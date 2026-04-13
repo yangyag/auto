@@ -1,0 +1,136 @@
+# AGENTS.md
+
+## 프로젝트 개요
+- Python 기반 그리드 자동매매 시스템
+- 현재 운영 기준은 가상화폐 거래이며, 거래소는 업비트로 고정한다.
+- `config/settings.py`의 현재 설정도 `EXCHANGE_TYPE = "crypto"` 기준이다.
+- 주식 거래소(`exchange/stock.py`)는 아직 stub 상태이며, 현재 운영 범위에서는 우선순위가 낮다.
+- `grid.txt`의 슬롯 상태를 읽고, 현재가 기준으로 매수/매도 주문을 생성한 뒤 체결 결과를 다시 `grid.txt`에 반영한다
+
+## 기준 거래소와 참고 문서
+- 현재 기준 거래소는 업비트다.
+- 업비트 API/인증/주문 파라미터/응답 해석이 불명확하면 공식 문서 `https://docs.upbit.com/kr`를 우선 기준으로 삼는다.
+- 로컬 요약본은 `UPBIT_API_REFERENCE.md`를 먼저 참고한다.
+- `exchange/crypto.py` 수정 시에는 구현 편의보다 업비트 공식 문서 기준 정합성을 우선한다.
+
+## 우선 읽을 파일
+- `UPBIT_API_REFERENCE.md`: 업비트 공식 문서 기반 로컬 요약 레퍼런스
+- `main.py`: 메인 루프, 리스크 체크, 주문 실행 순서
+- `config/settings.py`: 거래소 종류, 심볼, API 키, 리스크 파라미터
+- `core/grid.py`: `grid.txt` 파싱/저장 규칙
+- `core/models.py`: `GridRow`, `Order`, `OrderSide` 등 공용 모델
+- `strategy/grid_strategy.py`: 가격 트리거 판정과 주문 생성
+- `exchange/base.py`: 거래소 공용 인터페이스
+- `exchange/crypto.py`: 업비트 연동 구현
+- `exchange/stock.py`: 주식 연동 stub 구현
+
+## 디렉터리 구조
+```text
+auto/
+├── main.py                    # 메인 루프 진입점
+├── config/
+│   └── settings.py            # 설정 (거래소 선택, API 키, 리스크 파라미터)
+├── core/
+│   ├── grid.py                # grid.txt 파싱 + 그리드 상태 관리
+│   └── models.py              # 공용 데이터 모델
+├── exchange/
+│   ├── base.py                # 거래소 추상 클래스
+│   ├── crypto.py              # 업비트 구현
+│   └── stock.py               # 주식 거래소 stub
+├── strategy/
+│   └── grid_strategy.py       # 그리드 전략 핵심 로직
+├── utils/
+│   └── logger.py              # 공용 로거
+├── grid.txt                   # 그리드 상태 파일
+└── requirements.txt           # 런타임 의존성
+```
+
+## 에이전트 작업 원칙
+- 변경 전에 관련 모듈을 먼저 읽고, 영향 범위를 `config`, `core`, `exchange`, `strategy` 중 어디까지인지 명확히 잡는다.
+- 실거래 주문이 발생할 수 있는 `python main.py` 실행은 사용자가 명시적으로 요청한 경우에만 한다.
+- 기본 검증은 비파괴 방식으로 한다. 우선순위는 `python -c "import main"` 같은 임포트/정적 검증이다.
+- API 키는 환경변수 `UPBIT_ACCESS_KEY`, `UPBIT_SECRET_KEY`로만 주입한다. 민감정보를 문서, 샘플 파일, 커밋에 복제하지 않는다.
+- `grid.txt` 포맷은 깨지면 안 된다. 헤더, 슬롯 본문, 마지막 총재고 줄을 모두 유지해야 한다.
+- `Generator`는 외부 플러그인이나 별도 Codex 호출이 아니라, 메인 Codex가 직접 하위 에이전트를 병렬로 생성해서 운영한다.
+- 코인 거래 로직과 업비트 연동은 현재 시스템의 기준 경로다. 관련 동작을 바꿀 때는 설정, 전략, 주문 파라미터를 함께 점검한다.
+- 거래소 인터페이스를 바꾸면 `exchange/base.py`만 고치지 말고 `main.py`, `strategy/grid_strategy.py`, 구현체까지 함께 맞춘다.
+- `exchange/stock.py`는 미구현 상태다. 주식 기능 요청을 처리할 때는 stub 제거 범위와 누락된 메서드를 먼저 명시한다.
+- 현재 주문 수량 모델은 `int` 기준이다. 코인 소수 수량을 다루려면 `core/models.py`, 전략, 거래소 구현을 함께 수정해야 한다.
+
+## 작업 파이프라인
+
+### Planner
+- 사용자 요청을 기능 단위로 쪼갠다.
+- 영향 파일과 선행 인터페이스를 먼저 고정한다.
+- 완료 기준을 명확히 적는다.
+  - `grid.txt` 포맷 유지
+  - 리스크 파라미터 동작 유지 또는 변경 의도 명시
+  - 실거래 부작용 없는 검증 우선
+
+### Generator
+- 메인 Codex가 직접 하위 에이전트를 여러 개 병렬로 띄워 구현한다. 외부 플러그인이나 `/codex:...` 같은 별도 호출을 전제로 하지 않는다.
+- 즉시 다음 행동을 막는 핵심 작업은 메인 세션이 직접 처리하고, 독립적인 보조 작업만 하위 에이전트에 분배한다.
+- 하위 에이전트는 파일 충돌이 없도록 책임 범위를 분리한다.
+- 공용 계약 변경은 먼저 확정하고, 그 다음 병렬 작업에 들어간다.
+- 코드 변경 시 기존 저장 포맷, 주문 방향, 리스크 체크 흐름을 깨지 않는지 확인한다.
+- 문서나 설정 의미가 달라졌다면 `AGENTS.md`와 관련 문서를 함께 맞춘다.
+- 기본 검증 명령:
+  - `pip install -r requirements.txt`
+  - `python -c "import main"`
+  - `python -m pytest`  # 테스트가 추가된 경우
+
+### Evaluator
+- 매수/매도 트리거 조건이 반대로 뒤집히지 않았는지 본다.
+- `check_risk()`의 잔고/재고 한도 계산이 변경 의도와 맞는지 본다.
+- `GridState.save()`가 기존 포맷을 그대로 재생성하는지 본다.
+- 민감정보 노출, 실거래 실행, 미구현 stub 호출 가능성을 반드시 점검한다.
+
+## 주의할 구현 포인트
+- 거래 심볼은 현재 두 곳에 존재한다: `config/settings.py`의 `SYMBOL`, `grid.txt` 헤더의 심볼. 실제 주문은 `cfg.SYMBOL`을 사용하고, 그리드 파일 요약/저장은 `GridState.symbol`을 사용한다.
+- `exchange/crypto.py`는 외부 업비트 API를 호출하므로 네트워크, 인증, 주문 부작용을 항상 고려해야 한다.
+- `exchange/stock.py`는 모든 핵심 메서드가 `NotImplementedError`를 던진다.
+- `main.py`는 무한 루프 구조라서, 단순 검증 용도로 직접 실행하는 것은 적절하지 않다.
+
+## grid.txt 포맷
+```text
+Grid3 SYMBOL
+1) buy_price held_qty sell_price planned_sell_qty
+...
+
+테이블 총재고 : N
+```
+
+### 슬롯 해석 규칙
+- `held_qty > 0`, `planned_sell_qty = 0`: 보유 중 슬롯, `sell_price` 도달 시 매도 대상
+- `held_qty = 0`, `planned_sell_qty > 0`: 빈 슬롯, `buy_price` 도달 시 매수 대상
+
+### 그리드 전략 의미
+- `grid.txt`의 각 줄은 하나의 독립된 매매 슬롯이다.
+- 현재가가 특정 가격 구간에 내려오면, 그 줄에 적힌 수량만큼만 분할 매수한다.
+- 이후 가격이 그 줄의 `sell_price`에 도달하면, 그 줄에서 보유한 수량만큼만 분할 매도한다.
+- 전략은 전체 물량을 한 번에 매수하거나 한 번에 청산하는 구조가 아니다.
+- 핵심은 가격 변동 구간마다 슬롯별로 왕복 체결을 반복해 실현수익을 누적하는 것이다.
+- 따라서 전체 평가손익이 일시적으로 마이너스로 보여도, 변동성이 충분하면 개별 슬롯의 반복 매매로 수익이 발생할 수 있다.
+- `grid.txt`에 적힌 종목이 예시일 수는 있지만, 파일 의미 자체는 자산 종류와 무관하게 동일하다.
+
+## 실행 및 검증
+```bash
+# 의존성 설치
+pip install -r requirements.txt
+
+# 비파괴 검증
+python -c "import main"
+
+# 실거래/실시간 루프: 명시적 요청 시에만 실행
+python main.py
+
+# 테스트가 추가된 경우
+python -m pytest
+```
+
+## 코드 컨벤션
+- 신규 거래소 추가 시 `exchange/base.py`를 상속하고 `main.py`의 `build_exchange()` 분기도 함께 갱신한다.
+- 그리드 파일 파싱 규칙을 바꾸면 `core/grid.py`의 `load()`와 `save()`를 같이 수정한다.
+- 리스크 정책 변경은 `config/settings.py`와 `main.py::check_risk()`를 함께 본다.
+- 기능은 가능한 한 파일 단위 책임을 유지하고 `main.py`에서 조립한다.
+- git commit 메시지를 쓸 상황이면 한글로 작성한다.

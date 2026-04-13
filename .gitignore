@@ -1,0 +1,6 @@
+.env
+upbit.txt
+*.log
+__pycache__/
+*.pyc
+.pytest_cache/
