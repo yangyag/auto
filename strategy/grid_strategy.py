@@ -2,6 +2,7 @@
 그리드 전략 핵심 로직
 현재가를 받아 매수/매도 대상 슬롯을 판별하고 주문을 생성한다.
 """
+from decimal import Decimal
 from typing import List, Tuple
 
 from core.grid import GridState
@@ -18,20 +19,29 @@ class GridStrategy:
         self.grid = grid_state
         self.exchange = exchange
         self.symbol = symbol
+        self.previous_price: Decimal | None = None
 
-    def evaluate(self, current_price: float) -> Tuple[List[Order], List[Order]]:
+    def evaluate(self, current_price: Decimal) -> Tuple[List[Order], List[Order]]:
         """
-        현재가 기준으로 체결 조건인 슬롯을 찾아
-        매수 주문 목록, 매도 주문 목록을 반환한다.
+        직전 가격 대비 현재가가 그리드 라인을 교차했는지 확인해
+        매수/매도 주문 목록을 반환한다.
         """
-        buy_orders = self._make_buy_orders(current_price)
-        sell_orders = self._make_sell_orders(current_price)
+        if self.previous_price is None:
+            self.previous_price = current_price
+            return [], []
+
+        buy_orders = self._make_buy_orders(self.previous_price, current_price)
+        sell_orders = self._make_sell_orders(self.previous_price, current_price)
+        self.previous_price = current_price
         return buy_orders, sell_orders
 
-    def _make_buy_orders(self, current_price: float) -> List[Order]:
-        triggered = self.grid.get_buy_triggered(current_price)
+    def _make_buy_orders(self, previous_price: Decimal, current_price: Decimal) -> List[Order]:
         orders = []
-        for row in triggered:
+        for row in self.grid.rows:
+            crossed_down = row.is_empty and previous_price > row.buy_price and current_price <= row.buy_price
+            if not crossed_down:
+                continue
+
             orders.append(Order(
                 slot_index=row.index,
                 side=OrderSide.BUY,
@@ -39,13 +49,19 @@ class GridStrategy:
                 quantity=row.planned_qty,
                 symbol=self.symbol,
             ))
-            logger.info(f"매수 조건 충족 → 슬롯 {row.index}: {row.buy_price} x {row.planned_qty}주")
+            logger.info(
+                f"매수 교차 조건 충족 → 슬롯 {row.index}: "
+                f"{previous_price} -> {current_price} / {row.buy_price} x {row.planned_qty}"
+            )
         return orders
 
-    def _make_sell_orders(self, current_price: float) -> List[Order]:
-        triggered = self.grid.get_sell_triggered(current_price)
+    def _make_sell_orders(self, previous_price: Decimal, current_price: Decimal) -> List[Order]:
         orders = []
-        for row in triggered:
+        for row in self.grid.rows:
+            crossed_up = row.is_holding and previous_price < row.sell_price and current_price >= row.sell_price
+            if not crossed_up:
+                continue
+
             orders.append(Order(
                 slot_index=row.index,
                 side=OrderSide.SELL,
@@ -53,7 +69,10 @@ class GridStrategy:
                 quantity=row.held_qty,
                 symbol=self.symbol,
             ))
-            logger.info(f"매도 조건 충족 → 슬롯 {row.index}: {row.sell_price} x {row.held_qty}주")
+            logger.info(
+                f"매도 교차 조건 충족 → 슬롯 {row.index}: "
+                f"{previous_price} -> {current_price} / {row.sell_price} x {row.held_qty}"
+            )
         return orders
 
     def apply_filled_order(self, order: Order):

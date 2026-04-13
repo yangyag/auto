@@ -2,6 +2,7 @@
 공용 데이터 모델
 """
 from dataclasses import dataclass, field
+from decimal import Decimal
 from enum import Enum
 from typing import Optional
 
@@ -20,32 +21,53 @@ class EvalResult(Enum):
 @dataclass
 class GridRow:
     """grid.txt의 한 줄 (그리드 슬롯 1개)"""
-    index: int           # 줄 번호 (1-based)
-    buy_price: float     # 매수 트리거 가격
-    held_qty: int        # 현재 보유 수량 (>0 이면 보유 중)
-    sell_price: float    # 매도 트리거 가격
-    planned_qty: int     # 매도 목표 수량 (>0 이면 빈 슬롯)
+    index: int               # 줄 번호 (1-based)
+    buy_price: Decimal       # 매수 트리거 가격
+    held_qty: Decimal        # 현재 보유 수량 (>0 이면 보유 중)
+    sell_price: Decimal      # 매도 트리거 가격
+    planned_qty: Decimal     # 매도 목표 수량 (>0 이면 빈 슬롯)
 
     @property
     def is_holding(self) -> bool:
         """보유 중 슬롯: held_qty > 0"""
-        return self.held_qty > 0
+        return self.held_qty > Decimal("0")
 
     @property
     def is_empty(self) -> bool:
         """빈 슬롯: 아직 매수 안 됨"""
-        return self.held_qty == 0 and self.planned_qty > 0
+        return self.held_qty == Decimal("0") and self.planned_qty > Decimal("0")
 
 
 @dataclass
 class Order:
     """실행할 주문 1건"""
-    slot_index: int        # 해당 그리드 슬롯 번호
-    side: OrderSide        # BUY / SELL
-    price: float           # 주문 가격
-    quantity: int          # 주문 수량
-    symbol: str            # 종목/코인 심볼
+    slot_index: int             # 해당 그리드 슬롯 번호
+    side: OrderSide             # BUY / SELL
+    price: Decimal              # 주문 가격
+    quantity: Decimal           # 주문 수량
+    symbol: str                 # 종목/코인 심볼
     order_id: Optional[str] = None   # 거래소 체결 후 채워짐
+
+
+@dataclass
+class OrderStatus:
+    """거래소의 주문 상태 스냅샷"""
+    uuid: str
+    state: str
+    executed_volume: Decimal
+    remaining_volume: Decimal
+
+    @property
+    def is_filled(self) -> bool:
+        return self.state == "done"
+
+    @property
+    def is_open(self) -> bool:
+        return self.state in {"wait", "watch"}
+
+    @property
+    def is_cancelled(self) -> bool:
+        return self.state == "cancel"
 
 
 @dataclass

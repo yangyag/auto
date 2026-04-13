@@ -1,0 +1,109 @@
+import tempfile
+import unittest
+from decimal import Decimal
+from pathlib import Path
+from unittest.mock import Mock
+
+import main
+from core.grid import GridState
+from core.models import GridRow, Order, OrderSide, OrderStatus
+from strategy.grid_strategy import GridStrategy
+
+
+class PendingOrderSyncTest(unittest.TestCase):
+
+    def _build_strategy_with_empty_slot(self):
+        tmpdir = tempfile.TemporaryDirectory()
+        grid_path = Path(tmpdir.name) / "grid.txt"
+        rows = [
+            GridRow(
+                index=1,
+                buy_price=Decimal("100"),
+                held_qty=Decimal("0"),
+                sell_price=Decimal("110"),
+                planned_qty=Decimal("1"),
+            )
+        ]
+        grid = GridState.from_rows("KRW-BTC", rows, grid_file=str(grid_path))
+        strategy = GridStrategy(grid, Mock(), "KRW-BTC")
+        return tmpdir, grid, strategy
+
+    def test_submit_orders_keeps_grid_unchanged_until_order_is_filled(self):
+        tmpdir, grid, _strategy = self._build_strategy_with_empty_slot()
+        self.addCleanup(tmpdir.cleanup)
+        exchange = Mock()
+        exchange.place_order.return_value = "uuid-1"
+        pending_orders = {}
+        order = Order(
+            slot_index=1,
+            side=OrderSide.BUY,
+            price=Decimal("100"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+        )
+
+        submitted = main.submit_orders([order], exchange, pending_orders)
+
+        self.assertEqual(submitted, 1)
+        self.assertEqual(order.order_id, "uuid-1")
+        self.assertIn("uuid-1", pending_orders)
+        self.assertEqual(grid.rows[0].held_qty, Decimal("0"))
+        self.assertEqual(grid.rows[0].planned_qty, Decimal("1"))
+
+    def test_reconcile_pending_orders_applies_grid_after_done_fill(self):
+        tmpdir, grid, strategy = self._build_strategy_with_empty_slot()
+        self.addCleanup(tmpdir.cleanup)
+        exchange = Mock()
+        order = Order(
+            slot_index=1,
+            side=OrderSide.BUY,
+            price=Decimal("100"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+            order_id="uuid-1",
+        )
+        pending_orders = {"uuid-1": order}
+        exchange.get_order_status.return_value = OrderStatus(
+            uuid="uuid-1",
+            state="done",
+            executed_volume=Decimal("1"),
+            remaining_volume=Decimal("0"),
+        )
+
+        completed = main.reconcile_pending_orders(exchange, pending_orders, strategy)
+
+        self.assertEqual(completed, 1)
+        self.assertEqual(pending_orders, {})
+        self.assertEqual(grid.rows[0].held_qty, Decimal("1"))
+        self.assertEqual(grid.rows[0].planned_qty, Decimal("0"))
+
+    def test_reconcile_pending_orders_keeps_wait_order_pending(self):
+        tmpdir, grid, strategy = self._build_strategy_with_empty_slot()
+        self.addCleanup(tmpdir.cleanup)
+        exchange = Mock()
+        order = Order(
+            slot_index=1,
+            side=OrderSide.BUY,
+            price=Decimal("100"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+            order_id="uuid-1",
+        )
+        pending_orders = {"uuid-1": order}
+        exchange.get_order_status.return_value = OrderStatus(
+            uuid="uuid-1",
+            state="wait",
+            executed_volume=Decimal("0"),
+            remaining_volume=Decimal("1"),
+        )
+
+        completed = main.reconcile_pending_orders(exchange, pending_orders, strategy)
+
+        self.assertEqual(completed, 0)
+        self.assertIn("uuid-1", pending_orders)
+        self.assertEqual(grid.rows[0].held_qty, Decimal("0"))
+        self.assertEqual(grid.rows[0].planned_qty, Decimal("1"))
+
+
+if __name__ == "__main__":
+    unittest.main()

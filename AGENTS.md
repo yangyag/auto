@@ -5,7 +5,7 @@
 - 현재 운영 기준은 가상화폐 거래이며, 거래소는 업비트로 고정한다.
 - `config/settings.py`의 현재 설정도 `EXCHANGE_TYPE = "crypto"` 기준이다.
 - 주식 거래소(`exchange/stock.py`)는 아직 stub 상태이며, 현재 운영 범위에서는 우선순위가 낮다.
-- `grid.txt`의 슬롯 상태를 읽고, 현재가 기준으로 매수/매도 주문을 생성한 뒤 체결 결과를 다시 `grid.txt`에 반영한다
+- `grid.txt`의 슬롯 상태를 읽고, 현재가 기준으로 매수/매도 주문을 생성한 뒤 실제 체결이 확인되면 결과를 다시 `grid.txt`에 반영한다
 
 ## 기준 거래소와 참고 문서
 - 현재 기준 거래소는 업비트다.
@@ -56,6 +56,7 @@ auto/
 - 거래소 인터페이스를 바꾸면 `exchange/base.py`만 고치지 말고 `main.py`, `strategy/grid_strategy.py`, 구현체까지 함께 맞춘다.
 - `exchange/stock.py`는 미구현 상태다. 주식 기능 요청을 처리할 때는 stub 제거 범위와 누락된 메서드를 먼저 명시한다.
 - 현재 주문 수량 모델은 `int` 기준이다. 코인 소수 수량을 다루려면 `core/models.py`, 전략, 거래소 구현을 함께 수정해야 한다.
+- KRW-BTC 운영 시 수량은 소수 BTC 단위로 관리하고, 가격은 업비트 KRW 마켓 호가 단위에 맞춰야 한다.
 
 ## 작업 파이프라인
 
@@ -87,6 +88,9 @@ auto/
 
 ## 주의할 구현 포인트
 - 거래 심볼은 현재 두 곳에 존재한다: `config/settings.py`의 `SYMBOL`, `grid.txt` 헤더의 심볼. 실제 주문은 `cfg.SYMBOL`을 사용하고, 그리드 파일 요약/저장은 `GridState.symbol`을 사용한다.
+- `core/grid_builder.py::build_cash_only_grid()`는 상단 매도 경계와 하단 매수 경계를 고정한 뒤 그 사이를 슬롯 수만큼 분할한다.
+- `strategy/grid_strategy.py`의 트리거는 절대값 판정이 아니라 가격 교차 판정이다. 첫 가격 스냅샷에서는 주문을 내지 않고, 이후 `이전 가격 > buy_price >= 현재 가격`일 때 매수, `이전 가격 < sell_price <= 현재 가격`일 때 매도한다.
+- 주문 생성 성공은 체결 완료와 다르다. `main.py`는 업비트 `GET /v1/order`로 주문 상태를 재조회해 `state=done`일 때만 `grid.txt`를 갱신한다. `wait`/`watch` 상태 주문은 pending으로 유지한다.
 - `exchange/crypto.py`는 외부 업비트 API를 호출하므로 네트워크, 인증, 주문 부작용을 항상 고려해야 한다.
 - `exchange/stock.py`는 모든 핵심 메서드가 `NotImplementedError`를 던진다.
 - `main.py`는 무한 루프 구조라서, 단순 검증 용도로 직접 실행하는 것은 적절하지 않다.
@@ -119,18 +123,25 @@ Grid3 SYMBOL
 pip install -r requirements.txt
 
 # 비파괴 검증
-python -c "import main"
+python3 -c "import main"
+
+# 업비트 KRW 주문 가능 잔고 1회 조회
+python3 main.py balance
+
+# KRW-BTC 초기 그리드 생성
+python3 main.py init-grid
 
 # 실거래/실시간 루프: 명시적 요청 시에만 실행
-python main.py
+python3 main.py
 
 # 테스트가 추가된 경우
-python -m pytest
+python3 -m unittest discover -s tests -v
 ```
 
 ## 코드 컨벤션
 - 신규 거래소 추가 시 `exchange/base.py`를 상속하고 `main.py`의 `build_exchange()` 분기도 함께 갱신한다.
 - 그리드 파일 파싱 규칙을 바꾸면 `core/grid.py`의 `load()`와 `save()`를 같이 수정한다.
 - 리스크 정책 변경은 `config/settings.py`와 `main.py::check_risk()`를 함께 본다.
+- BTC 그리드는 총 수량 한도보다 총 투입 KRW 예산과 최소 유보 잔고 기준으로 점검한다.
 - 기능은 가능한 한 파일 단위 책임을 유지하고 `main.py`에서 조립한다.
 - git commit 메시지를 쓸 상황이면 한글로 작성한다.

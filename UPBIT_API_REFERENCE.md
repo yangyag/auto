@@ -146,6 +146,7 @@
 - 현재 코드 연결:
   - `exchange/crypto.py::get_balance`
   - `exchange/crypto.py::get_holdings`
+  - `python3 main.py balance`
 
 주의:
 
@@ -246,7 +247,7 @@
 
 현재 코드 연결:
 
-- 조회는 아직 직접 구현되어 있지 않다.
+- 조회는 `exchange/crypto.py::get_order_status`에서 사용한다.
 - 취소는 `exchange/crypto.py::cancel_order`에서 사용한다.
 
 ## 체결 대기 주문 조회
@@ -289,12 +290,14 @@
 - 원화(KRW) 마켓은 주문 가격 단위와 최소 주문 가능 금액 정책이 있다.
 - 이 값은 가격대와 마켓 정책에 따라 달라질 수 있으므로, 고정 숫자를 코드에 박아두기보다 공식 문서와 `orders/chance`를 함께 확인하는 편이 안전하다.
 - 그리드 전략에서 지정가를 생성할 때는 가격 단위 반올림/절사를 반드시 검토해야 한다.
+- BTC 그리드 생성 시에도 KRW 마켓 호가 단위에 맞춰 가격을 보정하고, 최소 주문 가능 금액 `5,000 KRW` 이상인지 확인해야 한다.
 
 ## 이 저장소 기준 구현 체크리스트
 
 - `python main.py`는 실제 주문을 발생시킬 수 있다.
 - 테스트 목적이면 실주문 대신 다음을 우선한다.
   - `python3 -c "import main"`
+  - `python3 main.py balance`
   - 주문 검증 전용 경로 추가
   - `POST /v1/orders/test` 사용
 - API Key는 환경변수로만 주입한다.
