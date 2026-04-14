@@ -42,6 +42,37 @@ class CryptoExchangeBalanceTest(unittest.TestCase):
         self.assertEqual(status.executed_volume, Decimal("0.001"))
         self.assertEqual(status.remaining_volume, Decimal("0"))
 
+    def test_get_order_status_treats_cancel_with_full_execution_as_filled(self):
+        payload = {
+            "uuid": "uuid-1",
+            "state": "cancel",
+            "executed_volume": "0.00090674",
+            "remaining_volume": "0",
+        }
+
+        with patch.object(self.exchange, "_get", return_value=payload):
+            status = self.exchange.get_order_status("uuid-1")
+
+        self.assertEqual(status.state, "cancel")
+        self.assertEqual(status.executed_volume, Decimal("0.00090674"))
+        self.assertEqual(status.remaining_volume, Decimal("0"))
+        self.assertTrue(status.is_filled)
+        self.assertFalse(status.is_cancelled)
+
+    def test_get_order_status_keeps_partial_cancel_as_cancelled(self):
+        payload = {
+            "uuid": "uuid-1",
+            "state": "cancel",
+            "executed_volume": "0.0004",
+            "remaining_volume": "0.0005",
+        }
+
+        with patch.object(self.exchange, "_get", return_value=payload):
+            status = self.exchange.get_order_status("uuid-1")
+
+        self.assertFalse(status.is_filled)
+        self.assertTrue(status.is_cancelled)
+
     def test_place_order_uses_limit_body_for_limit_orders(self):
         order = Order(
             slot_index=1,

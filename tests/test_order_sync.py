@@ -141,6 +141,47 @@ class PendingOrderSyncTest(unittest.TestCase):
         self.assertEqual(repository.load().rows[0].held_qty, Decimal("0.95"))
         self.assertEqual(pending_repository.list_open(), [])
 
+    def test_reconcile_pending_orders_treats_cancel_with_executed_volume_as_filled(self):
+        tmpdir, grid, strategy = self._build_strategy_with_empty_slot()
+        self.addCleanup(tmpdir.cleanup)
+        repository = FileGridRepository(str(Path(tmpdir.name) / "grid.txt"))
+        pending_repository = FilePendingOrderRepository()
+        runtime = main.GridStateRuntime(metadata=repository.save(grid.to_snapshot()).metadata)
+        exchange = Mock()
+        order = Order(
+            slot_index=1,
+            side=OrderSide.BUY,
+            price=Decimal("100"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+            execution_type=OrderExecutionType.MARKET_BUY_BY_PRICE,
+            spend_amount=Decimal("100"),
+            order_id="uuid-1",
+        )
+        pending_orders = {"uuid-1": order}
+        pending_repository.add(order)
+        exchange.get_order_status.return_value = OrderStatus(
+            uuid="uuid-1",
+            state="cancel",
+            executed_volume=Decimal("0.90674"),
+            remaining_volume=Decimal("0"),
+        )
+
+        completed = main.reconcile_pending_orders(
+            exchange,
+            pending_orders,
+            strategy,
+            on_grid_updated=lambda: main.persist_grid_state(grid, repository, runtime),
+            pending_order_repository=pending_repository,
+        )
+
+        self.assertEqual(completed, 1)
+        self.assertEqual(pending_orders, {})
+        self.assertEqual(grid.rows[0].held_qty, Decimal("0.90674"))
+        self.assertEqual(grid.rows[0].planned_qty, Decimal("1"))
+        self.assertEqual(repository.load().rows[0].held_qty, Decimal("0.90674"))
+        self.assertEqual(pending_repository.list_open(), [])
+
     def test_reconcile_pending_orders_keeps_wait_order_pending(self):
         tmpdir, grid, strategy = self._build_strategy_with_empty_slot()
         self.addCleanup(tmpdir.cleanup)

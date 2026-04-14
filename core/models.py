@@ -80,7 +80,13 @@ class OrderStatus:
 
     @property
     def is_filled(self) -> bool:
-        return self.state == "done"
+        if self.state == "done":
+            return True
+        return (
+            self.state == "cancel"
+            and self.executed_volume > Decimal("0")
+            and self.remaining_volume == Decimal("0")
+        )
 
     @property
     def is_open(self) -> bool:
@@ -88,7 +94,7 @@ class OrderStatus:
 
     @property
     def is_cancelled(self) -> bool:
-        return self.state == "cancel"
+        return self.state == "cancel" and not self.is_filled
 
 
 @dataclass
