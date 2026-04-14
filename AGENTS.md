@@ -10,11 +10,11 @@
 ## 기준 거래소와 참고 문서
 - 현재 기준 거래소는 업비트다.
 - 업비트 API/인증/주문 파라미터/응답 해석이 불명확하면 공식 문서 `https://docs.upbit.com/kr`를 우선 기준으로 삼는다.
-- 로컬 요약본은 `UPBIT_API_REFERENCE.md`를 먼저 참고한다.
+- 로컬 요약본은 `docs/UPBIT_API_REFERENCE.md`를 먼저 참고한다.
 - `exchange/crypto.py` 수정 시에는 구현 편의보다 업비트 공식 문서 기준 정합성을 우선한다.
 
 ## 우선 읽을 파일
-- `UPBIT_API_REFERENCE.md`: 업비트 공식 문서 기반 로컬 요약 레퍼런스
+- `docs/UPBIT_API_REFERENCE.md`: 업비트 공식 문서 기반 로컬 요약 레퍼런스
 - `main.py`: 메인 루프, 리스크 체크, 주문 실행 순서
 - `config/settings.py`: 거래소 종류, 심볼, API 키, 리스크 파라미터
 - `core/grid.py`: `grid.txt` 파싱/저장 규칙
