@@ -94,11 +94,25 @@ def decimal_arg(value: str) -> Decimal:
 
 
 def validate_grid_state(grid_state: GridState):
-    if grid_state.total_allocated_budget > cfg.MAX_TOTAL_BUDGET_KRW:
+    max_total_budget = cfg.MAX_TOTAL_BUDGET_KRW
+    if max_total_budget is None or max_total_budget <= 0:
+        return
+
+    if grid_state.total_allocated_budget > max_total_budget:
         raise ValueError(
             f"그리드 총 배정 금액이 한도를 초과했습니다: "
-            f"{format_decimal(grid_state.total_allocated_budget)} > {format_decimal(cfg.MAX_TOTAL_BUDGET_KRW)}"
+            f"{format_decimal(grid_state.total_allocated_budget)} > {format_decimal(max_total_budget)}"
         )
+
+
+def refresh_grid_state_if_changed(grid_state: GridState) -> bool:
+    """실행 중 grid.txt가 외부에서 바뀌면 즉시 다시 읽는다."""
+    changed = grid_state.reload_if_changed()
+    if changed:
+        validate_grid_state(grid_state)
+        logger.info("외부 grid.txt 변경 감지 → 재로드")
+        logger.info(grid_state.summary())
+    return changed
 
 
 def check_risk(orders, exchange: BaseExchange, grid_state: GridState) -> list:
@@ -144,6 +158,8 @@ def run():
 
     while True:
         try:
+            refresh_grid_state_if_changed(grid_state)
+
             completed = reconcile_pending_orders(exchange, pending_orders, strategy)
             if completed:
                 logger.info(grid_state.summary())
@@ -225,7 +241,7 @@ def run_grid_init(
     lower_price: Decimal,
     upper_price: Decimal,
     slot_count: int,
-    total_budget: Decimal,
+    first_buy_amount: Decimal,
     current_price: Decimal | None,
 ) -> int:
     """KRW-BTC 초기 그리드를 생성하고 저장."""
@@ -247,7 +263,7 @@ def run_grid_init(
             upper_price=upper_price,
             current_price=live_price,
             slot_count=slot_count,
-            total_budget_krw=total_budget,
+            first_buy_amount_krw=first_buy_amount,
         )
         state = GridState.from_rows(cfg.SYMBOL, rows, grid_file=grid_file)
         validate_grid_state(state)
@@ -265,7 +281,8 @@ def run_grid_init(
     print(f"상단 경계: {format_decimal(upper_price)} KRW")
     print(f"하단 경계: {format_decimal(lower_price)} KRW")
     print(f"슬롯 수: {slot_count}")
-    print(f"슬롯당 예산: {format_decimal(total_budget / Decimal(slot_count))} KRW")
+    print(f"첫 칸 기준 매수금액: {format_decimal(first_buy_amount)} KRW")
+    print(f"고정 수량: {format_decimal(rows[0].planned_qty)} BTC")
     print(f"총 배정 금액: {format_decimal(state.total_allocated_budget)} KRW")
     print("상태: 성공")
     return 0
@@ -282,7 +299,7 @@ def build_cli_parser() -> argparse.ArgumentParser:
     grid_parser.add_argument("--lower-price", type=decimal_arg, default=cfg.GRID_LOWER_PRICE)
     grid_parser.add_argument("--upper-price", type=decimal_arg, default=cfg.GRID_UPPER_PRICE)
     grid_parser.add_argument("--slot-count", type=int, default=cfg.GRID_SLOT_COUNT)
-    grid_parser.add_argument("--total-budget", type=decimal_arg, default=cfg.GRID_TOTAL_BUDGET_KRW)
+    grid_parser.add_argument("--first-buy-amount", type=decimal_arg, default=cfg.GRID_FIRST_BUY_AMOUNT_KRW)
     grid_parser.add_argument("--current-price", type=decimal_arg, default=None)
 
     return parser
@@ -307,7 +324,7 @@ def main(argv: list[str] | None = None) -> int:
             lower_price=args.lower_price,
             upper_price=args.upper_price,
             slot_count=args.slot_count,
-            total_budget=args.total_budget,
+            first_buy_amount=args.first_buy_amount,
             current_price=args.current_price,
         )
 

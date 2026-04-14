@@ -5,6 +5,7 @@ from pathlib import Path
 
 from core.grid import GridState
 from core.grid_builder import build_cash_only_grid
+from utils.decimal_utils import BTC_QUANTITY_STEP
 
 
 class GridBuilderTest(unittest.TestCase):
@@ -15,20 +16,23 @@ class GridBuilderTest(unittest.TestCase):
             upper_price=Decimal("111137221"),
             current_price=Decimal("112000000"),
             slot_count=10,
-            total_budget_krw=Decimal("990000"),
+            first_buy_amount_krw=Decimal("200000"),
         )
 
         self.assertEqual(len(rows), 10)
         self.assertTrue(all(row.held_qty == Decimal("0") for row in rows))
         self.assertTrue(all(row.planned_qty > Decimal("0") for row in rows))
+        self.assertTrue(all(row.planned_qty == rows[0].planned_qty for row in rows))
         self.assertTrue(all(rows[index].buy_price > rows[index + 1].buy_price for index in range(len(rows) - 1)))
         self.assertTrue(all(row.buy_price < Decimal("112000000") for row in rows))
         self.assertEqual(rows[0].sell_price, Decimal("111137000"))
         self.assertEqual(rows[-1].buy_price, Decimal("92253000"))
         self.assertTrue(all(row.sell_price > row.buy_price for row in rows))
 
-        total_budget = sum((row.buy_price * row.planned_qty for row in rows), Decimal("0"))
-        self.assertLessEqual(total_budget, Decimal("990000"))
+        first_order_amount = rows[0].buy_price * rows[0].planned_qty
+        self.assertEqual(rows[0].planned_qty, Decimal("0.00183341"))
+        self.assertLessEqual(first_order_amount, Decimal("200000"))
+        self.assertGreater(first_order_amount, Decimal("200000") - (rows[0].buy_price * BTC_QUANTITY_STEP))
 
     def test_build_cash_only_grid_uses_fixed_upper_lower_boundaries(self):
         rows = build_cash_only_grid(
@@ -36,7 +40,7 @@ class GridBuilderTest(unittest.TestCase):
             upper_price=Decimal("110370483"),
             current_price=Decimal("115000000"),
             slot_count=10,
-            total_budget_krw=Decimal("990000"),
+            first_buy_amount_krw=Decimal("200000"),
         )
 
         expected_pairs = [
@@ -63,7 +67,7 @@ class GridBuilderTest(unittest.TestCase):
             upper_price=Decimal("110370483"),
             current_price=Decimal("105695000"),
             slot_count=10,
-            total_budget_krw=Decimal("990000"),
+            first_buy_amount_krw=Decimal("200000"),
         )
 
         self.assertEqual(len(rows), 10)
@@ -75,7 +79,7 @@ class GridBuilderTest(unittest.TestCase):
             upper_price=Decimal("111137221"),
             current_price=Decimal("112000000"),
             slot_count=10,
-            total_budget_krw=Decimal("990000"),
+            first_buy_amount_krw=Decimal("200000"),
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:

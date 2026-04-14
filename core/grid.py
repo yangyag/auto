@@ -17,6 +17,7 @@ class GridState:
         self.grid_file = Path(grid_file)
         self.rows: List[GridRow] = []
         self.symbol: str = ""
+        self._last_loaded_mtime_ns: int | None = None
         self.load()
 
     @classmethod
@@ -25,12 +26,14 @@ class GridState:
         state.grid_file = Path(grid_file)
         state.rows = rows
         state.symbol = symbol
+        state._last_loaded_mtime_ns = None
         return state
 
     def load(self):
         """grid.txt를 파싱해서 rows에 로드"""
         self.rows = []
         lines = self.grid_file.read_text(encoding="utf-8").splitlines()
+        self._last_loaded_mtime_ns = self.grid_file.stat().st_mtime_ns
 
         # 첫 줄: "Grid3 SOXL" 같은 헤더
         if lines and not lines[0].strip().startswith("1)"):
@@ -67,6 +70,15 @@ class GridState:
         lines.append("")
         lines.append(f"테이블 총재고 : {format_decimal(total)}")
         self.grid_file.write_text("\n".join(lines), encoding="utf-8")
+        self._last_loaded_mtime_ns = self.grid_file.stat().st_mtime_ns
+
+    def reload_if_changed(self) -> bool:
+        """디스크의 grid.txt가 외부에서 수정됐으면 다시 로드한다."""
+        current_mtime_ns = self.grid_file.stat().st_mtime_ns
+        if self._last_loaded_mtime_ns == current_mtime_ns:
+            return False
+        self.load()
+        return True
 
     @property
     def total_inventory(self) -> Decimal:
@@ -107,13 +119,20 @@ class GridState:
         """매도 체결: 보유 중 → 빈 슬롯으로 전환"""
         row = self._get_row(slot_index)
         if row and row.is_holding:
-            row.planned_qty = row.held_qty
+            reference_qty = self._get_uniform_planned_qty()
+            row.planned_qty = reference_qty if reference_qty is not None else row.held_qty
             row.held_qty = DECIMAL_ZERO
 
     def _get_row(self, slot_index: int) -> Optional[GridRow]:
         for row in self.rows:
             if row.index == slot_index:
                 return row
+        return None
+
+    def _get_uniform_planned_qty(self) -> Optional[Decimal]:
+        quantities = {row.planned_qty for row in self.rows if row.planned_qty > DECIMAL_ZERO}
+        if len(quantities) == 1:
+            return next(iter(quantities))
         return None
 
     def summary(self) -> str:

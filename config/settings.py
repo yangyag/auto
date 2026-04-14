@@ -6,7 +6,24 @@ import os
 from decimal import Decimal
 from pathlib import Path
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:
+    load_dotenv = None
+
+
+def _load_env_file_without_dotenv(env_file: Path) -> None:
+    """python-dotenv 없이도 단순 KEY=VALUE 형식 .env를 읽는다."""
+    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("\"'")
+        if key:
+            os.environ.setdefault(key, value)
 
 
 def _load_project_env() -> None:
@@ -14,7 +31,10 @@ def _load_project_env() -> None:
     project_root = Path(__file__).resolve().parents[1]
     env_file = project_root / ".env"
     if env_file.exists():
-        load_dotenv(env_file, override=False)
+        if load_dotenv is not None:
+            load_dotenv(env_file, override=False)
+        else:
+            _load_env_file_without_dotenv(env_file)
 
 
 _load_project_env()
@@ -33,14 +53,14 @@ GRID_FILE = "grid.txt"
 GRID_SLOT_COUNT = 10
 GRID_LOWER_PRICE = Decimal("92253123")
 GRID_UPPER_PRICE = Decimal("111137221")
-GRID_TOTAL_BUDGET_KRW = Decimal("990000")
+GRID_FIRST_BUY_AMOUNT_KRW = Decimal("200000")
 
 # ── API 키 (환경변수 우선, 없으면 프로젝트 루트 .env 사용) ─────
 API_KEY = os.getenv("UPBIT_ACCESS_KEY", "")
 API_SECRET = os.getenv("UPBIT_SECRET_KEY", "")
 
 # ── 리스크 파라미터 ──────────────────────────────────────
-MAX_TOTAL_BUDGET_KRW = GRID_TOTAL_BUDGET_KRW  # BTC 그리드 총 투입 한도
+MAX_TOTAL_BUDGET_KRW = None  # BTC 그리드 총 투입 한도. None 또는 0 이하면 제한 비활성화
 MAX_DAILY_ORDERS = 50                         # 일일 최대 주문 횟수
 MIN_BALANCE_RESERVE = Decimal("10000")       # 최소 유보 잔고 KRW (이 금액 이하이면 매수 block)
 
@@ -48,5 +68,6 @@ MIN_BALANCE_RESERVE = Decimal("10000")       # 최소 유보 잔고 KRW (이 금
 PRICE_POLL_INTERVAL = 5      # 가격 조회 간격 (초)
 
 # ── 로그 ─────────────────────────────────────────────────
+LOG_DIR = "logs"
 LOG_FILE = "trading.log"
 LOG_LEVEL = "INFO"

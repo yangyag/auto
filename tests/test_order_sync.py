@@ -104,6 +104,51 @@ class PendingOrderSyncTest(unittest.TestCase):
         self.assertEqual(grid.rows[0].held_qty, Decimal("0"))
         self.assertEqual(grid.rows[0].planned_qty, Decimal("1"))
 
+    def test_reconcile_sell_resets_to_uniform_empty_slot_quantity(self):
+        tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmpdir.cleanup)
+        grid_path = Path(tmpdir.name) / "grid.txt"
+        rows = [
+            GridRow(
+                index=1,
+                buy_price=Decimal("100"),
+                held_qty=Decimal("2"),
+                sell_price=Decimal("110"),
+                planned_qty=Decimal("0"),
+            ),
+            GridRow(
+                index=2,
+                buy_price=Decimal("90"),
+                held_qty=Decimal("0"),
+                sell_price=Decimal("100"),
+                planned_qty=Decimal("1"),
+            ),
+        ]
+        grid = GridState.from_rows("KRW-BTC", rows, grid_file=str(grid_path))
+        strategy = GridStrategy(grid, Mock(), "KRW-BTC")
+        exchange = Mock()
+        order = Order(
+            slot_index=1,
+            side=OrderSide.SELL,
+            price=Decimal("110"),
+            quantity=Decimal("2"),
+            symbol="KRW-BTC",
+            order_id="uuid-1",
+        )
+        pending_orders = {"uuid-1": order}
+        exchange.get_order_status.return_value = OrderStatus(
+            uuid="uuid-1",
+            state="done",
+            executed_volume=Decimal("2"),
+            remaining_volume=Decimal("0"),
+        )
+
+        completed = main.reconcile_pending_orders(exchange, pending_orders, strategy)
+
+        self.assertEqual(completed, 1)
+        self.assertEqual(grid.rows[0].held_qty, Decimal("0"))
+        self.assertEqual(grid.rows[0].planned_qty, Decimal("1"))
+
 
 if __name__ == "__main__":
     unittest.main()

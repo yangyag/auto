@@ -12,6 +12,13 @@ from exchange.crypto import UpbitAPIError
 
 class BalanceCommandTest(unittest.TestCase):
 
+    def test_validate_grid_state_skips_budget_check_when_limit_disabled(self):
+        state = Mock()
+        state.total_allocated_budget = Decimal("8157489.21988")
+
+        with patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", None):
+            main.validate_grid_state(state)
+
     def test_run_balance_check_success(self):
         exchange = Mock()
         exchange.get_balance.return_value = Decimal("1000000")
@@ -76,8 +83,8 @@ class BalanceCommandTest(unittest.TestCase):
              patch.object(main.cfg, "GRID_LOWER_PRICE", Decimal("92253123")), \
              patch.object(main.cfg, "GRID_UPPER_PRICE", Decimal("111137221")), \
              patch.object(main.cfg, "GRID_SLOT_COUNT", 10), \
-             patch.object(main.cfg, "GRID_TOTAL_BUDGET_KRW", Decimal("990000")), \
-             patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", Decimal("990000")), \
+             patch.object(main.cfg, "GRID_FIRST_BUY_AMOUNT_KRW", Decimal("200000")), \
+             patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", Decimal("2000000")), \
              patch("main.build_exchange", return_value=exchange):
             grid_path = Path(tmpdir) / "grid.txt"
             stdout = io.StringIO()
@@ -87,7 +94,7 @@ class BalanceCommandTest(unittest.TestCase):
                     lower_price=Decimal("92253123"),
                     upper_price=Decimal("111137221"),
                     slot_count=10,
-                    total_budget=Decimal("990000"),
+                    first_buy_amount=Decimal("200000"),
                     current_price=None,
                 )
 
@@ -95,6 +102,7 @@ class BalanceCommandTest(unittest.TestCase):
             self.assertTrue(grid_path.exists())
             text = grid_path.read_text(encoding="utf-8")
             self.assertIn("Grid3 KRW-BTC", text)
+            self.assertIn("고정 수량: 0.00183341 BTC", stdout.getvalue())
             self.assertIn("상태: 성공", stdout.getvalue())
 
     def test_run_grid_init_allows_current_price_below_top_buy_level(self):
@@ -107,8 +115,8 @@ class BalanceCommandTest(unittest.TestCase):
              patch.object(main.cfg, "GRID_LOWER_PRICE", Decimal("92253123")), \
              patch.object(main.cfg, "GRID_UPPER_PRICE", Decimal("111137221")), \
              patch.object(main.cfg, "GRID_SLOT_COUNT", 10), \
-             patch.object(main.cfg, "GRID_TOTAL_BUDGET_KRW", Decimal("990000")), \
-             patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", Decimal("990000")), \
+             patch.object(main.cfg, "GRID_FIRST_BUY_AMOUNT_KRW", Decimal("200000")), \
+             patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", Decimal("2000000")), \
              patch("main.build_exchange", return_value=exchange):
             grid_path = Path(tmpdir) / "grid.txt"
             stdout = io.StringIO()
@@ -118,7 +126,7 @@ class BalanceCommandTest(unittest.TestCase):
                     lower_price=Decimal("92253123"),
                     upper_price=Decimal("111137221"),
                     slot_count=10,
-                    total_budget=Decimal("990000"),
+                    first_buy_amount=Decimal("200000"),
                     current_price=None,
                 )
 
