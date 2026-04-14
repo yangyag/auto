@@ -1,5 +1,6 @@
 .env
 upbit.txt
+.codex
 *.log
 .auto-trading.pid
 __pycache__/
