@@ -2,6 +2,7 @@ import unittest
 from decimal import Decimal
 from unittest.mock import patch
 
+from core.models import Order, OrderExecutionType, OrderSide
 from exchange.crypto import CryptoExchange
 
 
@@ -40,3 +41,46 @@ class CryptoExchangeBalanceTest(unittest.TestCase):
         self.assertEqual(status.state, "done")
         self.assertEqual(status.executed_volume, Decimal("0.001"))
         self.assertEqual(status.remaining_volume, Decimal("0"))
+
+    def test_place_order_uses_limit_body_for_limit_orders(self):
+        order = Order(
+            slot_index=1,
+            side=OrderSide.BUY,
+            price=Decimal("11000"),
+            quantity=Decimal("0.001"),
+            symbol="KRW-BTC",
+        )
+
+        with patch.object(self.exchange, "_post", return_value={"uuid": "uuid-1"}) as post:
+            order_id = self.exchange.place_order(order)
+
+        self.assertEqual(order_id, "uuid-1")
+        post.assert_called_once_with("/v1/orders", {
+            "market": "KRW-BTC",
+            "side": "bid",
+            "volume": "0.001",
+            "price": "11000",
+            "ord_type": "limit",
+        })
+
+    def test_place_order_uses_price_body_for_market_buy_by_price(self):
+        order = Order(
+            slot_index=1,
+            side=OrderSide.BUY,
+            price=Decimal("11000"),
+            quantity=Decimal("0.001"),
+            symbol="KRW-BTC",
+            execution_type=OrderExecutionType.MARKET_BUY_BY_PRICE,
+            spend_amount=Decimal("10000"),
+        )
+
+        with patch.object(self.exchange, "_post", return_value={"uuid": "uuid-1"}) as post:
+            order_id = self.exchange.place_order(order)
+
+        self.assertEqual(order_id, "uuid-1")
+        post.assert_called_once_with("/v1/orders", {
+            "market": "KRW-BTC",
+            "side": "bid",
+            "price": "10000",
+            "ord_type": "price",
+        })

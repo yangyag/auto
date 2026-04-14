@@ -1,84 +1,49 @@
 """
-grid.txt 파싱 및 그리드 상태 관리
+그리드 도메인 상태 관리
 """
-import re
+from dataclasses import replace
 from decimal import Decimal
-from pathlib import Path
 from typing import List, Optional
 
 from core.models import GridRow
-from utils.decimal_utils import DECIMAL_ZERO, format_decimal, to_decimal
+from storage.interfaces import GridSnapshot, RepositoryMetadata
+from utils.decimal_utils import DECIMAL_ZERO, format_decimal
+
+
+def _copy_row(row: GridRow) -> GridRow:
+    return replace(row)
 
 
 class GridState:
-    """그리드 전체 상태를 관리"""
+    """그리드 전체 상태를 관리하는 도메인 객체"""
 
-    def __init__(self, grid_file: str = "grid.txt"):
-        self.grid_file = Path(grid_file)
-        self.rows: List[GridRow] = []
-        self.symbol: str = ""
-        self._last_loaded_mtime_ns: int | None = None
-        self.load()
+    def __init__(self, symbol: str = "", rows: List[GridRow] | None = None):
+        self.symbol = symbol
+        self.rows: List[GridRow] = [_copy_row(row) for row in (rows or [])]
 
     @classmethod
-    def from_rows(cls, symbol: str, rows: List[GridRow], grid_file: str = "grid.txt") -> "GridState":
-        state = cls.__new__(cls)
-        state.grid_file = Path(grid_file)
-        state.rows = rows
-        state.symbol = symbol
-        state._last_loaded_mtime_ns = None
-        return state
+    def from_rows(
+        cls,
+        symbol: str,
+        rows: List[GridRow],
+        grid_file: str | None = None,
+    ) -> "GridState":
+        del grid_file  # 기존 테스트/호출부 호환용 인자
+        return cls(symbol=symbol, rows=rows)
 
-    def load(self):
-        """grid.txt를 파싱해서 rows에 로드"""
-        self.rows = []
-        lines = self.grid_file.read_text(encoding="utf-8").splitlines()
-        self._last_loaded_mtime_ns = self.grid_file.stat().st_mtime_ns
+    @classmethod
+    def from_snapshot(cls, snapshot: GridSnapshot) -> "GridState":
+        return cls(symbol=snapshot.symbol, rows=list(snapshot.rows))
 
-        # 첫 줄: "Grid3 SOXL" 같은 헤더
-        if lines and not lines[0].strip().startswith("1)"):
-            header = lines[0].strip()
-            parts = header.split()
-            self.symbol = parts[-1] if parts else ""
-            lines = lines[1:]
+    def to_snapshot(self, metadata: RepositoryMetadata | None = None) -> GridSnapshot:
+        rows = tuple(_copy_row(row) for row in self.rows)
+        if metadata is None:
+            return GridSnapshot(symbol=self.symbol, rows=rows)
+        return GridSnapshot(symbol=self.symbol, rows=rows, metadata=metadata)
 
-        # 각 줄 파싱: "1) 70.76 0 75.03 5"
-        pattern = re.compile(r"(\d+)\)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)")
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            m = pattern.match(line)
-            if m:
-                self.rows.append(GridRow(
-                    index=int(m.group(1)),
-                    buy_price=to_decimal(m.group(2)),
-                    held_qty=to_decimal(m.group(3)),
-                    sell_price=to_decimal(m.group(4)),
-                    planned_qty=to_decimal(m.group(5)),
-                ))
-
-    def save(self):
-        """현재 rows 상태를 grid.txt에 다시 저장"""
-        lines = [f"Grid3 {self.symbol}"]
-        for row in self.rows:
-            lines.append(
-                f"{row.index}) {format_decimal(row.buy_price)} {format_decimal(row.held_qty)} "
-                f"{format_decimal(row.sell_price)} {format_decimal(row.planned_qty)}"
-            )
-        total = self.total_inventory
-        lines.append("")
-        lines.append(f"테이블 총재고 : {format_decimal(total)}")
-        self.grid_file.write_text("\n".join(lines), encoding="utf-8")
-        self._last_loaded_mtime_ns = self.grid_file.stat().st_mtime_ns
-
-    def reload_if_changed(self) -> bool:
-        """디스크의 grid.txt가 외부에서 수정됐으면 다시 로드한다."""
-        current_mtime_ns = self.grid_file.stat().st_mtime_ns
-        if self._last_loaded_mtime_ns == current_mtime_ns:
-            return False
-        self.load()
-        return True
+    def replace_with(self, snapshot: GridSnapshot) -> None:
+        self.symbol = snapshot.symbol
+        self.rows = [_copy_row(row) for row in snapshot.rows]
 
     @property
     def total_inventory(self) -> Decimal:
@@ -108,19 +73,19 @@ class GridState:
             if r.is_holding and current_price >= r.sell_price
         ]
 
-    def apply_buy(self, slot_index: int):
-        """매수 체결: 빈 슬롯 → 보유 중으로 전환"""
+    def apply_buy(self, slot_index: int, filled_qty: Decimal | None = None):
+        """매수 체결: 실제 체결 수량을 보유 슬롯에 반영"""
         row = self._get_row(slot_index)
         if row and row.is_empty:
-            row.held_qty = row.planned_qty
-            row.planned_qty = DECIMAL_ZERO
+            row.held_qty = filled_qty if filled_qty is not None else row.planned_qty
 
     def apply_sell(self, slot_index: int):
         """매도 체결: 보유 중 → 빈 슬롯으로 전환"""
         row = self._get_row(slot_index)
         if row and row.is_holding:
-            reference_qty = self._get_uniform_planned_qty()
-            row.planned_qty = reference_qty if reference_qty is not None else row.held_qty
+            if row.planned_qty <= DECIMAL_ZERO:
+                reference_qty = self._get_uniform_planned_qty()
+                row.planned_qty = reference_qty if reference_qty is not None else row.held_qty
             row.held_qty = DECIMAL_ZERO
 
     def _get_row(self, slot_index: int) -> Optional[GridRow]:

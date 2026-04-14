@@ -201,9 +201,11 @@
 
 ### 현재 저장소와 직접 관련 있는 주문 유형
 
-- 현재 구현은 지정가 주문 중심이다.
+- 현재 구현은 지정가 주문과 시장가 매수를 함께 사용한다.
 - 코드상 매수는 `side=bid`, 매도는 `side=ask`로 매핑된다.
-- 현재 `exchange/crypto.py::place_order`는 `ord_type=limit`만 사용한다.
+- 하락 교차 매수와 매도는 `ord_type=limit`를 사용한다.
+- 상승 교차 매수는 `ord_type=price` 시장가 매수를 사용한다.
+- 상승 교차 시장가 매수는 슬롯 목표 KRW 예산을 먼저 계산하고, 실제 BTC 체결량은 `GET /v1/order`의 `executed_volume`으로 다시 반영한다.
 
 ### 주문 옵션 주의사항
 

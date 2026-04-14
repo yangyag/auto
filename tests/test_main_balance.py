@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
 import main
+from core.models import Order, OrderExecutionType, OrderSide
 from exchange.crypto import UpbitAPIError
 
 
@@ -18,6 +19,34 @@ class BalanceCommandTest(unittest.TestCase):
 
         with patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", None):
             main.validate_grid_state(state)
+
+    def test_check_risk_uses_actual_available_balance_only(self):
+        exchange = Mock()
+        exchange.get_balance.return_value = Decimal("0")
+        grid_state = Mock()
+        grid_state.total_allocated_budget = Decimal("0")
+        sell_order = Order(
+            slot_index=1,
+            side=OrderSide.SELL,
+            price=Decimal("11000"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+        )
+        buy_order = Order(
+            slot_index=2,
+            side=OrderSide.BUY,
+            price=Decimal("11000"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+            execution_type=OrderExecutionType.MARKET_BUY_BY_PRICE,
+            spend_amount=Decimal("10000"),
+        )
+
+        with patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", None), \
+             patch.object(main.cfg, "MIN_BALANCE_RESERVE", Decimal("0")):
+            approved = main.check_risk([sell_order, buy_order], exchange, grid_state)
+
+        self.assertEqual(approved, [sell_order])
 
     def test_run_balance_check_success(self):
         exchange = Mock()

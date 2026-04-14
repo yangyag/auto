@@ -6,11 +6,13 @@ from decimal import Decimal
 from typing import List, Tuple
 
 from core.grid import GridState
-from core.models import GridRow, Order, OrderSide
+from core.models import GridRow, Order, OrderExecutionType, OrderSide
 from exchange.base import BaseExchange
+from utils.decimal_utils import quantize_to_step
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+KRW_ORDER_AMOUNT_STEP = Decimal("1")
 
 
 class GridStrategy:
@@ -36,24 +38,50 @@ class GridStrategy:
         return buy_orders, sell_orders
 
     def _make_buy_orders(self, previous_price: Decimal, current_price: Decimal) -> List[Order]:
-        orders = []
+        orders_by_slot: dict[int, Order] = {}
         for row in self.grid.rows:
-            crossed_down = row.is_empty and previous_price > row.buy_price and current_price <= row.buy_price
-            if not crossed_down:
+            if not row.is_empty:
                 continue
 
-            orders.append(Order(
+            crossed_down = previous_price > row.buy_price and current_price <= row.buy_price
+            crossed_up = previous_price < row.buy_price and current_price >= row.buy_price
+            if not (crossed_down or crossed_up):
+                continue
+
+            if crossed_down:
+                orders_by_slot[row.index] = Order(
+                    slot_index=row.index,
+                    side=OrderSide.BUY,
+                    price=row.buy_price,
+                    quantity=row.planned_qty,
+                    symbol=self.symbol,
+                    execution_type=OrderExecutionType.LIMIT,
+                )
+                logger.info(
+                    f"매수 교차 조건 충족(하락) → 슬롯 {row.index}: "
+                    f"{previous_price} -> {current_price} / {row.buy_price} x {row.planned_qty}"
+                )
+                continue
+
+            spend_amount = quantize_to_step(
+                row.buy_price * row.planned_qty,
+                KRW_ORDER_AMOUNT_STEP,
+            )
+            orders_by_slot[row.index] = Order(
                 slot_index=row.index,
                 side=OrderSide.BUY,
                 price=row.buy_price,
                 quantity=row.planned_qty,
                 symbol=self.symbol,
-            ))
-            logger.info(
-                f"매수 교차 조건 충족 → 슬롯 {row.index}: "
-                f"{previous_price} -> {current_price} / {row.buy_price} x {row.planned_qty}"
+                execution_type=OrderExecutionType.MARKET_BUY_BY_PRICE,
+                spend_amount=spend_amount,
             )
-        return orders
+            logger.info(
+                f"매수 교차 조건 충족(상승) → 슬롯 {row.index}: "
+                f"{previous_price} -> {current_price} / trigger={row.buy_price} "
+                f"target={row.planned_qty} spend={spend_amount} KRW"
+            )
+        return list(orders_by_slot.values())
 
     def _make_sell_orders(self, previous_price: Decimal, current_price: Decimal) -> List[Order]:
         orders = []
@@ -76,11 +104,10 @@ class GridStrategy:
         return orders
 
     def apply_filled_order(self, order: Order):
-        """체결된 주문을 그리드 상태에 반영하고 저장"""
+        """체결된 주문을 그리드 상태에 반영한다."""
         if order.side == OrderSide.BUY:
-            self.grid.apply_buy(order.slot_index)
+            self.grid.apply_buy(order.slot_index, order.quantity)
             logger.info(f"매수 체결 반영 → 슬롯 {order.slot_index}")
         else:
             self.grid.apply_sell(order.slot_index)
             logger.info(f"매도 체결 반영 → 슬롯 {order.slot_index}")
-        self.grid.save()

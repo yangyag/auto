@@ -5,6 +5,7 @@ from pathlib import Path
 
 from core.grid import GridState
 from core.grid_builder import build_cash_only_grid
+from storage.file_grid_repository import FileGridRepository
 from utils.decimal_utils import BTC_QUANTITY_STEP
 
 
@@ -84,10 +85,11 @@ class GridBuilderTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             grid_path = Path(tmpdir) / "grid.txt"
-            state = GridState.from_rows("KRW-BTC", rows, grid_file=str(grid_path))
-            state.save()
+            state = GridState.from_rows("KRW-BTC", rows)
+            repository = FileGridRepository(str(grid_path))
+            repository.save(state.to_snapshot())
 
-            reloaded = GridState(str(grid_path))
+            reloaded = GridState.from_snapshot(repository.load())
 
         self.assertEqual(reloaded.symbol, "KRW-BTC")
         self.assertEqual(len(reloaded.rows), 10)

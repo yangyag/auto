@@ -12,7 +12,7 @@ from urllib.parse import unquote, urlencode
 import jwt
 import requests
 
-from core.models import Order, OrderSide, OrderStatus
+from core.models import Order, OrderExecutionType, OrderSide, OrderStatus
 from exchange.base import BaseExchange
 from utils.decimal_utils import DECIMAL_ZERO, format_decimal, to_decimal
 from utils.logger import get_logger
@@ -191,24 +191,39 @@ class CryptoExchange(BaseExchange):
 
     def place_order(self, order: Order) -> Optional[str]:
         """
-        지정가 주문 실행.
+        주문 실행.
         성공 시 업비트 uuid 반환, 실패 시 None.
         """
         side = "bid" if order.side == OrderSide.BUY else "ask"
-        body = {
-            "market": order.symbol,
-            "side": side,
-            "volume": format_decimal(order.quantity),
-            "price": format_decimal(order.price),
-            "ord_type": "limit",
-        }
+        if order.execution_type == OrderExecutionType.MARKET_BUY_BY_PRICE:
+            if order.side != OrderSide.BUY:
+                raise ValueError("시장가 매수 금액 주문은 BUY 에서만 사용할 수 있습니다.")
+            body = {
+                "market": order.symbol,
+                "side": side,
+                "price": format_decimal(order.required_krw),
+                "ord_type": "price",
+            }
+            log_message = (
+                f"주문 접수 [{side}] {order.symbol} 시장가 {format_decimal(order.required_krw)} KRW "
+                f"(trigger={format_decimal(order.price)}, qty={format_decimal(order.quantity)})"
+            )
+        else:
+            body = {
+                "market": order.symbol,
+                "side": side,
+                "volume": format_decimal(order.quantity),
+                "price": format_decimal(order.price),
+                "ord_type": "limit",
+            }
+            log_message = (
+                f"주문 접수 [{side}] {order.symbol} "
+                f"{format_decimal(order.price)} x {format_decimal(order.quantity)}"
+            )
         try:
             result = self._post("/v1/orders", body)
             order_id = result.get("uuid")
-            logger.info(
-                f"주문 접수 [{side}] {order.symbol} "
-                f"{order.price} x {order.quantity} → uuid={order_id}"
-            )
+            logger.info(f"{log_message} → uuid={order_id}")
             return order_id
         except UpbitAPIError as e:
             logger.error(f"주문 실패: {e}")

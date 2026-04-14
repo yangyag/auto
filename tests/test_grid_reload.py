@@ -6,7 +6,8 @@ from decimal import Decimal
 from pathlib import Path
 
 from core.grid import GridState
-from main import refresh_grid_state_if_changed
+from main import GridStateRuntime, refresh_grid_state_if_changed
+from storage.file_grid_repository import FileGridRepository
 
 
 INITIAL_GRID = """Grid3 KRW-BTC
@@ -24,17 +25,20 @@ UPDATED_GRID = """Grid3 KRW-BTC
 
 class GridReloadTest(unittest.TestCase):
 
-    def test_grid_state_reload_if_changed_refreshes_rows_from_disk(self):
+    def test_refresh_grid_state_if_changed_refreshes_rows_from_repository(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             grid_path = Path(tmpdir) / "grid.txt"
             grid_path.write_text(INITIAL_GRID, encoding="utf-8")
-            state = GridState(str(grid_path))
+            repository = FileGridRepository(str(grid_path))
+            snapshot = repository.load()
+            state = GridState.from_snapshot(snapshot)
+            runtime = GridStateRuntime(metadata=snapshot.metadata)
 
             time.sleep(0.02)
             grid_path.write_text(UPDATED_GRID, encoding="utf-8")
             os.utime(grid_path, None)
 
-            changed = state.reload_if_changed()
+            changed = refresh_grid_state_if_changed(state, repository, runtime)
 
             self.assertTrue(changed)
             self.assertEqual(state.rows[0].buy_price, Decimal("200"))
@@ -45,13 +49,16 @@ class GridReloadTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             grid_path = Path(tmpdir) / "grid.txt"
             grid_path.write_text(INITIAL_GRID, encoding="utf-8")
-            state = GridState(str(grid_path))
+            repository = FileGridRepository(str(grid_path))
+            snapshot = repository.load()
+            state = GridState.from_snapshot(snapshot)
+            runtime = GridStateRuntime(metadata=snapshot.metadata)
 
             time.sleep(0.02)
             grid_path.write_text(UPDATED_GRID, encoding="utf-8")
             os.utime(grid_path, None)
 
-            changed = refresh_grid_state_if_changed(state)
+            changed = refresh_grid_state_if_changed(state, repository, runtime)
 
             self.assertTrue(changed)
             self.assertEqual(state.rows[0].buy_price, Decimal("200"))

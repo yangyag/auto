@@ -12,6 +12,11 @@ class OrderSide(Enum):
     SELL = "SELL"
 
 
+class OrderExecutionType(Enum):
+    LIMIT = "limit"
+    MARKET_BUY_BY_PRICE = "market_buy_by_price"
+
+
 class EvalResult(Enum):
     PASS = "pass"
     REVISE = "revise"
@@ -25,7 +30,7 @@ class GridRow:
     buy_price: Decimal       # 매수 트리거 가격
     held_qty: Decimal        # 현재 보유 수량 (>0 이면 보유 중)
     sell_price: Decimal      # 매도 트리거 가격
-    planned_qty: Decimal     # 매도 목표 수량 (>0 이면 빈 슬롯)
+    planned_qty: Decimal     # 슬롯의 기본 목표 수량 (빈 슬롯 대기 / 보유 슬롯 복원 기준)
 
     @property
     def is_holding(self) -> bool:
@@ -46,7 +51,23 @@ class Order:
     price: Decimal              # 주문 가격
     quantity: Decimal           # 주문 수량
     symbol: str                 # 종목/코인 심볼
+    execution_type: OrderExecutionType = OrderExecutionType.LIMIT
+    spend_amount: Optional[Decimal] = None  # 시장가 매수 시 사용할 KRW 금액
     order_id: Optional[str] = None   # 거래소 체결 후 채워짐
+
+    @property
+    def required_krw(self) -> Decimal:
+        if self.side != OrderSide.BUY:
+            return Decimal("0")
+        if self.execution_type == OrderExecutionType.MARKET_BUY_BY_PRICE:
+            if self.spend_amount is None:
+                raise ValueError("시장가 매수 주문에는 spend_amount 가 필요합니다.")
+            return self.spend_amount
+        return self.price * self.quantity
+
+    @property
+    def is_market_buy_by_price(self) -> bool:
+        return self.execution_type == OrderExecutionType.MARKET_BUY_BY_PRICE
 
 
 @dataclass

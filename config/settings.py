@@ -48,6 +48,10 @@ EXCHANGE_TYPE = "crypto"
 # 업비트 마켓 형식: "KRW-BTC", "KRW-ETH" 등
 SYMBOL = "KRW-BTC"
 
+# ── 상태 저장 백엔드 ─────────────────────────────────────
+STATE_BACKEND = os.getenv("STATE_BACKEND", "file").strip().lower() or "file"
+STATE_BOT_KEY = os.getenv("STATE_BOT_KEY", "krw-btc-live")
+
 # ── 그리드 파일 ──────────────────────────────────────────
 GRID_FILE = "grid.txt"
 GRID_SLOT_COUNT = 10
@@ -55,14 +59,22 @@ GRID_LOWER_PRICE = Decimal("92253123")
 GRID_UPPER_PRICE = Decimal("111137221")
 GRID_FIRST_BUY_AMOUNT_KRW = Decimal("200000")
 
+# ── PostgreSQL 상태 저장 ─────────────────────────────────
+PGHOST = os.getenv("PGHOST", "127.0.0.1")
+PGPORT = int(os.getenv("PGPORT", "5432"))
+PGDATABASE = os.getenv("PGDATABASE", "yangyag")
+PGUSER = os.getenv("PGUSER", "yangyag")
+PGPASSWORD = os.getenv("PGPASSWORD", "")
+PGSCHEMA = os.getenv("PGSCHEMA", "auto_trading")
+
 # ── API 키 (환경변수 우선, 없으면 프로젝트 루트 .env 사용) ─────
 API_KEY = os.getenv("UPBIT_ACCESS_KEY", "")
 API_SECRET = os.getenv("UPBIT_SECRET_KEY", "")
 
 # ── 리스크 파라미터 ──────────────────────────────────────
 MAX_TOTAL_BUDGET_KRW = None  # BTC 그리드 총 투입 한도. None 또는 0 이하면 제한 비활성화
-MAX_DAILY_ORDERS = 50                         # 일일 최대 주문 횟수
-MIN_BALANCE_RESERVE = Decimal("10000")       # 최소 유보 잔고 KRW (이 금액 이하이면 매수 block)
+MAX_DAILY_ORDERS = 50        # 일일 최대 주문 횟수
+MIN_BALANCE_RESERVE = Decimal("10000")  # 최소 유보 잔고 KRW (이 금액 이하이면 매수 block)
 
 # ── 모니터링 주기 ────────────────────────────────────────
 PRICE_POLL_INTERVAL = 5      # 가격 조회 간격 (초)
