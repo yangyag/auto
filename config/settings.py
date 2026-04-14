@@ -83,3 +83,4 @@ PRICE_POLL_INTERVAL = 5      # 가격 조회 간격 (초)
 LOG_DIR = "logs"
 LOG_FILE = "trading.log"
 LOG_LEVEL = "INFO"
+LOG_RETENTION_DAYS = 7
