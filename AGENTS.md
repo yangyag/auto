@@ -61,8 +61,8 @@ auto/
 - `exchange/stock.py`는 미구현 상태다. 주식 기능 요청을 처리할 때는 stub 제거 범위와 누락된 메서드를 먼저 명시한다.
 - 현재 주문 수량 모델은 `Decimal` 기준이다. KRW-BTC 운영에서는 소수 BTC 수량이 기본 경로다.
 - KRW-BTC 운영 시 수량은 소수 BTC 단위로 관리하고, 가격은 업비트 KRW 마켓 호가 단위에 맞춰야 한다.
-- `grid.properties` 기반 DB 그리드 생성 도구가 있다. `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `BUY_AMOUNT_KRW`, `GRID_COUNT`를 채우면 `scripts/apply_grid_properties_to_postgres.py`가 최상단/최하단 buy_price를 그 범위에 맞추고, 각 슬롯 `planned_qty`는 `BUY_AMOUNT_KRW / buy_price`를 소수 BTC 단위 내림으로 계산해 PostgreSQL에 직접 저장한다.
-- 이 도구에서 중간 슬롯 buy_price는 기하비율로 계산하며, 각 슬롯의 `sell_price`는 바로 위 슬롯의 `buy_price`, 최상단 슬롯의 `sell_price`는 최상단 `buy_price`에서 한 단계 위로 외삽한 값이다.
+- `grid.properties` 기반 DB 그리드 생성 도구가 있다. `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `BUY_AMOUNT_KRW`, `GRID_COUNT`, `SELL_PERCENT`를 채우면 `scripts/apply_grid_properties_to_postgres.py`가 최상단/최하단 buy_price를 그 범위에 맞추고, 각 슬롯 `planned_qty`는 `BUY_AMOUNT_KRW / buy_price`를 소수 BTC 단위 내림으로 계산해 PostgreSQL에 직접 저장한다.
+- 이 도구에서 중간 슬롯 buy_price는 기하비율로 계산하며, 각 슬롯의 `sell_price`는 `buy_price * (1 + SELL_PERCENT / 100)` 기준으로 계산한다. `SELL_PERCENT=5`는 5%를 뜻한다.
 - 백그라운드 실행/종료는 가능하면 `./run.sh`, `./stop.sh`를 우선 사용한다. 직접 `nohup python3 main.py`를 실행하면 PID 추적과 로그 해석이 꼬일 수 있다.
 - 운영 로그는 `logs/trading-YYYY-MM-DD.log`를 기준으로 본다. 테스트 로그가 같은 날짜 파일에 남을 수 있으므로 로거 이름 `__main__`/`main`도 함께 확인한다.
 
@@ -105,8 +105,8 @@ auto/
 
 ## 주의할 구현 포인트
 - 거래 심볼은 현재 두 곳에 존재한다: `config/settings.py`의 `SYMBOL`, `grid.txt` 헤더의 심볼. 실제 주문은 `cfg.SYMBOL`을 사용하고, 그리드 파일 요약/저장은 `GridState.symbol`을 사용한다.
-- `core/grid_builder.py::build_cash_only_grid()`는 상단 매도 경계와 하단 매수 경계를 고정한 뒤 그 사이를 슬롯 수만큼 분할하고, 첫 슬롯 `buy_price` 기준 `GRID_FIRST_BUY_AMOUNT_KRW` 만큼 살 수 있는 BTC 수량을 모든 슬롯의 고정 수량으로 사용한다.
-- `python3 main.py init-grid`의 생성 기준은 총예산 분배가 아니라 `--first-buy-amount` 기반이다. 현재 기본값은 `config/settings.py::GRID_FIRST_BUY_AMOUNT_KRW`를 따른다.
+- `core/grid_builder.py::build_cash_only_grid()`는 상단/하단 매수 경계를 고정한 뒤 그 사이를 슬롯 수만큼 분할하고, 첫 슬롯 `buy_price` 기준 `GRID_FIRST_BUY_AMOUNT_KRW` 만큼 살 수 있는 BTC 수량을 모든 슬롯의 고정 수량으로 사용한다. 각 슬롯 `sell_price`는 `GRID_SELL_PERCENT` 기준으로 계산한다.
+- `python3 main.py init-grid`의 생성 기준은 총예산 분배가 아니라 `--first-buy-amount` 기반이다. 현재 기본값은 `config/settings.py::GRID_FIRST_BUY_AMOUNT_KRW`를 따르며, 매도 가격은 `--sell-percent` 또는 `config/settings.py::GRID_SELL_PERCENT`를 따른다.
 - `strategy/grid_strategy.py`의 트리거는 절대값 판정이 아니라 가격 교차 판정이다. 첫 가격 스냅샷에서는 주문을 내지 않고, 이후 빈 슬롯은 `buy_price`를 위에서 아래로 또는 아래에서 위로 교차할 때 매수하고, 보유 슬롯은 `이전 가격 < sell_price <= 현재 가격`일 때 매도한다.
 - 하락 교차 매수와 매도는 지정가 주문이다. 상승 교차 매수는 업비트 `ord_type=price` 시장가 매수로 보내며, 슬롯 목표 예산은 `buy_price * planned_qty`를 원 단위 내림한 KRW 금액으로 계산한다.
 - `main.py`는 같은 루프의 매도/매수 후보가 함께 생기면 매도를 먼저 접수하고 즉시 체결 재확인한 뒤, 실제로 늘어난 KRW 잔고 기준으로 매수 주문을 판단한다. `check_risk()` 자체는 현재 주문 가능 KRW만 본다.
@@ -150,7 +150,7 @@ python3 -c "import main"
 python3 main.py balance
 
 # KRW-BTC 초기 그리드 생성
-python3 main.py init-grid --first-buy-amount 200000
+python3 main.py init-grid --first-buy-amount 200000 --sell-percent 5
 
 # grid.properties -> PostgreSQL 그리드 반영
 python3 scripts/apply_grid_properties_to_postgres.py --properties-file grid.properties --force
@@ -173,7 +173,7 @@ python3 -m unittest discover -s tests -v
 - 신규 거래소 추가 시 `exchange/base.py`를 상속하고 `main.py`의 `build_exchange()` 분기도 함께 갱신한다.
 - 그리드 파일 파싱 규칙을 바꾸면 `core/grid.py`의 `load()`와 `save()`를 같이 수정한다.
 - 리스크 정책 변경은 `config/settings.py`와 `main.py::check_risk()`를 함께 본다.
-- 초기 그리드 생성 수량 기준을 바꾸면 `config/settings.py`의 `GRID_FIRST_BUY_AMOUNT_KRW`, `main.py init-grid` 인자, `core/grid_builder.py` 계산식을 함께 맞춘다.
+- 초기 그리드 생성 수량/매도 퍼센트 기준을 바꾸면 `config/settings.py`의 `GRID_FIRST_BUY_AMOUNT_KRW`, `GRID_SELL_PERCENT`, `main.py init-grid` 인자, `core/grid_builder.py` 계산식을 함께 맞춘다.
 - BTC 그리드는 총 수량 한도보다 총 투입 KRW 예산과 최소 유보 잔고 기준으로 점검한다.
 - 기능은 가능한 한 파일 단위 책임을 유지하고 `main.py`에서 조립한다.
 - git commit 메시지를 쓸 상황이면 한글로 작성한다.

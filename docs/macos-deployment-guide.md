@@ -213,6 +213,7 @@ MIN_BUY_PRICE=91623000
 MAX_BUY_PRICE=127886000
 BUY_AMOUNT_KRW=200000
 GRID_COUNT=20
+SELL_PERCENT=5
 ```
 
 의미:
@@ -220,6 +221,7 @@ GRID_COUNT=20
 - `MAX_BUY_PRICE`: 최상단 슬롯 buy_price
 - `BUY_AMOUNT_KRW`: 슬롯별 목표 매수금액
 - `GRID_COUNT`: 슬롯 개수
+- `SELL_PERCENT`: 매도 퍼센트, `5`는 `5%`를 뜻한다
 
 중요:
 - `MIN_BUY_PRICE`, `MAX_BUY_PRICE`는 업비트 호가 단위에 맞는 값이어야 한다.

@@ -10,6 +10,8 @@ from core.models import GridRow
 from utils.decimal_utils import BTC_QUANTITY_STEP, DECIMAL_ZERO, quantize_to_step, to_decimal
 from utils.upbit_market import MIN_KRW_ORDER_AMOUNT, normalize_krw_price
 
+DEFAULT_SELL_PERCENT = Decimal("5")
+
 
 @dataclass(frozen=True)
 class GridPropertySpec:
@@ -17,6 +19,7 @@ class GridPropertySpec:
     max_buy_price: Decimal
     buy_amount_krw: Decimal
     grid_count: int
+    sell_percent: Decimal = DEFAULT_SELL_PERCENT
 
 
 def load_grid_property_spec(path: str | Path) -> GridPropertySpec:
@@ -41,7 +44,22 @@ def load_grid_property_spec(path: str | Path) -> GridPropertySpec:
         max_buy_price=to_decimal(properties["MAX_BUY_PRICE"]),
         buy_amount_krw=to_decimal(properties["BUY_AMOUNT_KRW"]),
         grid_count=int(properties["GRID_COUNT"]),
+        sell_percent=to_decimal(properties.get("SELL_PERCENT") or DEFAULT_SELL_PERCENT),
     )
+
+
+def build_sell_price(buy_price: Decimal, sell_percent: Decimal) -> Decimal:
+    raw_sell_percent = to_decimal(sell_percent)
+    if raw_sell_percent <= DECIMAL_ZERO:
+        raise ValueError("SELL_PERCENT는 0보다 커야 합니다.")
+
+    raw_sell_price = buy_price * (Decimal("1") + (raw_sell_percent / Decimal("100")))
+    sell_price = normalize_krw_price(raw_sell_price)
+    if sell_price <= buy_price:
+        raise ValueError(
+            f"sell_price 계산 결과가 buy_price보다 크지 않습니다: buy_price={buy_price}, sell_percent={raw_sell_percent}, sell_price={sell_price}"
+        )
+    return sell_price
 
 
 def build_grid_rows_from_property_spec(spec: GridPropertySpec) -> list[GridRow]:
@@ -81,13 +99,9 @@ def build_grid_rows_from_property_spec(spec: GridPropertySpec) -> list[GridRow]:
     if len(set(buy_prices_desc)) != grid_count:
         raise ValueError("호가 단위 적용 후 buy_price 레벨이 중복되었습니다. 범위를 넓히거나 슬롯 수를 줄이세요.")
 
-    top_sell_price = normalize_krw_price(max_buy_price * growth_ratio)
-    if top_sell_price <= max_buy_price:
-        raise ValueError("상단 sell_price 계산 결과가 top buy_price보다 크지 않습니다.")
-
     rows: list[GridRow] = []
     for index, buy_price in enumerate(buy_prices_desc, start=1):
-        sell_price = top_sell_price if index == 1 else buy_prices_desc[index - 2]
+        sell_price = build_sell_price(buy_price, spec.sell_percent)
         planned_qty = quantize_to_step(
             buy_amount_krw / buy_price,
             BTC_QUANTITY_STEP,

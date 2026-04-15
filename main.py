@@ -454,6 +454,7 @@ def run_grid_init(
     upper_price: Decimal,
     slot_count: int,
     first_buy_amount: Decimal,
+    sell_percent: Decimal,
     current_price: Decimal | None,
 ) -> int:
     """KRW-BTC 초기 그리드를 생성하고 저장."""
@@ -476,6 +477,7 @@ def run_grid_init(
             current_price=live_price,
             slot_count=slot_count,
             first_buy_amount_krw=first_buy_amount,
+            sell_percent=sell_percent,
         )
         state = GridState.from_rows(cfg.SYMBOL, rows)
         validate_grid_state(state)
@@ -498,6 +500,7 @@ def run_grid_init(
     print(f"하단 경계: {format_decimal(lower_price)} KRW")
     print(f"슬롯 수: {slot_count}")
     print(f"첫 칸 기준 매수금액: {format_decimal(first_buy_amount)} KRW")
+    print(f"매도 퍼센트: {format_decimal(sell_percent)}%")
     print(f"고정 수량: {format_decimal(rows[0].planned_qty)} BTC")
     print(f"총 배정 금액: {format_decimal(state.total_allocated_budget)} KRW")
     print("상태: 성공")
@@ -516,6 +519,7 @@ def build_cli_parser() -> argparse.ArgumentParser:
     grid_parser.add_argument("--upper-price", type=decimal_arg, default=cfg.GRID_UPPER_PRICE)
     grid_parser.add_argument("--slot-count", type=int, default=cfg.GRID_SLOT_COUNT)
     grid_parser.add_argument("--first-buy-amount", type=decimal_arg, default=cfg.GRID_FIRST_BUY_AMOUNT_KRW)
+    grid_parser.add_argument("--sell-percent", type=decimal_arg, default=cfg.GRID_SELL_PERCENT)
     grid_parser.add_argument("--current-price", type=decimal_arg, default=None)
 
     return parser
@@ -541,6 +545,7 @@ def main(argv: list[str] | None = None) -> int:
             upper_price=args.upper_price,
             slot_count=args.slot_count,
             first_buy_amount=args.first_buy_amount,
+            sell_percent=args.sell_percent,
             current_price=args.current_price,
         )
 

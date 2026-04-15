@@ -21,7 +21,7 @@ Python 기반 그리드 자동매매 시스템이다. 현재 운영 기준 경�
 - 현재 저장소의 `grid.txt`는 `KRW-BTC` 20개 슬롯 구조다.
 - 현재 추적 파일 기준으로는 20개 슬롯이 모두 빈 슬롯이며 총재고는 `0 BTC`다.
 - 현재 추적 파일 기준 총 배정 금액은 `3,999,987.10096 KRW`다.
-- `GRID_FIRST_BUY_AMOUNT_KRW` 기본값은 `200000 KRW`, `PRICE_POLL_INTERVAL` 기본값은 `5초`다.
+- `GRID_FIRST_BUY_AMOUNT_KRW` 기본값은 `200000 KRW`, `GRID_SELL_PERCENT` 기본값은 `5`, `PRICE_POLL_INTERVAL` 기본값은 `5초`다.
 
 ## 디렉터리 구조
 
@@ -112,10 +112,10 @@ Grid3 SYMBOL
 
 ## `grid.properties` 기반 DB 그리드 반영
 
-- `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `BUY_AMOUNT_KRW`, `GRID_COUNT`를 읽는다.
+- `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `BUY_AMOUNT_KRW`, `GRID_COUNT`, `SELL_PERCENT`를 읽는다.
 - 중간 `buy_price`는 기하비율로 계산한다.
 - 각 슬롯 `planned_qty`는 `BUY_AMOUNT_KRW / buy_price`를 BTC 소수 단위로 내림해 계산한다.
-- 각 슬롯 `sell_price`는 바로 위 슬롯의 `buy_price`를 사용하고, 최상단 슬롯은 한 단계 위 가격을 외삽한다.
+- 각 슬롯 `sell_price`는 `buy_price * (1 + SELL_PERCENT / 100)` 기준으로 계산한다. `SELL_PERCENT=5`는 5%를 뜻한다.
 - 결과는 `scripts/apply_grid_properties_to_postgres.py`가 PostgreSQL에 직접 저장한다.
 
 ## 실행 및 검증
@@ -134,7 +134,7 @@ python3 -m unittest discover -s tests -v
 python3 main.py balance
 
 # 파일 기반 초기 그리드 생성
-python3 main.py init-grid --first-buy-amount 200000
+python3 main.py init-grid --first-buy-amount 200000 --sell-percent 5
 
 # grid.properties -> PostgreSQL 반영
 python3 scripts/apply_grid_properties_to_postgres.py --force

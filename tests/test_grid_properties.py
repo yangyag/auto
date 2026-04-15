@@ -3,7 +3,12 @@ import unittest
 from decimal import Decimal
 from pathlib import Path
 
-from core.grid_properties import GridPropertySpec, build_grid_rows_from_property_spec, load_grid_property_spec
+from core.grid_properties import (
+    GridPropertySpec,
+    build_grid_rows_from_property_spec,
+    build_sell_price,
+    load_grid_property_spec,
+)
 
 
 class GridPropertiesTest(unittest.TestCase):
@@ -11,7 +16,7 @@ class GridPropertiesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "grid.properties"
             path.write_text(
-                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\n",
+                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\nSELL_PERCENT=5\n",
                 encoding="utf-8",
             )
 
@@ -24,8 +29,21 @@ class GridPropertiesTest(unittest.TestCase):
                 max_buy_price=Decimal("127886000"),
                 buy_amount_krw=Decimal("200000"),
                 grid_count=20,
+                sell_percent=Decimal("5"),
             ),
         )
+
+    def test_load_grid_property_spec_defaults_sell_percent_to_five_when_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "grid.properties"
+            path.write_text(
+                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\n",
+                encoding="utf-8",
+            )
+
+            spec = load_grid_property_spec(path)
+
+        self.assertEqual(spec.sell_percent, Decimal("5"))
 
     def test_build_grid_rows_from_property_spec_uses_buy_bounds_as_top_and_bottom_slots(self):
         spec = GridPropertySpec(
@@ -33,6 +51,7 @@ class GridPropertiesTest(unittest.TestCase):
             max_buy_price=Decimal("127886000"),
             buy_amount_krw=Decimal("200000"),
             grid_count=20,
+            sell_percent=Decimal("5"),
         )
 
         rows = build_grid_rows_from_property_spec(spec)
@@ -42,8 +61,8 @@ class GridPropertiesTest(unittest.TestCase):
         self.assertEqual(rows[-1].buy_price, Decimal("91623000"))
         self.assertTrue(all(row.held_qty == Decimal("0") for row in rows))
         self.assertTrue(all(row.planned_qty > Decimal("0") for row in rows))
-        self.assertEqual(rows[1].sell_price, rows[0].buy_price)
-        self.assertEqual(rows[-1].sell_price, rows[-2].buy_price)
+        self.assertEqual(rows[0].sell_price, build_sell_price(rows[0].buy_price, spec.sell_percent))
+        self.assertEqual(rows[-1].sell_price, build_sell_price(rows[-1].buy_price, spec.sell_percent))
         self.assertGreater(rows[0].sell_price, rows[0].buy_price)
         self.assertTrue(all(rows[i].buy_price > rows[i + 1].buy_price for i in range(len(rows) - 1)))
 
@@ -53,6 +72,7 @@ class GridPropertiesTest(unittest.TestCase):
             max_buy_price=Decimal("127886999"),
             buy_amount_krw=Decimal("200000"),
             grid_count=20,
+            sell_percent=Decimal("5"),
         )
 
         with self.assertRaises(ValueError):
@@ -64,6 +84,7 @@ class GridPropertiesTest(unittest.TestCase):
             max_buy_price=Decimal("120000000"),
             buy_amount_krw=Decimal("200000"),
             grid_count=3,
+            sell_percent=Decimal("5"),
         )
 
         rows = build_grid_rows_from_property_spec(spec)
@@ -71,6 +92,9 @@ class GridPropertiesTest(unittest.TestCase):
         self.assertEqual(rows[0].planned_qty, Decimal("0.00166666"))
         self.assertEqual(rows[1].planned_qty, Decimal("0.00182575"))
         self.assertEqual(rows[2].planned_qty, Decimal("0.00200000"))
+        self.assertEqual(rows[0].sell_price, build_sell_price(rows[0].buy_price, spec.sell_percent))
+        self.assertEqual(rows[1].sell_price, build_sell_price(rows[1].buy_price, spec.sell_percent))
+        self.assertEqual(rows[2].sell_price, build_sell_price(rows[2].buy_price, spec.sell_percent))
 
 
 if __name__ == "__main__":

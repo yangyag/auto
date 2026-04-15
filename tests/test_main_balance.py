@@ -113,6 +113,7 @@ class BalanceCommandTest(unittest.TestCase):
              patch.object(main.cfg, "GRID_UPPER_PRICE", Decimal("111137221")), \
              patch.object(main.cfg, "GRID_SLOT_COUNT", 10), \
              patch.object(main.cfg, "GRID_FIRST_BUY_AMOUNT_KRW", Decimal("200000")), \
+             patch.object(main.cfg, "GRID_SELL_PERCENT", Decimal("5")), \
              patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", Decimal("2000000")), \
              patch("main.build_exchange", return_value=exchange):
             grid_path = Path(tmpdir) / "grid.txt"
@@ -124,6 +125,7 @@ class BalanceCommandTest(unittest.TestCase):
                     upper_price=Decimal("111137221"),
                     slot_count=10,
                     first_buy_amount=Decimal("200000"),
+                    sell_percent=Decimal("5"),
                     current_price=None,
                 )
 
@@ -131,6 +133,7 @@ class BalanceCommandTest(unittest.TestCase):
             self.assertTrue(grid_path.exists())
             text = grid_path.read_text(encoding="utf-8")
             self.assertIn("Grid3 KRW-BTC", text)
+            self.assertIn("매도 퍼센트: 5%", stdout.getvalue())
             self.assertIn("고정 수량: 0.00183341 BTC", stdout.getvalue())
             self.assertIn("상태: 성공", stdout.getvalue())
 
@@ -145,6 +148,7 @@ class BalanceCommandTest(unittest.TestCase):
              patch.object(main.cfg, "GRID_UPPER_PRICE", Decimal("111137221")), \
              patch.object(main.cfg, "GRID_SLOT_COUNT", 10), \
              patch.object(main.cfg, "GRID_FIRST_BUY_AMOUNT_KRW", Decimal("200000")), \
+             patch.object(main.cfg, "GRID_SELL_PERCENT", Decimal("5")), \
              patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", Decimal("2000000")), \
              patch("main.build_exchange", return_value=exchange):
             grid_path = Path(tmpdir) / "grid.txt"
@@ -156,6 +160,7 @@ class BalanceCommandTest(unittest.TestCase):
                     upper_price=Decimal("111137221"),
                     slot_count=10,
                     first_buy_amount=Decimal("200000"),
+                    sell_percent=Decimal("5"),
                     current_price=None,
                 )
 

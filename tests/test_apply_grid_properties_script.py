@@ -6,6 +6,7 @@ import unittest
 from decimal import Decimal
 from pathlib import Path
 
+from core.grid_properties import build_sell_price
 from storage.postgres_grid_repository import PostgresGridRepository
 from tests.postgres_test_utils import (
     PostgresIntegrationTestCase,
@@ -53,7 +54,7 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             properties_path = Path(tmpdir) / "grid.properties"
             properties_path.write_text(
-                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\n",
+                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\nSELL_PERCENT=5\n",
                 encoding="utf-8",
             )
             result = subprocess.run(
@@ -75,7 +76,8 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
         self.assertEqual(len(snapshot.rows), 20)
         self.assertEqual(snapshot.rows[0].buy_price, Decimal("127886000"))
         self.assertEqual(snapshot.rows[-1].buy_price, Decimal("91623000"))
-        self.assertEqual(snapshot.rows[1].sell_price, snapshot.rows[0].buy_price)
+        self.assertEqual(snapshot.rows[0].sell_price, build_sell_price(snapshot.rows[0].buy_price, Decimal("5")))
+        self.assertEqual(snapshot.rows[1].sell_price, build_sell_price(snapshot.rows[1].buy_price, Decimal("5")))
         self.assertGreater(snapshot.rows[0].sell_price, snapshot.rows[0].buy_price)
         self.assertIn("rows: 20", result.stdout)
         self.assertIn("top_buy_price: 127886000", result.stdout)
@@ -86,7 +88,7 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
         original = project_properties.read_text(encoding="utf-8") if project_properties.exists() else None
         try:
             project_properties.write_text(
-                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\n",
+                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\nSELL_PERCENT=5\n",
                 encoding="utf-8",
             )
             result = subprocess.run(

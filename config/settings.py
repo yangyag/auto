@@ -58,6 +58,7 @@ GRID_SLOT_COUNT = 10
 GRID_LOWER_PRICE = Decimal("92253123")
 GRID_UPPER_PRICE = Decimal("111137221")
 GRID_FIRST_BUY_AMOUNT_KRW = Decimal("200000")
+GRID_SELL_PERCENT = Decimal("5")
 
 # ── PostgreSQL 상태 저장 ─────────────────────────────────
 PGHOST = os.getenv("PGHOST", "127.0.0.1")
