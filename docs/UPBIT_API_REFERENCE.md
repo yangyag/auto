@@ -4,7 +4,8 @@
 
 이 문서는 현재 저장소에서 사용하는 업비트 Open API 관련 내용을 빠르게 참고하기 위한 **실무용 요약본**이다.
 
-- 기준일: 2026-04-13
+- 기준일: 2026-04-15
+- API 버전: v1.6.2 (공식 문서 기준)
 - 기준 범위: 가상화폐 거래, 업비트 거래소, REST API 중심
 - 우선 대상: 현재 코드에서 직접 쓰는 인증/현재가/잔고/주문 생성/주문 조회/주문 취소
 - 충돌 시 우선순위: 이 문서보다 **업비트 공식 문서가 우선**
@@ -17,13 +18,14 @@
 - 문서 인덱스: <https://docs.upbit.com/kr/llms.txt>
 - 인증: <https://docs.upbit.com/kr/reference/auth>
 - REST 사용/에러 안내: <https://docs.upbit.com/kr/reference/rest-api-guide>
-- 요청 수 제한: <https://docs.upbit.com/kr/kr/reference/rate-limits>
+- 요청 수 제한: <https://docs.upbit.com/kr/reference/rate-limits>
 - REST API Best Practice: <https://docs.upbit.com/kr/docs/rest-api-best-practice>
-- 원화(KRW) 마켓 주문 가격 단위 / 최소 주문 가능 금액: <https://docs.upbit.com/kr/kr/docs/krw-market-info>
+- 원화(KRW) 마켓 주문 가격 단위 / 최소 주문 가능 금액: <https://docs.upbit.com/kr/docs/krw-market-info>
+- 자전거래 체결 방지(SMP): <https://docs.upbit.com/kr/docs/smp>
 
 ### 자주 보는 Reference
 
-- 현재가 조회: <https://docs.upbit.com/kr/kr/reference/list-tickers>
+- 현재가 조회: <https://docs.upbit.com/kr/reference/list-tickers>
 - 잔고 조회: <https://docs.upbit.com/kr/reference/get-balance>
 - 주문 가능 정보 조회: <https://docs.upbit.com/kr/reference/available-order-information>
 - 주문 생성: <https://docs.upbit.com/kr/reference/new-order>
@@ -31,6 +33,11 @@
 - 개별 주문 조회: <https://docs.upbit.com/kr/reference/get-order>
 - 개별 주문 취소: <https://docs.upbit.com/kr/reference/cancel-order>
 - 체결 대기 주문 목록 조회: <https://docs.upbit.com/kr/reference/list-open-orders>
+- 종료 주문 목록 조회: <https://docs.upbit.com/kr/reference/list-closed-orders>
+- ID로 주문 목록 조회: <https://docs.upbit.com/kr/reference/list-orders-by-ids>
+- ID로 주문 목록 취소: <https://docs.upbit.com/kr/reference/cancel-orders-by-ids>
+- 주문 일괄 취소: <https://docs.upbit.com/kr/reference/batch-cancel-orders>
+- 취소 후 재주문: <https://docs.upbit.com/kr/reference/cancel-and-new-order>
 
 ## 이 저장소 기준 범위
 
@@ -70,12 +77,12 @@
 - Base URL: `https://api.upbit.com/v1`
 - TLS 1.2 이상 필요
 - POST 본문은 JSON으로 전송
-- Form 방식 POST는 지원 종료
+- Form 방식 POST는 지원 종료 (2022-03-01 이후)
 
 ### WebSocket
 
-- 시세용: `wss://api.upbit.com/websocket/v1`
-- 내 자산/내 주문용: `wss://api.upbit.com/websocket/v1/private`
+- 시세용(공개): `wss://api.upbit.com/websocket/v1`
+- 내 자산/내 주문용(인증): `wss://api.upbit.com/websocket/v1/private`
 
 현재 저장소는 WebSocket을 아직 쓰지 않고 REST 중심이다.
 
@@ -99,7 +106,7 @@
 - `access_key`: Access Key
 - `nonce`: 요청마다 새로 만드는 UUID
 - `query_hash`: 쿼리 문자열 또는 Body를 쿼리 문자열 형태로 바꾼 뒤 해시한 값
-- `query_hash_alg`: 일반적으로 `SHA512`
+- `query_hash_alg`: 일반적으로 `SHA512` (기본값이므로 생략 가능)
 
 ### query_hash 생성 규칙
 
@@ -124,6 +131,11 @@
 | 개별 주문 조회 | `GET` | `/v1/order` | 필요 | `uuid` 또는 `identifier` 중 하나 |
 | 개별 주문 취소 | `DELETE` | `/v1/order` | 필요 | `uuid` 또는 `identifier` 중 하나 |
 | 체결 대기 주문 조회 | `GET` | `/v1/orders/open` | 필요 | 미체결 주문 목록 |
+| 종료 주문 목록 조회 | `GET` | `/v1/orders/closed` | 필요 | 체결/취소 완료 주문 목록 |
+| ID로 주문 목록 조회 | `GET` | `/v1/orders/uuids` | 필요 | uuid 또는 identifier 배열 |
+| ID로 주문 목록 취소 | `DELETE` | `/v1/orders/uuids` | 필요 | uuid 또는 identifier 배열 |
+| 주문 일괄 취소 | `DELETE` | `/v1/orders` | 필요 | 전체 미체결 주문 취소 |
+| 취소 후 재주문 | `POST` | `/v1/orders/cancel_and_new` | 필요 | 취소와 신규 주문 원자 실행 |
 
 ## 현재가 조회
 
@@ -136,7 +148,7 @@
 주의:
 
 - 이 API는 스냅샷 조회다.
-- 고빈도 실시간 전략이면 WebSocket 전환을 검토해야 한다.
+- 고빈도 실시간 전략이면 WebSocket Ticker 전환을 검토해야 한다.
 
 ## 잔고 조회
 
@@ -150,8 +162,9 @@
 
 주의:
 
-- 응답에는 사용 가능 잔고와 잠금 자산 정보가 함께 올 수 있다.
+- 응답에는 사용 가능 잔고(`balance`)와 잠금 자산(`locked`) 정보가 함께 올 수 있다.
 - 주문 생성 직후에는 주문에 사용된 자산이 잠금 상태가 될 수 있다.
+- `get_balance()`는 `balance` 필드만 사용하므로 잠금 자산은 포함하지 않는다.
 
 ## 주문 가능 정보 조회
 
@@ -163,10 +176,20 @@
   - 최소/최대 주문 가능 금액 확인
   - 마켓이 지원하는 매수/매도 주문 타입 확인
 
+주요 응답 필드:
+
+- `bid_fee` / `ask_fee`: 테이커 매수/매도 수수료율
+- `maker_bid_fee` / `maker_ask_fee`: 메이커 매수/매도 수수료율
+- `market.bid_types`: 지원하는 매수 주문 타입 목록
+- `market.ask_types`: 지원하는 매도 주문 타입 목록
+- `market.order_types`: **지원 종료 예정** — `bid_types`, `ask_types` 사용 권장
+- `market.max_total`: 최대 주문 가능 금액
+- `bid_account` / `ask_account`: 호가/기준 자산 계정 잔고
+
 권장 사용 시점:
 
 - 실주문 전 사전 검증
-- KRW 마켓 최소 주문 금액 확인
+- KRW 마켓 최소/최대 주문 금액 확인
 - 지원 주문 타입(`limit`, `market`, `best`) 및 옵션 확인
 
 현재 코드에는 아직 직접 연결되어 있지 않다.
@@ -184,20 +207,20 @@
   - `ask`: 매도
 - `ord_type`
   - `limit`: 지정가
-  - `price`: 시장가 매수
-  - `market`: 시장가 매도
-  - `best`: 최유리 지정가
-- `volume`
-- `price`
+  - `price`: 시장가 매수 (KRW 금액 지정)
+  - `market`: 시장가 매도 (수량 지정)
+  - `best`: 최유리 지정가 (2024-04-22 추가)
+- `volume`: 주문 수량 (시장가 매수 제외 시 필수)
+- `price`: 주문 단가 또는 KRW 총액 (시장가 매도 제외 시 필수)
 - `time_in_force`
-  - `ioc`
-  - `fok`
-  - `post_only`
-- `smp_type`
-  - `cancel_maker`
-  - `cancel_taker`
-  - `reduce`
-- `identifier`: 사용자 정의 주문 식별자
+  - `ioc`: 즉시 체결 가능 수량만 부분 체결, 잔여 취소
+  - `fok`: 전량 체결 가능할 때만 실행, 아니면 전량 취소
+  - `post_only`: 메이커 주문으로만 생성 (지정가 전용, 2025-07-07 추가)
+- `smp_type`: 자전거래 체결 방지 (2025-07-02 추가)
+  - `cancel_maker`: 새 주문 생성 시 기존 주문 취소
+  - `cancel_taker`: 새 주문 생성 시 신규 주문 취소
+  - `reduce`: 양쪽 주문 수량 감소
+- `identifier`: 사용자 정의 주문 식별자 (계정 전체 유일, 2024-12-04 추가)
 
 ### 현재 저장소와 직접 관련 있는 주문 유형
 
@@ -209,14 +232,16 @@
 
 ### 주문 옵션 주의사항
 
-- `post_only`는 지정가 주문에서만 사용 가능하다.
+- `post_only`는 지정가 주문(`ord_type=limit`)에서만 사용 가능하다.
 - `post_only`는 `smp_type`과 함께 사용할 수 없다.
+- `best` 주문은 `time_in_force`(`ioc` 또는 `fok`)가 필수다.
 - `identifier`는 계정 전체 주문 기준으로 유일해야 하며, 한번 사용한 값은 재사용하지 않는 편이 안전하다.
+- `smp_type` 사용 시 응답에 `prevented_volume`, `prevented_locked` 필드가 추가된다.
 
 ### 자산 잠금
 
-- 매수 주문 생성 시 호가 자산이 잠긴다.
-- 매도 주문 생성 시 기준 자산이 잠긴다.
+- 매수 주문 생성 시 호가 자산(KRW)이 잠긴다.
+- 매도 주문 생성 시 기준 자산(BTC)이 잠긴다.
 - 잠금은 전량 체결, 취소, 또는 `time_in_force` 조건에 의한 만료 전까지 유지될 수 있다.
 
 ## 주문 생성 테스트
@@ -240,6 +265,12 @@
 - `GET /v1/order`
 - 권한: `주문조회`
 - `uuid` 또는 `identifier` 중 하나가 필요하다.
+- 주요 응답 필드:
+  - `state`: `wait`(대기), `watch`(예약), `done`(체결 완료), `cancel`(취소)
+  - `executed_volume`: 실제 체결된 수량
+  - `remaining_volume`: 미체결 잔여 수량
+  - `trades`: 부분 체결 내역 배열
+  - `smp_type`, `prevented_volume`, `prevented_locked`: SMP 관련 (해당 주문만)
 
 ### 개별 주문 취소
 
@@ -258,41 +289,114 @@
 - 권한: `주문조회`
 - 미체결 주문 목록을 확인할 때 사용한다.
 
+주요 파라미터:
+
+- `market`: 마켓 필터 (선택)
+- `state`: `wait`(지정가 대기) 또는 `watch`(예약가 대기), 기본값 `wait`
+- `states[]`: 여러 상태 동시 조회 시 배열로 전달 — `state`와 동시 사용 불가
+- `limit`: 조회 건수 (기본 100)
+- `order_by`: 정렬 (`asc` / `desc`, 기본 `desc`)
+
 운영상 유용한 시점:
 
 - 재시작 직후 미체결 주문 동기화
 - 중복 주문 방지
 - 장시간 대기 주문 정리
 
+## 종료 주문 목록 조회
+
+- `GET /v1/orders/closed`
+- 권한: `주문조회`
+- 전량 체결 완료 및 취소된 주문 목록을 조회한다.
+
+주요 파라미터:
+
+- `market`: 마켓 코드 (필수)
+- `state` / `states[]`: `done`(체결), `cancel`(취소), 기본값 `done,cancel` — 둘 중 하나만 사용
+- `start_time` / `end_time`: 조회 기간 (최대 7일 구간)
+- `limit`: 조회 건수 (기본 100)
+- `order_by`: 정렬 (`asc` / `desc`)
+
+운영상 유용한 시점:
+
+- 체결 이력 확인 및 PostgreSQL 상태와 대조
+- 누락된 체결 복구 검증
+
+## 취소 후 재주문
+
+- `POST /v1/orders/cancel_and_new`
+- 권한: `주문하기`
+- 기존 주문 취소와 신규 주문 생성을 원자적으로 실행한다. 취소가 완료돼야 신규 주문이 생성된다.
+
+주요 파라미터:
+
+- `prev_order_uuid` 또는 `prev_order_identifier`: 취소 대상 주문 식별자 (필수, 둘 중 하나)
+- `new_ord_type`: 신규 주문 유형 (필수)
+- `new_volume`: 신규 주문 수량. `"remain_only"` 입력 시 기존 주문의 미체결 잔량 자동 적용
+- `new_price`: 신규 주문 단가/금액
+- `new_time_in_force`: `ioc`, `fok`, `post_only`
+- `new_smp_type`: `cancel_maker`, `cancel_taker`, `reduce`
+- `new_identifier`: 신규 주문 식별자 (취소된 identifier 재사용 불가)
+
+제약사항:
+
+- 신규 주문은 기존과 동일한 페어, 동일한 주문 방향만 가능하다.
+
 ## 요청 수 제한
 
 모든 요청 수 제한은 초 단위다. 같은 Rate Limit 그룹에 속한 API끼리는 허용량을 함께 공유한다.
 
-현재 프로젝트에 직접 중요한 값만 정리하면 다음과 같다.
+### REST API
 
-| API | 제한 |
-| --- | --- |
-| `GET /v1/ticker` | 초당 최대 10회, IP 단위 |
-| `GET /v1/accounts` | 초당 최대 30회, 계정 단위 |
-| `GET /v1/orders/chance` | 초당 최대 30회, 계정 단위 |
-| `GET /v1/order` | 초당 최대 30회, 계정 단위 |
-| `DELETE /v1/order` | 초당 최대 30회, 계정 단위 |
-| `GET /v1/orders/open` | 초당 최대 30회, 계정 단위 |
-| `POST /v1/orders` | 초당 최대 8회, 계정 단위 |
-| `POST /v1/orders/test` | 초당 최대 8회, 계정 단위 |
+| 그룹 | 포함 API 예시 | 제한 | 단위 |
+| --- | --- | --- | --- |
+| **ticker** (Quotation) | `GET /v1/ticker` | 초당 10회 | IP |
+| **default** (Exchange) | `GET /v1/accounts`, `GET /v1/order`, `DELETE /v1/order`, `GET /v1/orders/open`, `GET /v1/orders/chance` 등 | 초당 30회 | 계정 |
+| **order** | `POST /v1/orders`, `POST /v1/orders/cancel_and_new` | 초당 8회 | 계정 |
+| **order-test** | `POST /v1/orders/test` | 초당 8회 | 계정 |
+| **order-cancel-all** | `DELETE /v1/orders` (일괄 취소) | 2초당 1회 | 계정 |
 
-구현 원칙:
+### WebSocket
 
-- 응답 헤더 `Remaining-Req`를 보고 조절한다.
+| 요청 유형 | 제한 | 단위 |
+| --- | --- | --- |
+| 연결 요청 | 초당 5회 | IP(공개) / 계정(인증) |
+| 데이터 요청 | 초당 5회, 분당 100회 | IP(공개) / 계정(인증) |
+
+### 특수 정책
+
+- **Origin 헤더 포함 요청**: Quotation API 및 WebSocket에서 10초당 1회로 별도 제한된다.
 - `429 Too Many Requests`가 오면 즉시 같은 그룹 호출을 멈추고 대기한다.
-- 반복 초과는 임시 또는 영구 제한으로 이어질 수 있으므로, 단순 재시도 루프를 만들지 않는다.
+- 반복 초과는 `418` 상태코드 반환 후 임시 또는 영구 제한으로 이어질 수 있으므로, 단순 재시도 루프를 만들지 않는다.
+- 응답 헤더 `Remaining-Req`를 보고 조절하는 것이 권장된다.
 
 ## KRW 마켓 운영 메모
 
-- 원화(KRW) 마켓은 주문 가격 단위와 최소 주문 가능 금액 정책이 있다.
+### 최소 주문 금액
+
+- KRW 마켓 최소 주문 가능 금액: **5,000 KRW**
+
+### 가격 단위 (호가 단위)
+
+지정가 주문 시 가격을 아래 단위에 맞게 보정해야 한다. 단위에 맞지 않으면 주문이 거부된다.
+
+| 가격 구간 (KRW) | 호가 단위 |
+| --- | --- |
+| 2,000,000 이상 | 1,000 |
+| 1,000,000 ~ 2,000,000 미만 | 1,000 |
+| 500,000 ~ 1,000,000 미만 | 500 |
+| 100,000 ~ 500,000 미만 | 100 |
+| 50,000 ~ 100,000 미만 | 50 |
+| 10,000 ~ 50,000 미만 | 10 |
+| 5,000 ~ 10,000 미만 | 5 |
+| 1,000 ~ 5,000 미만 | 1 |
+| 100 ~ 1,000 미만 | 1 |
+
+BTC 현재가가 1억원 수준이면 **1,000원 단위**가 적용된다. 그리드 전략에서 `buy_price`, `sell_price`를 생성할 때 반드시 이 단위로 절사/반올림해야 한다.
+
+### 기타 운영 주의
+
 - 이 값은 가격대와 마켓 정책에 따라 달라질 수 있으므로, 고정 숫자를 코드에 박아두기보다 공식 문서와 `orders/chance`를 함께 확인하는 편이 안전하다.
-- 그리드 전략에서 지정가를 생성할 때는 가격 단위 반올림/절사를 반드시 검토해야 한다.
-- BTC 그리드 생성 시에도 KRW 마켓 호가 단위에 맞춰 가격을 보정하고, 최소 주문 가능 금액 `5,000 KRW` 이상인지 확인해야 한다.
 
 ## 이 저장소 기준 구현 체크리스트
 
@@ -312,8 +416,13 @@
 - `exchange/crypto.py`에 `orders/chance` 연동 추가
 - 실주문 전 `orders/test` 사전 검증 추가
 - `Remaining-Req` 파싱 및 throttling 추가
-- 미체결 주문 조회(`orders/open`)를 통한 재시작 복구 로직 추가
+- 미체결 주문 조회(`orders/open`)를 통한 재시작 복구 로직 보강
 - 가격 단위/최소 주문 금액을 KRW 마켓 정책 기준으로 정규화하는 유틸 추가
+- `smp_type` 옵션 도입 검토 (자전거래 방지)
+- `post_only` 옵션 도입 검토 (수수료 최적화)
+- WebSocket MyOrder (`wss://.../private`, type=`myOrder`) 도입 검토 — REST 폴링 대신 실시간 체결 이벤트 수신으로 전환 가능
+- `orders/closed`를 활용한 재시작 후 체결 이력 대조 로직 추가
+- `orders/cancel_and_new`의 `remain_only` 옵션을 이용한 지정가 재배치 로직 검토
 
 ## 문서 갱신 방법
 

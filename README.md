@@ -29,11 +29,16 @@ auto/
 │   ├── crypto.py                         # 업비트 구현
 │   └── stock.py                          # 주식 거래소 stub
 ├── storage/
-│   ├── factory.py                        # 저장소 선택
+│   ├── interfaces.py                     # GridStateRepository / PendingOrderRepository 인터페이스
+│   ├── factory.py                        # 저장소 생성
 │   ├── postgres_grid_repository.py       # PostgreSQL grid 저장소
 │   ├── postgres_order_repository.py      # PostgreSQL pending/open order 저장소
 │   └── postgres_common.py                # PostgreSQL 공통 연결/락 유틸
 ├── strategy/grid_strategy.py             # 가격 교차 기반 주문 후보 생성
+├── utils/
+│   ├── decimal_utils.py                  # Decimal 연산 유틸
+│   ├── upbit_market.py                   # KRW 마켓 호가 단위 / 최소 주문 금액
+│   └── logger.py                         # 날짜별 로그 파일 설정
 ├── scripts/
 │   ├── apply_grid_properties_to_postgres.py
 │   ├── export_postgres_grid.py
@@ -49,6 +54,7 @@ auto/
 ├── grid.properties
 ├── run.sh
 ├── stop.sh
+├── tail-latest-log.sh                    # 최신 날짜 로그 실시간 추적
 └── requirements.txt
 ```
 
@@ -82,6 +88,9 @@ python3 -m unittest discover -s tests -v
 
 # 업비트 KRW 주문 가능 잔고 1회 조회
 python3 main.py balance
+
+# 초기 그리드 생성 (코드 기반)
+python3 main.py init-grid --first-buy-amount 200000 --sell-percent 5 --force
 
 # grid.properties -> PostgreSQL 반영
 python3 scripts/apply_grid_properties_to_postgres.py --force
@@ -120,7 +129,7 @@ PGSCHEMA=auto_trading
 ```
 
 - `UPBIT_ACCESS_KEY`, `UPBIT_SECRET_KEY`: 업비트 API 인증 키
-- `STATE_BACKEND`: 현재 운영 기준은 `postgres` 고정
+- `STATE_BACKEND`: `.env_sample` 호환용 항목. 현재 코드는 PostgreSQL 전용으로 고정되어 있으며 이 값을 런타임에서 읽지 않는다.
 - `STATE_BOT_KEY`: PostgreSQL 상태 저장소에서 사용할 봇 식별자
 - `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, `PGSCHEMA`: PostgreSQL 접속 정보
 
