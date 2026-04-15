@@ -104,9 +104,25 @@ python3 scripts/show_grid_state.py
 
 ## 환경변수
 
-- 업비트 키: `UPBIT_ACCESS_KEY`, `UPBIT_SECRET_KEY`
-- 상태 저장: `STATE_BOT_KEY`
-- PostgreSQL: `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, `PGSCHEMA`
+- 샘플 파일은 [.env_sample](/home/yangyag/auto/.env_sample:1) 이다. 보통 이 파일 내용을 기준으로 프로젝트 루트 `.env`를 채운다.
+
+```dotenv
+UPBIT_ACCESS_KEY=
+UPBIT_SECRET_KEY=
+STATE_BACKEND=postgres
+STATE_BOT_KEY=krw-btc-live
+PGHOST=127.0.0.1
+PGPORT=5432
+PGDATABASE=
+PGUSER=
+PGPASSWORD=
+PGSCHEMA=auto_trading
+```
+
+- `UPBIT_ACCESS_KEY`, `UPBIT_SECRET_KEY`: 업비트 API 인증 키
+- `STATE_BACKEND`: 현재 운영 기준은 `postgres` 고정
+- `STATE_BOT_KEY`: PostgreSQL 상태 저장소에서 사용할 봇 식별자
+- `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, `PGSCHEMA`: PostgreSQL 접속 정보
 
 `config/settings.py`는 프로젝트 루트 `.env`를 읽도록 되어 있으며, `python-dotenv`가 없어도 fallback 로더로 기본 `KEY=VALUE` 형식은 읽는다.
 
