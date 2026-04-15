@@ -15,7 +15,6 @@ from core.models import Order, OrderSide
 from exchange.base import BaseExchange
 from exchange.crypto import UpbitAPIError
 from storage.factory import build_grid_repository, build_pending_order_repository
-from storage.file_grid_repository import FileGridRepository
 from storage.interfaces import GridStateRepository, PendingOrderRepository, RepositoryMetadata
 from strategy.grid_strategy import GridStrategy
 from utils.decimal_utils import format_decimal, to_decimal
@@ -34,19 +33,15 @@ class StatePersistenceError(RuntimeError):
     """상태 저장소 반영 실패로 새 주문을 중단해야 하는 경우."""
 
 
-def is_postgres_backend() -> bool:
-    return str(cfg.STATE_BACKEND).strip().lower() == "postgres"
-
-
 def validate_runtime_grid_state(grid_state: GridState) -> None:
-    if grid_state.symbol and grid_state.symbol != cfg.SYMBOL:
-        raise ValueError(
-            f"저장소 심볼과 설정 심볼이 다릅니다: {grid_state.symbol} != {cfg.SYMBOL}"
-        )
-    if is_postgres_backend() and not grid_state.rows:
+    if not grid_state.rows:
         raise ValueError(
             "PostgreSQL 상태 저장소에 그리드 상태가 없습니다. "
             "마이그레이션/STATE_BOT_KEY/PGSCHEMA 설정을 확인하세요."
+        )
+    if grid_state.symbol and grid_state.symbol != cfg.SYMBOL:
+        raise ValueError(
+            f"저장소 심볼과 설정 심볼이 다릅니다: {grid_state.symbol} != {cfg.SYMBOL}"
         )
 
 
@@ -177,9 +172,6 @@ def build_exchange() -> BaseExchange:
 
 
 def acquire_runtime_lock_if_needed():
-    if not is_postgres_backend():
-        return None
-
     from storage.postgres_common import PostgresRuntimeLock
 
     runtime_lock = PostgresRuntimeLock.from_config(cfg)
@@ -273,13 +265,15 @@ def process_cycle_orders(
 ) -> int:
     """
     한 번의 가격 평가에서 나온 주문을 실제 체결 흐름에 맞춰 처리한다.
-    매도 주문을 먼저 접수하고 즉시 체결 여부를 다시 본 뒤, 그 결과로 늘어난 KRW 잔고로 매수를 판단한다.
+    매수 주문 승인은 현재 주문 가능 KRW 기준으로만 판단하고,
+    같은 사이클에서 발생한 매도 체결대금은 즉시 매수 재원으로 재사용하지 않는다.
     """
     grid_state = strategy.grid
     submitted_total = 0
 
     sell_orders = filter_pending_slot_orders(sell_orders, pending_orders)
     buy_orders = filter_pending_slot_orders(buy_orders, pending_orders)
+    approved_buys = check_risk(buy_orders, exchange, grid_state) if buy_orders else []
 
     if sell_orders:
         if daily_order_count + len(sell_orders) > cfg.MAX_DAILY_ORDERS:
@@ -294,7 +288,8 @@ def process_cycle_orders(
         )
         submitted_total += submitted_sells
 
-        if submitted_sells:
+    if not approved_buys:
+        if submitted_total:
             completed = reconcile_pending_orders(
                 exchange,
                 pending_orders,
@@ -304,27 +299,22 @@ def process_cycle_orders(
             )
             if completed:
                 logger.info(grid_state.summary())
-
-    buy_orders = filter_pending_slot_orders(buy_orders, pending_orders)
-    if not buy_orders:
         return submitted_total
 
-    approved_buys = check_risk(buy_orders, exchange, grid_state)
-    if not approved_buys:
-        return submitted_total
+    approved_buys = filter_pending_slot_orders(approved_buys, pending_orders)
+    if approved_buys:
+        if daily_order_count + submitted_total + len(approved_buys) > cfg.MAX_DAILY_ORDERS:
+            logger.warning("[BLOCK] 일일 주문 한도 초과")
+        else:
+            submitted_buys = submit_orders(
+                approved_buys,
+                exchange,
+                pending_orders,
+                pending_order_repository=pending_order_repository,
+            )
+            submitted_total += submitted_buys
 
-    if daily_order_count + submitted_total + len(approved_buys) > cfg.MAX_DAILY_ORDERS:
-        logger.warning("[BLOCK] 일일 주문 한도 초과")
-        return submitted_total
-
-    submitted_buys = submit_orders(
-        approved_buys,
-        exchange,
-        pending_orders,
-        pending_order_repository=pending_order_repository,
-    )
-    submitted_total += submitted_buys
-    if submitted_buys:
+    if submitted_total:
         completed = reconcile_pending_orders(
             exchange,
             pending_orders,
@@ -449,18 +439,18 @@ def run_balance_check() -> int:
 
 def run_grid_init(
     *,
-    grid_file: str,
     lower_price: Decimal,
     upper_price: Decimal,
     slot_count: int,
     first_buy_amount: Decimal,
     sell_percent: Decimal,
     current_price: Decimal | None,
+    force: bool = False,
 ) -> int:
-    """KRW-BTC 초기 그리드를 생성하고 저장."""
+    """KRW-BTC 초기 그리드를 PostgreSQL 상태 저장소에 저장."""
     print("=== KRW-BTC 초기 그리드 생성 ===")
     print(f"심볼: {cfg.SYMBOL}")
-    print(f"저장 파일: {grid_file}")
+    print(f"저장 대상: postgres:{cfg.PGSCHEMA}/{cfg.STATE_BOT_KEY}")
 
     if cfg.EXCHANGE_TYPE != "crypto":
         print("상태: 실패")
@@ -468,8 +458,15 @@ def run_grid_init(
         return 1
 
     exchange = build_exchange()
+    repository = build_grid_repository(cfg)
 
     try:
+        existing_snapshot = repository.load()
+        if existing_snapshot.metadata.version is not None and not force:
+            print("상태: 실패")
+            print("사유: 기존 PostgreSQL 그리드 스냅샷이 있습니다. 덮어쓰려면 --force 를 사용하세요.")
+            return 1
+
         live_price = current_price if current_price is not None else exchange.get_current_price(cfg.SYMBOL)
         rows = build_cash_only_grid(
             lower_price=lower_price,
@@ -481,11 +478,9 @@ def run_grid_init(
         )
         state = GridState.from_rows(cfg.SYMBOL, rows)
         validate_grid_state(state)
-        persist_grid_state(
-            state,
-            FileGridRepository(grid_file),
-            GridStateRuntime(),
-        )
+
+        metadata = existing_snapshot.metadata if existing_snapshot.metadata.version is not None else None
+        saved_snapshot = repository.save(state.to_snapshot(metadata))
     except (UpbitAPIError, ValueError) as e:
         print("상태: 실패")
         print(f"사유: {e}")
@@ -503,6 +498,7 @@ def run_grid_init(
     print(f"매도 퍼센트: {format_decimal(sell_percent)}%")
     print(f"고정 수량: {format_decimal(rows[0].planned_qty)} BTC")
     print(f"총 배정 금액: {format_decimal(state.total_allocated_budget)} KRW")
+    print(f"버전: {saved_snapshot.metadata.version}")
     print("상태: 성공")
     return 0
 
@@ -513,14 +509,14 @@ def build_cli_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("balance", help="업비트 KRW 주문 가능 잔고를 1회 조회하고 종료")
 
-    grid_parser = subparsers.add_parser("init-grid", help="KRW-BTC 초기 그리드를 생성하고 grid.txt에 저장")
-    grid_parser.add_argument("--grid-file", default=cfg.GRID_FILE)
+    grid_parser = subparsers.add_parser("init-grid", help="KRW-BTC 초기 그리드를 PostgreSQL 상태 저장소에 저장")
     grid_parser.add_argument("--lower-price", type=decimal_arg, default=cfg.GRID_LOWER_PRICE)
     grid_parser.add_argument("--upper-price", type=decimal_arg, default=cfg.GRID_UPPER_PRICE)
     grid_parser.add_argument("--slot-count", type=int, default=cfg.GRID_SLOT_COUNT)
     grid_parser.add_argument("--first-buy-amount", type=decimal_arg, default=cfg.GRID_FIRST_BUY_AMOUNT_KRW)
     grid_parser.add_argument("--sell-percent", type=decimal_arg, default=cfg.GRID_SELL_PERCENT)
     grid_parser.add_argument("--current-price", type=decimal_arg, default=None)
+    grid_parser.add_argument("--force", action="store_true", help="기존 PostgreSQL 그리드 스냅샷을 덮어쓴다")
 
     return parser
 
@@ -540,13 +536,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "init-grid":
         return run_grid_init(
-            grid_file=args.grid_file,
             lower_price=args.lower_price,
             upper_price=args.upper_price,
             slot_count=args.slot_count,
             first_buy_amount=args.first_buy_amount,
             sell_percent=args.sell_percent,
             current_price=args.current_price,
+            force=args.force,
         )
 
     parser.print_help()

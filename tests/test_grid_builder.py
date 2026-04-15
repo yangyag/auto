@@ -1,12 +1,9 @@
-import tempfile
 import unittest
 from decimal import Decimal
-from pathlib import Path
 
 from core.grid import GridState
 from core.grid_builder import build_cash_only_grid
 from core.grid_properties import build_sell_price
-from storage.file_grid_repository import FileGridRepository
 from utils.decimal_utils import BTC_QUANTITY_STEP
 
 
@@ -81,7 +78,7 @@ class GridBuilderTest(unittest.TestCase):
         self.assertEqual(len(rows), 10)
         self.assertEqual(rows[0].buy_price, Decimal("108576000"))
 
-    def test_grid_state_save_and_load_preserves_decimal_quantities(self):
+    def test_grid_state_snapshot_round_trip_preserves_decimal_quantities(self):
         rows = build_cash_only_grid(
             lower_price=Decimal("92253123"),
             upper_price=Decimal("111137221"),
@@ -91,13 +88,9 @@ class GridBuilderTest(unittest.TestCase):
             sell_percent=Decimal("5"),
         )
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            grid_path = Path(tmpdir) / "grid.txt"
-            state = GridState.from_rows("KRW-BTC", rows)
-            repository = FileGridRepository(str(grid_path))
-            repository.save(state.to_snapshot())
-
-            reloaded = GridState.from_snapshot(repository.load())
+        state = GridState.from_rows("KRW-BTC", rows)
+        snapshot = state.to_snapshot()
+        reloaded = GridState.from_snapshot(snapshot)
 
         self.assertEqual(reloaded.symbol, "KRW-BTC")
         self.assertEqual(len(reloaded.rows), 10)

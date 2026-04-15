@@ -1,5 +1,7 @@
 # PostgreSQL 상태 저장 전환 구현 계획
 
+이 문서는 file backend 에서 PostgreSQL 전용 운영으로 넘어가던 당시의 계획 기록이다. 현재 운영 기준 문서가 아니다.
+
 > For Hermes: Use subagent-driven-development skill to implement this plan task-by-task.
 
 목표: `grid.txt` 기반 상태 저장을 PostgreSQL 기반으로 전환하고, pending/open order까지 DB에 저장해 재시작 후에도 안전하게 복구되도록 만든다.

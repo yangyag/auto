@@ -187,7 +187,6 @@ PY
 UPBIT_ACCESS_KEY=YOUR_UPBIT_ACCESS_KEY
 UPBIT_SECRET_KEY=YOUR_UPBIT_SECRET_KEY
 
-STATE_BACKEND=postgres
 STATE_BOT_KEY=krw-btc-live
 
 PGHOST=127.0.0.1
@@ -325,7 +324,7 @@ source .venv/bin/activate
 python3 scripts/apply_grid_properties_to_postgres.py --force
 ```
 
-### DB 상태를 파일로 백업 export
+### DB 상태 export
 ```bash
 python3 scripts/export_postgres_grid.py
 ```

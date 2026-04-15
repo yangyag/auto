@@ -51,7 +51,7 @@ class SettingsEnvLoadingTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertEqual(result.stdout.strip().splitlines(), ["test-access", "test-secret"])
 
-    def test_settings_loads_postgres_state_backend_from_env_file(self):
+    def test_settings_loads_postgres_state_settings_from_env_file(self):
         project_root = Path(__file__).resolve().parents[1]
         settings_source = (project_root / "config" / "settings.py").read_text(encoding="utf-8")
 
@@ -61,12 +61,11 @@ class SettingsEnvLoadingTest(unittest.TestCase):
             (tmp_path / "config" / "__init__.py").write_text("", encoding="utf-8")
             (tmp_path / "config" / "settings.py").write_text(settings_source, encoding="utf-8")
             (tmp_path / ".env").write_text(
-                "STATE_BACKEND=postgres\nSTATE_BOT_KEY=env-bot\nPGHOST=db.example\nPGPORT=5433\nPGDATABASE=grid\nPGUSER=bot\nPGPASSWORD=secret\nPGSCHEMA=custom_schema\n",
+                "STATE_BOT_KEY=env-bot\nPGHOST=db.example\nPGPORT=5433\nPGDATABASE=grid\nPGUSER=bot\nPGPASSWORD=secret\nPGSCHEMA=custom_schema\n",
                 encoding="utf-8",
             )
 
             env = os.environ.copy()
-            env.pop("STATE_BACKEND", None)
             env.pop("STATE_BOT_KEY", None)
             env.pop("PGHOST", None)
             env.pop("PGPORT", None)
@@ -84,7 +83,6 @@ class SettingsEnvLoadingTest(unittest.TestCase):
                         import sys
                         sys.path.insert(0, r'__TMPDIR__')
                         import config.settings as settings
-                        print(settings.STATE_BACKEND)
                         print(settings.STATE_BOT_KEY)
                         print(settings.PGHOST)
                         print(settings.PGPORT)
@@ -105,7 +103,7 @@ class SettingsEnvLoadingTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertEqual(
             result.stdout.strip().splitlines(),
-            ["postgres", "env-bot", "db.example", "5433", "grid", "bot", "secret", "custom_schema"],
+            ["env-bot", "db.example", "5433", "grid", "bot", "secret", "custom_schema"],
         )
 
 

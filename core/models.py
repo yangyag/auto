@@ -25,7 +25,7 @@ class EvalResult(Enum):
 
 @dataclass
 class GridRow:
-    """grid.txt의 한 줄 (그리드 슬롯 1개)"""
+    """그리드 슬롯 1개"""
     index: int               # 줄 번호 (1-based)
     buy_price: Decimal       # 매수 트리거 가격
     held_qty: Decimal        # 현재 보유 수량 (>0 이면 보유 중)

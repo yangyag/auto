@@ -1,64 +1,78 @@
-import os
-import tempfile
-import time
 import unittest
 from decimal import Decimal
-from pathlib import Path
 
 from core.grid import GridState
+from core.models import GridRow
 from main import GridStateRuntime, refresh_grid_state_if_changed
-from storage.file_grid_repository import FileGridRepository
+from storage.interfaces import GridSnapshot, RepositoryMetadata
 
 
-INITIAL_GRID = """Grid3 KRW-BTC
-1) 100 0 110 1
+INITIAL_SNAPSHOT = GridSnapshot(
+    symbol="KRW-BTC",
+    rows=(
+        GridRow(1, Decimal("100"), Decimal("0"), Decimal("110"), Decimal("1")),
+    ),
+    metadata=RepositoryMetadata(version=1, revision="rev-1"),
+)
 
-테이블 총재고 : 0
-"""
+UPDATED_SNAPSHOT = GridSnapshot(
+    symbol="KRW-BTC",
+    rows=(
+        GridRow(1, Decimal("200"), Decimal("0"), Decimal("210"), Decimal("2")),
+    ),
+    metadata=RepositoryMetadata(version=2, revision="rev-2"),
+)
 
-UPDATED_GRID = """Grid3 KRW-BTC
-1) 200 0 210 2
 
-테이블 총재고 : 0
-"""
+class InMemoryGridRepository:
+    def __init__(self, snapshot: GridSnapshot):
+        self.snapshot = snapshot
+
+    def load(self) -> GridSnapshot:
+        return self.snapshot
+
+    def save(self, snapshot: GridSnapshot) -> GridSnapshot:
+        self.snapshot = GridSnapshot(
+            symbol=snapshot.symbol,
+            rows=snapshot.rows,
+            metadata=RepositoryMetadata(version=(snapshot.metadata.version or 0) + 1, revision="rev-saved"),
+        )
+        return self.snapshot
+
+    def has_changed(self, metadata: RepositoryMetadata | None) -> bool:
+        return metadata is None or metadata.version != self.snapshot.metadata.version
 
 
 class GridReloadTest(unittest.TestCase):
 
     def test_refresh_grid_state_if_changed_refreshes_rows_from_repository(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            grid_path = Path(tmpdir) / "grid.txt"
-            grid_path.write_text(INITIAL_GRID, encoding="utf-8")
-            repository = FileGridRepository(str(grid_path))
-            snapshot = repository.load()
-            state = GridState.from_snapshot(snapshot)
-            runtime = GridStateRuntime(metadata=snapshot.metadata)
+        repository = InMemoryGridRepository(INITIAL_SNAPSHOT)
+        snapshot = repository.load()
+        state = GridState.from_snapshot(snapshot)
+        runtime = GridStateRuntime(metadata=snapshot.metadata)
 
-            time.sleep(0.02)
-            grid_path.write_text(UPDATED_GRID, encoding="utf-8")
-            os.utime(grid_path, None)
+        repository.snapshot = UPDATED_SNAPSHOT
 
-            changed = refresh_grid_state_if_changed(state, repository, runtime)
+        changed = refresh_grid_state_if_changed(state, repository, runtime)
 
-            self.assertTrue(changed)
-            self.assertEqual(state.rows[0].buy_price, Decimal("200"))
-            self.assertEqual(state.rows[0].sell_price, Decimal("210"))
-            self.assertEqual(state.rows[0].planned_qty, Decimal("2"))
+        self.assertTrue(changed)
+        self.assertEqual(state.rows[0].buy_price, Decimal("200"))
+        self.assertEqual(state.rows[0].sell_price, Decimal("210"))
+        self.assertEqual(state.rows[0].planned_qty, Decimal("2"))
 
     def test_refresh_grid_state_if_changed_returns_true_for_external_grid_update(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            grid_path = Path(tmpdir) / "grid.txt"
-            grid_path.write_text(INITIAL_GRID, encoding="utf-8")
-            repository = FileGridRepository(str(grid_path))
-            snapshot = repository.load()
-            state = GridState.from_snapshot(snapshot)
-            runtime = GridStateRuntime(metadata=snapshot.metadata)
+        repository = InMemoryGridRepository(INITIAL_SNAPSHOT)
+        snapshot = repository.load()
+        state = GridState.from_snapshot(snapshot)
+        runtime = GridStateRuntime(metadata=snapshot.metadata)
 
-            time.sleep(0.02)
-            grid_path.write_text(UPDATED_GRID, encoding="utf-8")
-            os.utime(grid_path, None)
+        repository.snapshot = UPDATED_SNAPSHOT
 
-            changed = refresh_grid_state_if_changed(state, repository, runtime)
+        changed = refresh_grid_state_if_changed(state, repository, runtime)
 
-            self.assertTrue(changed)
-            self.assertEqual(state.rows[0].buy_price, Decimal("200"))
+        self.assertTrue(changed)
+        self.assertEqual(state.rows[0].buy_price, Decimal("200"))
+
+
+if __name__ == "__main__":
+    unittest.main()

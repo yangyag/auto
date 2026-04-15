@@ -2,13 +2,12 @@ import io
 import unittest
 from contextlib import redirect_stdout
 from decimal import Decimal
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
 import main
 from core.models import Order, OrderExecutionType, OrderSide
 from exchange.crypto import UpbitAPIError
+from storage.interfaces import GridSnapshot, RepositoryMetadata
 
 
 class BalanceCommandTest(unittest.TestCase):
@@ -102,60 +101,32 @@ class BalanceCommandTest(unittest.TestCase):
         self.assertEqual(result, 0)
         run_balance_check.assert_called_once_with()
 
-    def test_run_grid_init_writes_grid_file(self):
+    def test_run_grid_init_saves_postgres_snapshot(self):
         exchange = Mock()
         exchange.get_current_price.return_value = Decimal("112000000")
+        repository = Mock()
+        repository.load.return_value = GridSnapshot(symbol="", rows=tuple(), metadata=RepositoryMetadata())
+        repository.save.return_value = GridSnapshot(
+            symbol="KRW-BTC",
+            rows=tuple(),
+            metadata=RepositoryMetadata(version=1, revision="rev-1"),
+        )
 
-        with TemporaryDirectory() as tmpdir, \
-             patch.object(main.cfg, "EXCHANGE_TYPE", "crypto"), \
+        with patch.object(main.cfg, "EXCHANGE_TYPE", "crypto"), \
              patch.object(main.cfg, "SYMBOL", "KRW-BTC"), \
+             patch.object(main.cfg, "PGSCHEMA", "auto_trading"), \
+             patch.object(main.cfg, "STATE_BOT_KEY", "krw-btc-live"), \
              patch.object(main.cfg, "GRID_LOWER_PRICE", Decimal("92253123")), \
              patch.object(main.cfg, "GRID_UPPER_PRICE", Decimal("111137221")), \
              patch.object(main.cfg, "GRID_SLOT_COUNT", 10), \
              patch.object(main.cfg, "GRID_FIRST_BUY_AMOUNT_KRW", Decimal("200000")), \
              patch.object(main.cfg, "GRID_SELL_PERCENT", Decimal("5")), \
              patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", Decimal("2000000")), \
-             patch("main.build_exchange", return_value=exchange):
-            grid_path = Path(tmpdir) / "grid.txt"
+             patch("main.build_exchange", return_value=exchange), \
+             patch("main.build_grid_repository", return_value=repository):
             stdout = io.StringIO()
             with redirect_stdout(stdout):
                 result = main.run_grid_init(
-                    grid_file=str(grid_path),
-                    lower_price=Decimal("92253123"),
-                    upper_price=Decimal("111137221"),
-                    slot_count=10,
-                    first_buy_amount=Decimal("200000"),
-                    sell_percent=Decimal("5"),
-                    current_price=None,
-                )
-
-            self.assertEqual(result, 0)
-            self.assertTrue(grid_path.exists())
-            text = grid_path.read_text(encoding="utf-8")
-            self.assertIn("Grid3 KRW-BTC", text)
-            self.assertIn("매도 퍼센트: 5%", stdout.getvalue())
-            self.assertIn("고정 수량: 0.00183341 BTC", stdout.getvalue())
-            self.assertIn("상태: 성공", stdout.getvalue())
-
-    def test_run_grid_init_allows_current_price_below_top_buy_level(self):
-        exchange = Mock()
-        exchange.get_current_price.return_value = Decimal("105817000")
-
-        with TemporaryDirectory() as tmpdir, \
-             patch.object(main.cfg, "EXCHANGE_TYPE", "crypto"), \
-             patch.object(main.cfg, "SYMBOL", "KRW-BTC"), \
-             patch.object(main.cfg, "GRID_LOWER_PRICE", Decimal("92253123")), \
-             patch.object(main.cfg, "GRID_UPPER_PRICE", Decimal("111137221")), \
-             patch.object(main.cfg, "GRID_SLOT_COUNT", 10), \
-             patch.object(main.cfg, "GRID_FIRST_BUY_AMOUNT_KRW", Decimal("200000")), \
-             patch.object(main.cfg, "GRID_SELL_PERCENT", Decimal("5")), \
-             patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", Decimal("2000000")), \
-             patch("main.build_exchange", return_value=exchange):
-            grid_path = Path(tmpdir) / "grid.txt"
-            stdout = io.StringIO()
-            with redirect_stdout(stdout):
-                result = main.run_grid_init(
-                    grid_file=str(grid_path),
                     lower_price=Decimal("92253123"),
                     upper_price=Decimal("111137221"),
                     slot_count=10,
@@ -165,4 +136,49 @@ class BalanceCommandTest(unittest.TestCase):
                 )
 
         self.assertEqual(result, 0)
+        repository.save.assert_called_once()
+        saved_snapshot = repository.save.call_args.args[0]
+        self.assertEqual(saved_snapshot.symbol, "KRW-BTC")
+        self.assertIn("저장 대상: postgres:auto_trading/krw-btc-live", stdout.getvalue())
+        self.assertIn("매도 퍼센트: 5%", stdout.getvalue())
+        self.assertIn("고정 수량: 0.00183341 BTC", stdout.getvalue())
+        self.assertIn("버전: 1", stdout.getvalue())
         self.assertIn("상태: 성공", stdout.getvalue())
+
+    def test_run_grid_init_rejects_existing_postgres_snapshot_without_force(self):
+        exchange = Mock()
+        exchange.get_current_price.return_value = Decimal("105817000")
+        repository = Mock()
+        repository.load.return_value = GridSnapshot(
+            symbol="KRW-BTC",
+            rows=tuple(),
+            metadata=RepositoryMetadata(version=7, revision="rev-7"),
+        )
+
+        with patch.object(main.cfg, "EXCHANGE_TYPE", "crypto"), \
+             patch.object(main.cfg, "SYMBOL", "KRW-BTC"), \
+             patch.object(main.cfg, "PGSCHEMA", "auto_trading"), \
+             patch.object(main.cfg, "STATE_BOT_KEY", "krw-btc-live"), \
+             patch.object(main.cfg, "GRID_LOWER_PRICE", Decimal("92253123")), \
+             patch.object(main.cfg, "GRID_UPPER_PRICE", Decimal("111137221")), \
+             patch.object(main.cfg, "GRID_SLOT_COUNT", 10), \
+             patch.object(main.cfg, "GRID_FIRST_BUY_AMOUNT_KRW", Decimal("200000")), \
+             patch.object(main.cfg, "GRID_SELL_PERCENT", Decimal("5")), \
+             patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", Decimal("2000000")), \
+             patch("main.build_exchange", return_value=exchange), \
+             patch("main.build_grid_repository", return_value=repository):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                result = main.run_grid_init(
+                    lower_price=Decimal("92253123"),
+                    upper_price=Decimal("111137221"),
+                    slot_count=10,
+                    first_buy_amount=Decimal("200000"),
+                    sell_percent=Decimal("5"),
+                    current_price=None,
+                )
+
+        self.assertEqual(result, 1)
+        repository.save.assert_not_called()
+        self.assertIn("기존 PostgreSQL 그리드 스냅샷이 있습니다", stdout.getvalue())
+        self.assertIn("상태: 실패", stdout.getvalue())

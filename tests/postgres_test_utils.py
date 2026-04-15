@@ -26,7 +26,6 @@ def postgres_test_config(*, schema: str | None = None, bot_key: str | None = Non
         "Config",
         (),
         {
-            "STATE_BACKEND": "postgres",
             "STATE_BOT_KEY": bot_key or f"test-bot-{uuid.uuid4().hex[:8]}",
             "PGHOST": os.getenv("PGHOST", "127.0.0.1"),
             "PGPORT": int(os.getenv("PGPORT", "5432")),

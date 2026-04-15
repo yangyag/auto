@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PostgreSQL 상태를 grid.txt 형식 파일로 내보낸다."""
+"""PostgreSQL 상태를 사람이 읽는 텍스트로 내보낸다."""
 import argparse
 import sys
 from pathlib import Path
@@ -7,8 +7,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import config.settings as cfg
-from storage.file_grid_repository import FileGridRepository
+from storage.interfaces import GridSnapshot
 from storage.postgres_grid_repository import PostgresGridRepository
+from utils.decimal_utils import DECIMAL_ZERO, format_decimal
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -24,6 +25,20 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def render_grid_text(snapshot: GridSnapshot) -> str:
+    lines = [f"Grid3 {snapshot.symbol}"]
+    for row in snapshot.rows:
+        lines.append(
+            f"{row.index}) {format_decimal(row.buy_price)} {format_decimal(row.held_qty)} "
+            f"{format_decimal(row.sell_price)} {format_decimal(row.planned_qty)}"
+        )
+
+    total_inventory = sum((row.held_qty for row in snapshot.rows), DECIMAL_ZERO)
+    lines.append("")
+    lines.append(f"테이블 총재고 : {format_decimal(total_inventory)}")
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     postgres_repo = PostgresGridRepository(
@@ -36,9 +51,11 @@ def main(argv: list[str] | None = None) -> int:
         bot_key=args.bot_key,
     )
     snapshot = postgres_repo.load()
-    FileGridRepository(args.output).save(snapshot)
+    output_path = Path(args.output)
+    output_path.write_text(render_grid_text(snapshot), encoding="utf-8")
     print("상태: 성공")
     print(f"bot_key: {args.bot_key}")
+    print(f"source: postgres:{args.schema}/{args.bot_key}")
     print(f"output: {args.output}")
     print(f"rows: {len(snapshot.rows)}")
     return 0

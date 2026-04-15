@@ -6,3 +6,4 @@ upbit.txt
 __pycache__/
 *.pyc
 .pytest_cache/
+grid.txt

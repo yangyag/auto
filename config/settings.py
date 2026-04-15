@@ -48,19 +48,15 @@ EXCHANGE_TYPE = "crypto"
 # 업비트 마켓 형식: "KRW-BTC", "KRW-ETH" 등
 SYMBOL = "KRW-BTC"
 
-# ── 상태 저장 백엔드 ─────────────────────────────────────
-STATE_BACKEND = os.getenv("STATE_BACKEND", "file").strip().lower() or "file"
+# ── PostgreSQL 상태 저장 ─────────────────────────────────
 STATE_BOT_KEY = os.getenv("STATE_BOT_KEY", "krw-btc-live")
-
-# ── 그리드 파일 ──────────────────────────────────────────
-GRID_FILE = "grid.txt"
 GRID_SLOT_COUNT = 10
 GRID_LOWER_PRICE = Decimal("92253123")
 GRID_UPPER_PRICE = Decimal("111137221")
 GRID_FIRST_BUY_AMOUNT_KRW = Decimal("200000")
 GRID_SELL_PERCENT = Decimal("5")
 
-# ── PostgreSQL 상태 저장 ─────────────────────────────────
+# ── PostgreSQL 접속 정보 ─────────────────────────────────
 PGHOST = os.getenv("PGHOST", "127.0.0.1")
 PGPORT = int(os.getenv("PGPORT", "5432"))
 PGDATABASE = os.getenv("PGDATABASE", "yangyag")

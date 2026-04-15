@@ -1,14 +1,58 @@
 import tempfile
 import unittest
 from decimal import Decimal
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 import main
 from core.grid import GridState
 from core.models import GridRow, Order, OrderExecutionType, OrderSide, OrderStatus
-from storage.file_grid_repository import FileGridRepository, FilePendingOrderRepository
+from storage.interfaces import GridSnapshot, RepositoryMetadata
 from strategy.grid_strategy import GridStrategy
+
+
+class InMemoryGridRepository:
+    def __init__(self, snapshot: GridSnapshot):
+        self.snapshot = snapshot
+
+    def load(self) -> GridSnapshot:
+        return self.snapshot
+
+    def save(self, snapshot: GridSnapshot) -> GridSnapshot:
+        version = 1 if snapshot.metadata.version is None else snapshot.metadata.version + 1
+        self.snapshot = GridSnapshot(
+            symbol=snapshot.symbol,
+            rows=snapshot.rows,
+            metadata=RepositoryMetadata(version=version, revision=f"rev-{version}"),
+        )
+        return self.snapshot
+
+    def has_changed(self, metadata: RepositoryMetadata | None) -> bool:
+        return metadata is None or metadata.version != self.snapshot.metadata.version
+
+
+class InMemoryPendingOrderRepository:
+    def __init__(self):
+        self._orders: dict[str, Order] = {}
+
+    def add(self, order: Order) -> None:
+        if not order.order_id:
+            raise ValueError("order_id 없는 주문은 저장할 수 없습니다.")
+        self._orders[order.order_id] = order
+
+    def get(self, order_id: str) -> Order | None:
+        return self._orders.get(order_id)
+
+    def remove(self, order_id: str) -> None:
+        self._orders.pop(order_id, None)
+
+    def mark_filled(self, order_id: str) -> None:
+        self.remove(order_id)
+
+    def mark_cancelled(self, order_id: str) -> None:
+        self.remove(order_id)
+
+    def list_open(self) -> list[Order]:
+        return list(self._orders.values())
 
 
 class PendingOrderSyncTest(unittest.TestCase):
@@ -54,7 +98,7 @@ class PendingOrderSyncTest(unittest.TestCase):
         exchange = Mock()
         exchange.place_order.return_value = "uuid-1"
         pending_orders = {}
-        repository = FilePendingOrderRepository()
+        repository = InMemoryPendingOrderRepository()
         order = Order(
             slot_index=1,
             side=OrderSide.BUY,
@@ -103,8 +147,8 @@ class PendingOrderSyncTest(unittest.TestCase):
     def test_reconcile_pending_orders_applies_grid_after_done_fill(self):
         tmpdir, grid, strategy = self._build_strategy_with_empty_slot()
         self.addCleanup(tmpdir.cleanup)
-        repository = FileGridRepository(str(Path(tmpdir.name) / "grid.txt"))
-        pending_repository = FilePendingOrderRepository()
+        repository = InMemoryGridRepository(grid.to_snapshot())
+        pending_repository = InMemoryPendingOrderRepository()
         runtime = main.GridStateRuntime(metadata=repository.save(grid.to_snapshot()).metadata)
         exchange = Mock()
         order = Order(
@@ -144,8 +188,8 @@ class PendingOrderSyncTest(unittest.TestCase):
     def test_reconcile_pending_orders_treats_cancel_with_executed_volume_as_filled(self):
         tmpdir, grid, strategy = self._build_strategy_with_empty_slot()
         self.addCleanup(tmpdir.cleanup)
-        repository = FileGridRepository(str(Path(tmpdir.name) / "grid.txt"))
-        pending_repository = FilePendingOrderRepository()
+        repository = InMemoryGridRepository(grid.to_snapshot())
+        pending_repository = InMemoryPendingOrderRepository()
         runtime = main.GridStateRuntime(metadata=repository.save(grid.to_snapshot()).metadata)
         exchange = Mock()
         order = Order(
@@ -212,7 +256,6 @@ class PendingOrderSyncTest(unittest.TestCase):
     def test_reconcile_sell_resets_to_uniform_empty_slot_quantity(self):
         tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(tmpdir.cleanup)
-        grid_path = Path(tmpdir.name) / "grid.txt"
         rows = [
             GridRow(
                 index=1,
@@ -254,10 +297,9 @@ class PendingOrderSyncTest(unittest.TestCase):
         self.assertEqual(grid.rows[0].held_qty, Decimal("0"))
         self.assertEqual(grid.rows[0].planned_qty, Decimal("1"))
 
-    def test_process_cycle_orders_reuses_krw_after_immediate_sell_fill(self):
+    def test_process_cycle_orders_does_not_reuse_same_cycle_sell_proceeds_for_buy(self):
         tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(tmpdir.cleanup)
-        grid_path = Path(tmpdir.name) / "grid.txt"
         rows = [
             GridRow(
                 index=1,
@@ -277,80 +319,22 @@ class PendingOrderSyncTest(unittest.TestCase):
         grid = GridState.from_rows("KRW-BTC", rows)
         strategy = GridStrategy(grid, Mock(), "KRW-BTC")
         exchange = Mock()
-        exchange.place_order.side_effect = ["sell-id", "buy-id"]
-        exchange.get_order_status.side_effect = lambda order_id: OrderStatus(
-            uuid=order_id,
-            state="done" if order_id == "sell-id" else "wait",
-            executed_volume=Decimal("1") if order_id == "sell-id" else Decimal("0"),
-            remaining_volume=Decimal("0") if order_id == "sell-id" else Decimal("1"),
-        )
-        exchange.get_balance.return_value = Decimal("11000")
-        pending_orders = {}
-        sell_order = Order(
-            slot_index=1,
-            side=OrderSide.SELL,
-            price=Decimal("11000"),
-            quantity=Decimal("1"),
-            symbol="KRW-BTC",
-        )
-        buy_order = Order(
-            slot_index=2,
-            side=OrderSide.BUY,
-            price=Decimal("11000"),
-            quantity=Decimal("1"),
-            symbol="KRW-BTC",
-            execution_type=OrderExecutionType.MARKET_BUY_BY_PRICE,
-            spend_amount=Decimal("11000"),
-        )
+        sell_reconciled = False
+        exchange.place_order.return_value = "sell-id"
 
-        with patch.object(main.cfg, "MAX_DAILY_ORDERS", 10), \
-             patch.object(main.cfg, "MIN_BALANCE_RESERVE", Decimal("0")):
-            submitted = main.process_cycle_orders(
-                sell_orders=[sell_order],
-                buy_orders=[buy_order],
-                exchange=exchange,
-                strategy=strategy,
-                pending_orders=pending_orders,
-                daily_order_count=0,
+        def get_order_status(order_id):
+            nonlocal sell_reconciled
+            if order_id == "sell-id":
+                sell_reconciled = True
+            return OrderStatus(
+                uuid=order_id,
+                state="done",
+                executed_volume=Decimal("1"),
+                remaining_volume=Decimal("0"),
             )
 
-        self.assertEqual(submitted, 2)
-        self.assertNotIn("sell-id", pending_orders)
-        self.assertIn("buy-id", pending_orders)
-        self.assertEqual(grid.rows[0].held_qty, Decimal("0"))
-        self.assertEqual(grid.rows[0].planned_qty, Decimal("1"))
-
-    def test_process_cycle_orders_keeps_buy_blocked_until_sell_is_filled(self):
-        tmpdir = tempfile.TemporaryDirectory()
-        self.addCleanup(tmpdir.cleanup)
-        grid_path = Path(tmpdir.name) / "grid.txt"
-        rows = [
-            GridRow(
-                index=1,
-                buy_price=Decimal("10000"),
-                held_qty=Decimal("1"),
-                sell_price=Decimal("11000"),
-                planned_qty=Decimal("0"),
-            ),
-            GridRow(
-                index=2,
-                buy_price=Decimal("11000"),
-                held_qty=Decimal("0"),
-                sell_price=Decimal("12000"),
-                planned_qty=Decimal("1"),
-            ),
-        ]
-        grid = GridState.from_rows("KRW-BTC", rows)
-        strategy = GridStrategy(grid, Mock(), "KRW-BTC")
-        exchange = Mock()
-        exchange.place_order.return_value = "sell-id"
-        exchange.get_order_status.return_value = OrderStatus(
-            uuid="sell-id",
-            state="wait",
-            executed_volume=Decimal("0"),
-            remaining_volume=Decimal("1"),
-        )
-        exchange.get_balance.return_value = Decimal("0")
+        exchange.get_order_status.side_effect = get_order_status
+        exchange.get_balance.side_effect = lambda: Decimal("11000") if sell_reconciled else Decimal("0")
         pending_orders = {}
         sell_order = Order(
             slot_index=1,
@@ -381,8 +365,82 @@ class PendingOrderSyncTest(unittest.TestCase):
             )
 
         self.assertEqual(submitted, 1)
-        self.assertIn("sell-id", pending_orders)
+        self.assertNotIn("sell-id", pending_orders)
         self.assertEqual(exchange.place_order.call_count, 1)
+        self.assertEqual(grid.rows[0].held_qty, Decimal("0"))
+        self.assertEqual(grid.rows[0].planned_qty, Decimal("1"))
+
+    def test_process_cycle_orders_submits_buy_without_waiting_for_sell_fill_when_balance_allows(self):
+        tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmpdir.cleanup)
+        rows = [
+            GridRow(
+                index=1,
+                buy_price=Decimal("10000"),
+                held_qty=Decimal("1"),
+                sell_price=Decimal("11000"),
+                planned_qty=Decimal("0"),
+            ),
+            GridRow(
+                index=2,
+                buy_price=Decimal("11000"),
+                held_qty=Decimal("0"),
+                sell_price=Decimal("12000"),
+                planned_qty=Decimal("1"),
+            ),
+        ]
+        grid = GridState.from_rows("KRW-BTC", rows)
+        strategy = GridStrategy(grid, Mock(), "KRW-BTC")
+        exchange = Mock()
+        sell_checked = False
+        exchange.place_order.side_effect = ["sell-id", "buy-id"]
+
+        def get_order_status(order_id):
+            nonlocal sell_checked
+            if order_id == "sell-id":
+                sell_checked = True
+            return OrderStatus(
+                uuid=order_id,
+                state="wait",
+                executed_volume=Decimal("0"),
+                remaining_volume=Decimal("1"),
+            )
+
+        exchange.get_order_status.side_effect = get_order_status
+        exchange.get_balance.side_effect = lambda: Decimal("0") if sell_checked else Decimal("11000")
+        pending_orders = {}
+        sell_order = Order(
+            slot_index=1,
+            side=OrderSide.SELL,
+            price=Decimal("11000"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+        )
+        buy_order = Order(
+            slot_index=2,
+            side=OrderSide.BUY,
+            price=Decimal("11000"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+            execution_type=OrderExecutionType.MARKET_BUY_BY_PRICE,
+            spend_amount=Decimal("11000"),
+        )
+
+        with patch.object(main.cfg, "MAX_DAILY_ORDERS", 10), \
+             patch.object(main.cfg, "MIN_BALANCE_RESERVE", Decimal("0")):
+            submitted = main.process_cycle_orders(
+                sell_orders=[sell_order],
+                buy_orders=[buy_order],
+                exchange=exchange,
+                strategy=strategy,
+                pending_orders=pending_orders,
+                daily_order_count=0,
+            )
+
+        self.assertEqual(submitted, 2)
+        self.assertIn("sell-id", pending_orders)
+        self.assertIn("buy-id", pending_orders)
+        self.assertEqual(exchange.place_order.call_count, 2)
 
 
 if __name__ == "__main__":
