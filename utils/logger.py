@@ -17,7 +17,7 @@ class DailyFileHandler(logging.Handler):
         *,
         encoding: str = "utf-8",
         date_provider=None,
-        retention_days: int = 7,
+        retention_days: int = 3,
     ):
         super().__init__()
         self.log_dir = Path(log_dir)

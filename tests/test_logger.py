@@ -14,7 +14,7 @@ class DailyFileHandlerTest(unittest.TestCase):
             tmpdir,
             "trading.log",
             date_provider=date_provider,
-            retention_days=7,
+            retention_days=3,
         )
         handler.setFormatter(logging.Formatter("%(message)s"))
         return handler
@@ -51,10 +51,10 @@ class DailyFileHandlerTest(unittest.TestCase):
             self.assertEqual(day1_path.read_text(encoding="utf-8").splitlines(), ["프로그램 시작", "매수 체결"])
             self.assertEqual(day2_path.read_text(encoding="utf-8").splitlines(), ["매도 체결"])
 
-    def test_daily_file_handler_deletes_logs_older_than_seven_days_on_emit(self):
+    def test_daily_file_handler_deletes_logs_older_than_three_days_on_emit(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            old_path = Path(tmpdir) / "trading-2026-04-07.log"
-            retained_path = Path(tmpdir) / "trading-2026-04-08.log"
+            old_path = Path(tmpdir) / "trading-2026-04-11.log"
+            retained_path = Path(tmpdir) / "trading-2026-04-12.log"
             old_path.write_text("too old", encoding="utf-8")
             retained_path.write_text("keep me", encoding="utf-8")
 
@@ -74,7 +74,7 @@ class DailyFileHandlerTest(unittest.TestCase):
         current_date = ["2026-04-14"]
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            boundary_path = Path(tmpdir) / "trading-2026-04-08.log"
+            boundary_path = Path(tmpdir) / "trading-2026-04-12.log"
             boundary_path.write_text("keep on day 1", encoding="utf-8")
 
             handler = self._build_handler(tmpdir, date_provider=lambda: current_date[0])

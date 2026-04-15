@@ -10,6 +10,7 @@ Python 기반 그리드 자동매매 시스템이다. 현재 운영 기준은 �
 - 상승 교차 매수는 업비트 `ord_type=price` 시장가 매수, 하락 교차 매수와 매도는 지정가 주문으로 처리한다.
 - 주문 접수만으로는 그리드 상태를 바꾸지 않고, `GET /v1/order` 재조회 결과가 `done`일 때만 반영한다.
 - `run.sh` / `stop.sh` 기반 백그라운드 실행과 `logs/trading-YYYY-MM-DD.log` 날짜별 로그가 준비되어 있다.
+- 최신 날짜 로그를 바로 따라가려면 `./tail-latest-log.sh`를 사용한다.
 - `scripts/show_grid_state.py`와 `scripts/export_postgres_grid.py`는 현재 DB 상태를 확인하는 보조 도구다.
 
 ## 디렉터리 구조
@@ -94,6 +95,9 @@ python3 scripts/show_grid_state.py
 # 백그라운드 실행 / 종료
 ./run.sh
 ./stop.sh
+
+# 최신 날짜 로그 실시간 추적
+./tail-latest-log.sh
 ```
 
 실거래 루프 `python3 main.py`는 실제 주문을 발생시킬 수 있으므로 명시적으로 필요할 때만 실행한다.

@@ -34,6 +34,11 @@ tail -n 50 logs/trading-$(date +%F).log
 tail -f logs/trading-$(date +%F).log
 ```
 
+### 최신 날짜 로그 자동 선택 후 실시간 보기
+```bash
+./tail-latest-log.sh
+```
+
 ## 3) 업비트 잔고 확인
 
 ### 주문 가능 KRW 잔고 1회 조회
