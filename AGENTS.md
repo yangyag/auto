@@ -116,8 +116,8 @@ auto/
 - 거래 심볼은 `config/settings.py`의 `SYMBOL`과 PostgreSQL 그리드 상태에 함께 존재한다. 실제 주문은 `cfg.SYMBOL`을 사용하고, 상태 저장은 그리드 저장소 계약을 따른다.
 - `core/grid_builder.py::build_cash_only_grid()`는 상단/하단 매수 경계를 고정한 뒤 그 사이를 슬롯 수만큼 분할하고, 첫 슬롯 `buy_price` 기준 `GRID_FIRST_BUY_AMOUNT_KRW` 만큼 살 수 있는 BTC 수량을 모든 슬롯의 고정 수량으로 사용한다. 각 슬롯 `sell_price`는 `GRID_SELL_PERCENT` 기준으로 계산한다.
 - `python3 main.py init-grid`의 생성 기준은 총예산 분배가 아니라 `--first-buy-amount` 기반이다. 현재 기본값은 `config/settings.py::GRID_FIRST_BUY_AMOUNT_KRW`를 따르며, 매도 가격은 `--sell-percent` 또는 `config/settings.py::GRID_SELL_PERCENT`를 따른다.
-- `strategy/grid_strategy.py`의 트리거는 절대값 판정이 아니라 가격 교차 판정이다. 첫 가격 스냅샷에서는 주문을 내지 않고, 이후 빈 슬롯은 `buy_price`를 위에서 아래로 또는 아래에서 위로 교차할 때 매수하고, 보유 슬롯은 `이전 가격 < sell_price <= 현재 가격`일 때 매도한다.
-- 하락 교차 매수와 매도는 지정가 주문이다. 상승 교차 매수는 업비트 `ord_type=price` 시장가 매수로 보내며, 슬롯 목표 예산은 `buy_price * planned_qty`를 원 단위 내림한 KRW 금액으로 계산한다.
+- `strategy/grid_strategy.py`의 트리거는 절대값 판정이 아니라 poll 구간 기준 가격 조건 판정이다. 첫 가격 스냅샷에서는 빈 슬롯 매수 주문을 내지 않고, 이후 빈 슬롯은 `previous_price > buy_price >= current_price` 이면 지정가 매수한다. 하락 구간에서 여러 `buy_price`를 한 poll 안에 함께 통과하면 그 empty 슬롯들은 모두 매수 후보가 된다. 상승 구간에서는 `previous_price < buy_price <= current_price` 인 empty 슬롯이 한 poll 동안 정확히 1개일 때만 그 슬롯을 시장가 예산매수하고, 2개 이상을 한 번에 뛰어넘으면 그 상승 구간 매수는 모두 건너뛴다. 보유 슬롯은 현재가가 `sell_price` 이상이면 즉시 매도 후보가 된다.
+- 하락 교차 매수와 매도는 지정가 주문이다. 상승 시 단일 슬롯 상향 돌파 매수만 업비트 `ord_type=price` 시장가 예산매수를 사용한다. `wait`/`watch` pending 슬롯은 중복 주문 대상에서 제외된다.
 - `main.py`는 같은 루프의 매도/매수 후보가 함께 생겨도 매수 주문은 현재 주문 가능 KRW 기준으로 독립 판단한다. 매도는 먼저 접수할 수 있지만, 같은 사이클에서 체결된 매도대금을 즉시 상위 매수 재원으로 재사용하지는 않는다.
 - 주문 생성 성공은 체결 완료와 다르다. `main.py`는 업비트 `GET /v1/order`로 주문 상태를 재조회해 `state=done`일 때만 PostgreSQL 그리드 상태를 갱신한다. `wait`/`watch` 상태 주문은 pending으로 유지한다.
 - `exchange/crypto.py`는 외부 업비트 API를 호출하므로 네트워크, 인증, 주문 부작용을 항상 고려해야 한다.

@@ -253,6 +253,72 @@ class PendingOrderSyncTest(unittest.TestCase):
         self.assertEqual(grid.rows[0].held_qty, Decimal("0"))
         self.assertEqual(grid.rows[0].planned_qty, Decimal("1"))
 
+    def test_reconcile_pending_orders_applies_multiple_downward_buy_fills_to_holding_slots(self):
+        tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmpdir.cleanup)
+        rows = [
+            GridRow(
+                index=1,
+                buy_price=Decimal("105"),
+                held_qty=Decimal("0"),
+                sell_price=Decimal("115"),
+                planned_qty=Decimal("1"),
+            ),
+            GridRow(
+                index=2,
+                buy_price=Decimal("100"),
+                held_qty=Decimal("0"),
+                sell_price=Decimal("110"),
+                planned_qty=Decimal("1"),
+            ),
+        ]
+        grid = GridState.from_rows("KRW-BTC", rows)
+        strategy = GridStrategy(grid, Mock(), "KRW-BTC")
+        exchange = Mock()
+        order_1 = Order(
+            slot_index=1,
+            side=OrderSide.BUY,
+            price=Decimal("105"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+            order_id="uuid-1",
+        )
+        order_2 = Order(
+            slot_index=2,
+            side=OrderSide.BUY,
+            price=Decimal("100"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+            order_id="uuid-2",
+        )
+        pending_orders = {
+            "uuid-1": order_1,
+            "uuid-2": order_2,
+        }
+
+        def get_order_status(order_id):
+            volumes = {
+                "uuid-1": Decimal("1"),
+                "uuid-2": Decimal("1"),
+            }
+            return OrderStatus(
+                uuid=order_id,
+                state="done",
+                executed_volume=volumes[order_id],
+                remaining_volume=Decimal("0"),
+            )
+
+        exchange.get_order_status.side_effect = get_order_status
+
+        completed = main.reconcile_pending_orders(exchange, pending_orders, strategy)
+
+        self.assertEqual(completed, 2)
+        self.assertEqual(pending_orders, {})
+        self.assertEqual(grid.rows[0].held_qty, Decimal("1"))
+        self.assertEqual(grid.rows[1].held_qty, Decimal("1"))
+        self.assertEqual(grid.rows[0].planned_qty, Decimal("1"))
+        self.assertEqual(grid.rows[1].planned_qty, Decimal("1"))
+
     def test_reconcile_sell_resets_to_uniform_empty_slot_quantity(self):
         tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(tmpdir.cleanup)

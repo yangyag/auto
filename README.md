@@ -7,7 +7,7 @@ Python 기반 그리드 자동매매 시스템이다. 현재 운영 기준은 �
 - 핵심 경로는 `exchange/crypto.py` 기반 업비트 연동이다.
 - 상태 저장은 PostgreSQL 전용이다.
 - 전략은 가격 절대값이 아니라 직전 가격 대비 `buy_price`/`sell_price` 교차 여부로 주문을 만든다.
-- 상승 교차 매수는 업비트 `ord_type=price` 시장가 매수, 하락 교차 매수와 매도는 지정가 주문으로 처리한다.
+- 빈 슬롯은 `previous_price > buy_price >= current_price` 인 하락 교차 시 지정가 매수한다. 한 poll 안에 여러 `buy_price`를 아래로 통과하면 그 empty 슬롯들은 모두 매수 후보가 된다. 상승 시에는 `previous_price < buy_price <= current_price` 인 empty 슬롯이 한 poll에서 정확히 1개일 때만 해당 슬롯을 시장가 예산매수하고, 여러 슬롯을 한 번에 뛰어넘으면 그 상승 구간은 매수하지 않는다. 보유 슬롯은 현재가가 `sell_price` 이상이면 전부 매도한다.
 - 주문 접수만으로는 그리드 상태를 바꾸지 않고, `GET /v1/order` 재조회 결과가 `done`일 때만 반영한다.
 - `run.sh` / `stop.sh` 기반 백그라운드 실행과 `logs/trading-YYYY-MM-DD.log` 날짜별 로그가 준비되어 있다.
 - 최신 날짜 로그를 바로 따라가려면 `./tail-latest-log.sh`를 사용한다.
@@ -68,8 +68,9 @@ Grid3 SYMBOL
 테이블 총재고 : N
 ```
 
-- `held_qty > 0`: 보유 중 슬롯이다. `sell_price`를 아래에서 위로 교차하면 매도 후보가 된다.
-- `held_qty = 0` and `planned_qty > 0`: 빈 슬롯이다. `buy_price`를 위에서 아래로 또는 아래에서 위로 교차하면 매수 후보가 된다.
+- `held_qty > 0`: 보유 중 슬롯이다. 현재가가 `sell_price` 이상이면 매도 후보가 된다.
+- `held_qty = 0` and `planned_qty > 0`: 빈 슬롯이다. `previous_price > buy_price >= current_price` 이면 지정가 매수 후보가 된다. 이 하락 구간에서 여러 슬롯을 한 poll 안에 함께 통과하면 그 슬롯들은 모두 매수 후보가 된다. `previous_price < buy_price <= current_price` 인 empty 슬롯이 한 poll에서 정확히 1개뿐이면 그 슬롯만 시장가 예산매수 후보가 된다.
+- 매수 주문은 접수만으로 holding 이 되지 않고, 거래소 재조회 결과가 `done`일 때만 해당 슬롯의 `held_qty`가 채워진다.
 - 보유 슬롯에서도 `planned_qty`는 다음 빈 슬롯 복원용 목표 수량으로 유지될 수 있다.
 - `grid.properties` 기반 DB 그리드 생성은 `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `BUY_AMOUNT_KRW`, `GRID_COUNT`, `SELL_PERCENT`를 읽는다.
 - 각 슬롯 `sell_price`는 `buy_price * (1 + SELL_PERCENT / 100)` 기준으로 계산한다. `SELL_PERCENT=5`는 5%를 뜻한다.

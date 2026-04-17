@@ -368,7 +368,11 @@ def run():
                 current_price = exchange.get_current_price(cfg.SYMBOL)
                 logger.info(f"현재가: {current_price}")
 
-                buy_orders, sell_orders = strategy.evaluate(current_price)
+                pending_slots = {order.slot_index for order in pending_orders.values()}
+                buy_orders, sell_orders = strategy.evaluate_with_pending(
+                    current_price,
+                    pending_slot_indexes=pending_slots,
+                )
                 if not sell_orders and not buy_orders:
                     time.sleep(cfg.PRICE_POLL_INTERVAL)
                     continue

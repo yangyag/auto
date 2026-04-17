@@ -224,11 +224,15 @@
 
 ### 현재 저장소와 직접 관련 있는 주문 유형
 
-- 현재 구현은 지정가 주문과 시장가 매수를 함께 사용한다.
+- 현재 그리드 전략 경로는 지정가 주문과 조건부 시장가 예산매수를 함께 사용한다.
 - 코드상 매수는 `side=bid`, 매도는 `side=ask`로 매핑된다.
-- 하락 교차 매수와 매도는 `ord_type=limit`를 사용한다.
-- 상승 교차 매수는 `ord_type=price` 시장가 매수를 사용한다.
-- 상승 교차 시장가 매수는 슬롯 목표 KRW 예산을 먼저 계산하고, 실제 BTC 체결량은 `GET /v1/order`의 `executed_volume`으로 다시 반영한다.
+- 빈 슬롯 하락 교차 매수와 보유 슬롯 매도는 `ord_type=limit`를 사용한다.
+- 빈 슬롯은 `previous_price > buy_price >= current_price` 인 하락 교차일 때 지정가 주문을 낸다.
+- 한 poll 안에 여러 `buy_price`를 아래로 동시에 통과하면 그 empty 슬롯들은 모두 지정가 매수 주문 후보가 된다.
+- 빈 슬롯은 `previous_price < buy_price <= current_price` 인 empty 슬롯이 한 poll 동안 정확히 1개일 때만 `ord_type=price` 시장가 예산매수를 낸다.
+- 한 poll 안에 여러 `buy_price`를 동시에 위로 돌파하면 그 상승 구간 매수는 건너뛴다.
+- 보유 슬롯은 현재가가 `sell_price` 이상이면 바로 매도 후보가 된다.
+- 매수 주문은 접수 시점이 아니라 `GET /v1/order` 재조회에서 `state=done`으로 확인될 때만 해당 슬롯의 `held_qty`에 반영된다.
 
 ### 주문 옵션 주의사항
 
