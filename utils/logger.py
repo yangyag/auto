@@ -5,10 +5,27 @@ import logging
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+KST = ZoneInfo("Asia/Seoul")
+
+
+def current_kst_datetime() -> datetime:
+    return datetime.now(tz=KST)
+
+
+class KSTFormatter(logging.Formatter):
+    """서버 로컬 시간대와 무관하게 로그 시간을 KST로 포맷한다."""
+
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+        timestamp = datetime.fromtimestamp(record.created, tz=KST)
+        if datefmt:
+            return timestamp.strftime(datefmt)
+        return timestamp.isoformat(timespec="seconds")
 
 
 class DailyFileHandler(logging.Handler):
-    """로컬 날짜가 바뀌면 새 파일로 전환하는 일별 파일 핸들러."""
+    """KST 날짜가 바뀌면 새 파일로 전환하는 일별 파일 핸들러."""
 
     def __init__(
         self,
@@ -23,7 +40,7 @@ class DailyFileHandler(logging.Handler):
         self.log_dir = Path(log_dir)
         self.log_file = Path(log_file)
         self.encoding = encoding
-        self.date_provider = date_provider or (lambda: datetime.now().strftime("%Y-%m-%d"))
+        self.date_provider = date_provider or (lambda: current_kst_datetime().strftime("%Y-%m-%d"))
         self.retention_days = max(1, int(retention_days))
         self._current_date: str | None = None
         self._last_cleanup_date: str | None = None
@@ -133,7 +150,7 @@ def get_logger(name: str) -> logging.Logger:
     level = getattr(logging, LOG_LEVEL.upper(), logging.INFO)
     logger.setLevel(level)
 
-    formatter = logging.Formatter(
+    formatter = KSTFormatter(
         fmt="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
@@ -143,7 +160,7 @@ def get_logger(name: str) -> logging.Logger:
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
-    # 날짜별 파일 출력: logs/trading-YYYY-MM-DD.log
+    # 날짜별 파일 출력: logs/trading-YYYY-MM-DD.log (KST 기준)
     fh = DailyFileHandler(
         LOG_DIR,
         LOG_FILE,

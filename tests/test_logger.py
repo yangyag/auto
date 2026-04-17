@@ -2,10 +2,11 @@ import logging
 import os
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from utils.logger import DailyFileHandler
+from utils.logger import DailyFileHandler, KSTFormatter
 
 
 class DailyFileHandlerTest(unittest.TestCase):
@@ -140,6 +141,47 @@ class DailyFileHandlerTest(unittest.TestCase):
                 self.assertNotIn(active_path.resolve(), deleted_paths)
             finally:
                 os.chdir(current_dir)
+
+    def test_daily_file_handler_uses_kst_date_by_default(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            handler = DailyFileHandler(tmpdir, "trading.log", retention_days=3)
+            handler.setFormatter(logging.Formatter("%(message)s"))
+            logger = self._build_logger(handler)
+
+            with patch(
+                "utils.logger.current_kst_datetime",
+                return_value=datetime(2026, 4, 17, 0, 5, 0, tzinfo=timezone.utc),
+            ):
+                logger.info("kst date trigger")
+                handler.flush()
+
+            self.assertTrue((Path(tmpdir) / "trading-2026-04-17.log").exists())
+
+
+class KSTFormatterTest(unittest.TestCase):
+    def test_format_time_always_uses_kst(self):
+        formatter = KSTFormatter(
+            fmt="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+        record = logging.LogRecord(
+            name="tests.logger",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=1,
+            msg="현재가: 110710000.0",
+            args=(),
+            exc_info=None,
+        )
+        record.created = datetime(2026, 4, 17, 6, 58, 33, tzinfo=timezone.utc).timestamp()
+        record.msecs = 0
+
+        formatted = formatter.format(record)
+
+        self.assertEqual(
+            formatted,
+            "2026-04-17 15:58:33 [INFO] tests.logger - 현재가: 110710000.0",
+        )
 
 
 if __name__ == "__main__":
