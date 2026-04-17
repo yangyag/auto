@@ -12,6 +12,7 @@ Python 기반 그리드 자동매매 시스템이다. 현재 운영 기준은 �
 - `run.sh` / `stop.sh` 기반 백그라운드 실행과 `logs/trading-YYYY-MM-DD.log` 날짜별 로그가 준비되어 있다.
 - 최신 날짜 로그를 바로 따라가려면 `./tail-latest-log.sh`를 사용한다.
 - `scripts/show_grid_state.py`와 `scripts/export_postgres_grid.py`는 현재 DB 상태를 확인하는 보조 도구다.
+- `grid.properties` 튜닝은 [docs/grid-parameter-tuning.md](docs/grid-parameter-tuning.md) 기준으로 계산한다.
 
 ## 디렉터리 구조
 
@@ -139,6 +140,7 @@ PGSCHEMA=auto_trading
 ## 참고 문서
 
 - [docs/UPBIT_API_REFERENCE.md](docs/UPBIT_API_REFERENCE.md)
+- [docs/grid-parameter-tuning.md](docs/grid-parameter-tuning.md)
 - [AGENTS.md](AGENTS.md)
 - [docs/quick-commands.md](docs/quick-commands.md)
 - [docs/postgres-cutover-checklist.md](docs/postgres-cutover-checklist.md)

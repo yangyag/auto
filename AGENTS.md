@@ -11,10 +11,12 @@
 - 현재 기준 거래소는 업비트다.
 - 업비트 API/인증/주문 파라미터/응답 해석이 불명확하면 공식 문서 `https://docs.upbit.com/kr`를 우선 기준으로 삼는다.
 - 로컬 요약본은 `docs/UPBIT_API_REFERENCE.md`를 먼저 참고한다.
+- `grid.properties` 튜닝 요청을 받으면 `docs/grid-parameter-tuning.md`를 먼저 보고, 같은 가격 경로와 자금 상한 기준으로 `GRID_COUNT` / `SELL_PERCENT`를 비교한다.
 - `exchange/crypto.py` 수정 시에는 구현 편의보다 업비트 공식 문서 기준 정합성을 우선한다.
 
 ## 우선 읽을 파일
 - `docs/UPBIT_API_REFERENCE.md`: 업비트 공식 문서 기반 로컬 요약 레퍼런스
+- `docs/grid-parameter-tuning.md`: 그리드 개수/매도 퍼센트 비교용 계산 절차와 재사용 스니펫
 - `main.py`: 메인 루프, 리스크 체크, 주문 실행 순서
 - `config/settings.py`: 거래소 종류, 심볼, API 키, 리스크 파라미터
 - `core/grid.py`: 그리드 상태 모델
