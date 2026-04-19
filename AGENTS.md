@@ -11,12 +11,12 @@
 - 현재 기준 거래소는 업비트다.
 - 업비트 API/인증/주문 파라미터/응답 해석이 불명확하면 공식 문서 `https://docs.upbit.com/kr`를 우선 기준으로 삼는다.
 - 로컬 요약본은 `docs/UPBIT_API_REFERENCE.md`를 먼저 참고한다.
-- `grid.properties` 튜닝 요청을 받으면 `docs/grid-parameter-tuning.md`를 먼저 본다. 다만 이 문서는 현재 기본값인 `k` TP가 아니라 레거시 `SELL_PERCENT` 비교용 성격이 강하므로, `TP_MODEL=percent` 전제인지 먼저 확인한다.
+- 운영자가 기존 전략과 현재 전략의 차이를 묻는 경우 `docs/strategy-change-guide.md`를 먼저 본다.
 - `exchange/crypto.py` 수정 시에는 구현 편의보다 업비트 공식 문서 기준 정합성을 우선한다.
 
 ## 우선 읽을 파일
 - `docs/UPBIT_API_REFERENCE.md`: 업비트 공식 문서 기반 로컬 요약 레퍼런스
-- `docs/grid-parameter-tuning.md`: 레거시 percent TP(`SELL_PERCENT`) 비교용 계산 절차와 재사용 스니펫
+- `docs/strategy-change-guide.md`: 기존 운영 전략과 현재 운영 전략의 차이 설명
 - `main.py`: 메인 루프, 리스크 체크, 주문 실행 순서
 - `config/settings.py`: 거래소 종류, 심볼, API 키, 리스크 파라미터
 - `core/grid.py`: 그리드 상태 모델
