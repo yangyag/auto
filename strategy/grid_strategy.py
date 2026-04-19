@@ -5,6 +5,7 @@
 from decimal import Decimal
 from typing import List, Tuple
 
+import config.settings as cfg
 from core.grid import GridState
 from core.models import Order, OrderExecutionType, OrderSide
 from exchange.base import BaseExchange
@@ -56,12 +57,25 @@ class GridStrategy:
         pending_slot_indexes: set[int],
     ) -> List[Order]:
         orders_by_slot: dict[int, Order] = {}
+        projected_inventory_krw = self.grid.current_inventory_cost
         for row in self.grid.rows:
             if not row.is_empty or row.index in pending_slot_indexes:
                 continue
 
             crossed_down = previous_price > row.buy_price and current_price <= row.buy_price
             if not crossed_down:
+                continue
+
+            gate_passed, current_ratio, target_ratio, z = self._passes_inventory_target_gate(
+                current_price=current_price,
+                projected_inventory_krw=projected_inventory_krw,
+            )
+            if not gate_passed:
+                logger.info(
+                    f"매수 차단(q_target) → 슬롯 {row.index}: "
+                    f"current={current_price} z={z:.4f} q_current={current_ratio:.4f} "
+                    f"q_target={target_ratio:.4f} epsilon={cfg.INVENTORY_TARGET_EPSILON}"
+                )
                 continue
 
             orders_by_slot[row.index] = Order(
@@ -76,11 +90,13 @@ class GridStrategy:
                 f"매수 교차 조건 충족(하락) → 슬롯 {row.index}: "
                 f"{previous_price} -> {current_price} / {row.buy_price} x {row.planned_qty}"
             )
+            projected_inventory_krw += row.buy_price * row.planned_qty
 
-        upward_buy_order = self._make_upward_buy_order(
+        upward_buy_order, _ = self._make_upward_buy_order(
             previous_price,
             current_price,
             pending_slot_indexes,
+            projected_inventory_krw,
         )
         if upward_buy_order is not None:
             orders_by_slot[upward_buy_order.slot_index] = upward_buy_order
@@ -92,9 +108,13 @@ class GridStrategy:
         previous_price: Decimal,
         current_price: Decimal,
         pending_slot_indexes: set[int],
-    ) -> Order | None:
+        projected_inventory_krw: Decimal,
+    ) -> tuple[Order | None, Decimal]:
+        if not self._is_upward_buy_enabled():
+            return None, projected_inventory_krw
+
         if current_price <= previous_price:
-            return None
+            return None, projected_inventory_krw
 
         crossed_up_rows = [
             row for row in self.grid.rows
@@ -103,7 +123,7 @@ class GridStrategy:
             and previous_price < row.buy_price <= current_price
         ]
         if not crossed_up_rows:
-            return None
+            return None, projected_inventory_krw
 
         if len(crossed_up_rows) > 1:
             skipped_slots = ", ".join(str(row.index) for row in crossed_up_rows)
@@ -111,9 +131,21 @@ class GridStrategy:
                 f"급등 상승 매수 스킵(다중 상향 돌파) → {previous_price} -> {current_price} / "
                 f"slots={skipped_slots}"
             )
-            return None
+            return None, projected_inventory_krw
 
         current_row = crossed_up_rows[0]
+        gate_passed, current_ratio, target_ratio, z = self._passes_inventory_target_gate(
+            current_price=current_price,
+            projected_inventory_krw=projected_inventory_krw,
+        )
+        if not gate_passed:
+            logger.info(
+                f"상승 매수 차단(q_target) → 슬롯 {current_row.index}: "
+                f"current={current_price} z={z:.4f} q_current={current_ratio:.4f} "
+                f"q_target={target_ratio:.4f} epsilon={cfg.INVENTORY_TARGET_EPSILON}"
+            )
+            return None, projected_inventory_krw
+
         spend_amount = quantize_to_step(
             current_row.buy_price * current_row.planned_qty,
             KRW_ORDER_AMOUNT_STEP,
@@ -123,7 +155,7 @@ class GridStrategy:
             f"{previous_price} -> {current_price} / trigger={current_row.buy_price} "
             f"target={current_row.planned_qty} spend={spend_amount} KRW"
         )
-        return Order(
+        order = Order(
             slot_index=current_row.index,
             side=OrderSide.BUY,
             price=current_row.buy_price,
@@ -132,6 +164,7 @@ class GridStrategy:
             execution_type=OrderExecutionType.MARKET_BUY_BY_PRICE,
             spend_amount=spend_amount,
         )
+        return order, projected_inventory_krw + (current_row.buy_price * current_row.planned_qty)
 
     def _make_sell_orders(self, current_price: Decimal) -> List[Order]:
         orders = []
@@ -160,3 +193,31 @@ class GridStrategy:
         else:
             self.grid.apply_sell(order.slot_index)
             logger.info(f"매도 체결 반영 → 슬롯 {order.slot_index}")
+
+    def _passes_inventory_target_gate(
+        self,
+        *,
+        current_price: Decimal,
+        projected_inventory_krw: Decimal,
+    ) -> tuple[bool, Decimal, Decimal, Decimal]:
+        current_ratio = self.grid.current_inventory_ratio(
+            operating_budget_krw=cfg.MAX_OPERATING_BUDGET_KRW,
+            inventory_cost_krw=projected_inventory_krw,
+        )
+        target_ratio = self.grid.target_inventory_ratio(
+            current_price,
+            q_min=cfg.INVENTORY_TARGET_Q_MIN,
+            q_max=cfg.INVENTORY_TARGET_Q_MAX,
+            gamma=cfg.INVENTORY_TARGET_GAMMA,
+        )
+        z = self.grid.band_position_z(current_price)
+        threshold = max(target_ratio - cfg.INVENTORY_TARGET_EPSILON, Decimal("0"))
+        return current_ratio < threshold, current_ratio, target_ratio, z
+
+    def _is_upward_buy_enabled(self) -> bool:
+        return bool(
+            getattr(cfg, "UPWARD_SINGLE_SLOT_BUY_ENABLED", False)
+            or getattr(cfg, "UPWARD_BUY_ENABLED", False)
+            or getattr(cfg, "UP_BUY_ENABLED", False)
+            or getattr(cfg, "ENABLE_UPWARD_BUY", False)
+        )

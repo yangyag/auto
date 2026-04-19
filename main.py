@@ -5,6 +5,7 @@ import argparse
 import sys
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Callable
 
@@ -16,17 +17,22 @@ from exchange.base import BaseExchange
 from exchange.crypto import UpbitAPIError
 from storage.factory import build_grid_repository, build_pending_order_repository
 from storage.interfaces import GridStateRepository, PendingOrderRepository, RepositoryMetadata
+from strategy.breakout_guard import BreakoutGuardStatus, evaluate_breakout_guard
 from strategy.grid_strategy import GridStrategy
-from utils.decimal_utils import format_decimal, to_decimal
+from utils.decimal_utils import DECIMAL_ZERO, format_decimal, to_decimal
 from utils.upbit_market import MIN_KRW_ORDER_AMOUNT
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+KST = timezone(timedelta(hours=9))
 
 
 @dataclass
 class GridStateRuntime:
     metadata: RepositoryMetadata | None = None
+    breakout_guard_active: bool | None = None
+    breakout_guard_side: str | None = None
+    breakout_guard_reason: str | None = None
 
 
 class StatePersistenceError(RuntimeError):
@@ -199,6 +205,159 @@ def validate_grid_state(grid_state: GridState):
         )
 
 
+def _resolve_runtime_band_bounds(grid_state: GridState) -> tuple[Decimal, Decimal] | None:
+    buy_prices = [row.buy_price for row in grid_state.rows if row.buy_price > DECIMAL_ZERO]
+    if not buy_prices:
+        return None
+    lower_price = min(buy_prices)
+    upper_price = max(buy_prices)
+    if upper_price <= lower_price:
+        return None
+    return lower_price, upper_price
+
+
+def _breakout_guard_candle_unit() -> int:
+    raw_unit = getattr(
+        cfg,
+        "BREAKOUT_GUARD_CANDLE_UNIT",
+        getattr(cfg, "BREAKOUT_GUARD_CANDLE_UNIT_MINUTES", 15),
+    )
+    return max(int(raw_unit), 1)
+
+
+def _breakout_guard_consecutive_closes() -> int:
+    raw_count = getattr(
+        cfg,
+        "BREAKOUT_GUARD_CONSECUTIVE_CANDLES",
+        getattr(cfg, "BREAKOUT_GUARD_CONSECUTIVE_CLOSES", 4),
+    )
+    return max(int(raw_count), 1)
+
+
+def _breakout_guard_failure_policy() -> str:
+    raw_fail_open = getattr(cfg, "BREAKOUT_GUARD_FAIL_OPEN", None)
+    if raw_fail_open is not None:
+        return "open" if bool(raw_fail_open) else "close"
+
+    raw_policy = getattr(cfg, "BREAKOUT_GUARD_FAILURE_POLICY", None)
+    if raw_policy is not None:
+        normalized = str(raw_policy).strip().lower()
+        if normalized in {"open", "close"}:
+            return normalized
+
+    return "open"
+
+
+def _build_breakout_guard_failure_status(reason: str) -> BreakoutGuardStatus:
+    failure_policy = _breakout_guard_failure_policy()
+    fail_mode = f"fail_{failure_policy}"
+    return BreakoutGuardStatus(
+        active=failure_policy == "close",
+        reason=f"guard_eval_failed:{fail_mode}:{reason}",
+    )
+
+
+def _resolve_breakout_guard_cutoff(now: datetime | None = None) -> datetime:
+    current = (now or datetime.now(tz=KST)).astimezone(KST)
+    unit = _breakout_guard_candle_unit()
+    floored_minute = current.minute - (current.minute % unit)
+    return current.replace(minute=floored_minute, second=0, microsecond=0)
+
+
+def fetch_breakout_guard_status(
+    exchange: BaseExchange,
+    grid_state: GridState,
+    *,
+    symbol: str | None = None,
+    now: datetime | None = None,
+) -> BreakoutGuardStatus:
+    if not cfg.BREAKOUT_GUARD_ENABLED:
+        return BreakoutGuardStatus(active=False, reason="guard_disabled")
+
+    band_bounds = _resolve_runtime_band_bounds(grid_state)
+    if band_bounds is None:
+        return _build_breakout_guard_failure_status("invalid_band")
+
+    try:
+        closes = exchange.get_minute_candle_closes(
+            symbol or cfg.SYMBOL,
+            unit_minutes=_breakout_guard_candle_unit(),
+            count=_breakout_guard_consecutive_closes(),
+            to=_resolve_breakout_guard_cutoff(now),
+        )
+    except Exception as exc:
+        return _build_breakout_guard_failure_status(type(exc).__name__)
+
+    required_candles = _breakout_guard_consecutive_closes()
+    if len(closes) < required_candles:
+        return _build_breakout_guard_failure_status(
+            f"insufficient_candles:{len(closes)}/{required_candles}",
+        )
+
+    lower_price, upper_price = band_bounds
+    return evaluate_breakout_guard(
+        closes,
+        lower_price=lower_price,
+        upper_price=upper_price,
+        consecutive_count=required_candles,
+    )
+
+
+def log_breakout_guard_transition(
+    runtime: GridStateRuntime,
+    status: BreakoutGuardStatus,
+) -> None:
+    previous_active = runtime.breakout_guard_active
+    previous_side = runtime.breakout_guard_side
+    previous_reason = runtime.breakout_guard_reason
+
+    runtime.breakout_guard_active = status.active
+    runtime.breakout_guard_side = status.side
+    runtime.breakout_guard_reason = status.reason
+
+    if (previous_active, previous_side, previous_reason) == (
+        status.active,
+        status.side,
+        status.reason,
+    ):
+        return
+
+    is_failure = status.reason.startswith("guard_eval_failed:")
+    was_failure = (previous_reason or "").startswith("guard_eval_failed:")
+
+    if is_failure:
+        logger.warning(
+            f"[GUARD] 브레이크아웃 가드 평가 실패 "
+            f"(reason={status.reason}, policy={_breakout_guard_failure_policy()})"
+        )
+        return
+
+    if status.active:
+        logger.warning(
+            f"[GUARD] 브레이크아웃 가드 ON "
+            f"(side={status.side}, reason={status.reason}, closes={[format_decimal(price) for price in status.close_prices]})"
+        )
+        return
+
+    if previous_active or was_failure:
+        logger.info(f"[GUARD] 브레이크아웃 가드 OFF (reason={status.reason})")
+
+
+def apply_breakout_guard_to_buy_orders(
+    buy_orders: list[Order],
+    guard_status: BreakoutGuardStatus,
+) -> list[Order]:
+    if not guard_status.active:
+        return buy_orders
+
+    if buy_orders:
+        logger.warning(
+            f"[GUARD] 신규 매수 차단 "
+            f"(reason={guard_status.reason}, side={guard_status.side}, orders={len(buy_orders)})"
+        )
+    return []
+
+
 def refresh_grid_state_if_changed(
     grid_state: GridState,
     repository: GridStateRepository,
@@ -368,10 +527,17 @@ def run():
                 current_price = exchange.get_current_price(cfg.SYMBOL)
                 logger.info(f"현재가: {current_price}")
 
+                breakout_guard_status = fetch_breakout_guard_status(exchange, grid_state)
+                log_breakout_guard_transition(runtime, breakout_guard_status)
+
                 pending_slots = {order.slot_index for order in pending_orders.values()}
                 buy_orders, sell_orders = strategy.evaluate_with_pending(
                     current_price,
                     pending_slot_indexes=pending_slots,
+                )
+                buy_orders = apply_breakout_guard_to_buy_orders(
+                    buy_orders,
+                    breakout_guard_status,
                 )
                 if not sell_orders and not buy_orders:
                     time.sleep(cfg.PRICE_POLL_INTERVAL)

@@ -2,6 +2,7 @@
 주식 거래소 구현 (stub)
 실제 연동 시 한국투자증권 KIS API, LS증권 등으로 교체
 """
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -23,6 +24,10 @@ class StockExchange(BaseExchange):
         # TODO: KIS API 등 실거래소 연동
         raise NotImplementedError("주식 거래소 get_current_price 미구현")
 
+    def get_recent_minute_closes(self, symbol: str, unit: int, count: int) -> list[Decimal]:
+        # TODO: KIS API 등 실거래소 연동
+        raise NotImplementedError("주식 거래소 get_recent_minute_closes 미구현")
+
     def get_balance(self) -> Decimal:
         # TODO: KIS API 등 실거래소 연동
         raise NotImplementedError("주식 거래소 get_balance 미구현")
@@ -30,6 +35,18 @@ class StockExchange(BaseExchange):
     def get_holdings(self, symbol: str) -> Decimal:
         # TODO: KIS API 등 실거래소 연동
         raise NotImplementedError("주식 거래소 get_holdings 미구현")
+
+    def get_minute_candle_closes(
+        self,
+        symbol: str,
+        *,
+        unit_minutes: int,
+        count: int,
+        to: datetime | None = None,
+    ) -> list[Decimal]:
+        del symbol, unit_minutes, count, to
+        # TODO: KIS API 등 실거래소 연동
+        raise NotImplementedError("주식 거래소 get_minute_candle_closes 미구현")
 
     def place_order(self, order: Order) -> Optional[str]:
         # TODO: KIS API 등 실거래소 연동

@@ -9,7 +9,10 @@ from storage.postgres_common import require_psycopg
 class StateFactoryTest(unittest.TestCase):
 
     def test_factory_builds_postgres_repositories_from_config(self):
-        require_psycopg()
+        try:
+            require_psycopg()
+        except ModuleNotFoundError as exc:
+            self.skipTest(f"postgres integration prerequisites unavailable: {exc}")
         config = type(
             "Config",
             (),

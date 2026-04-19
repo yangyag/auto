@@ -69,9 +69,25 @@ API_KEY = os.getenv("UPBIT_ACCESS_KEY", "")
 API_SECRET = os.getenv("UPBIT_SECRET_KEY", "")
 
 # ── 리스크 파라미터 ──────────────────────────────────────
-MAX_TOTAL_BUDGET_KRW = None  # BTC 그리드 총 투입 한도. None 또는 0 이하면 제한 비활성화
+MAX_TOTAL_BUDGET_KRW = None  # BTC 그리드 총 배정 금액 한도. None 또는 0 이하면 제한 비활성화
+MAX_OPERATING_BUDGET_KRW = None  # q_current 분모로 쓰는 운영 자본 상한. None 이면 현재 그리드 총배정금액을 사용
 MAX_DAILY_ORDERS = 50        # 일일 최대 주문 횟수
 MIN_BALANCE_RESERVE = Decimal("10000")  # 최소 유보 잔고 KRW (이 금액 이하이면 매수 block)
+
+# ── 전략 안전장치 / 재고 목표 ─────────────────────────────
+UPWARD_BUY_ENABLED = False   # 상승 1칸 돌파 시장가 매수. 기본값 OFF
+UPWARD_SINGLE_SLOT_BUY_ENABLED = UPWARD_BUY_ENABLED
+INVENTORY_TARGET_Q_MIN = Decimal("0.10")
+INVENTORY_TARGET_Q_MAX = Decimal("0.85")
+INVENTORY_TARGET_GAMMA = Decimal("1.5")
+INVENTORY_TARGET_EPSILON = Decimal("0.03")
+BREAKOUT_GUARD_ENABLED = True
+BREAKOUT_GUARD_CANDLE_UNIT = 15
+BREAKOUT_GUARD_CONSECUTIVE_CANDLES = 4
+BREAKOUT_GUARD_FAIL_OPEN = True  # 캔들 조회 실패 시 신규 매수 차단 대신 기존 전략 유지
+BREAKOUT_GUARD_CANDLE_UNIT_MINUTES = BREAKOUT_GUARD_CANDLE_UNIT
+BREAKOUT_GUARD_CONSECUTIVE_CLOSES = BREAKOUT_GUARD_CONSECUTIVE_CANDLES
+BREAKOUT_GUARD_FAILURE_POLICY = "open" if BREAKOUT_GUARD_FAIL_OPEN else "close"
 
 # ── 모니터링 주기 ────────────────────────────────────────
 PRICE_POLL_INTERVAL = 5      # 가격 조회 간격 (초)

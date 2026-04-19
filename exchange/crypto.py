@@ -5,6 +5,7 @@ API 문서: https://docs.upbit.com/
 """
 import hashlib
 import uuid
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Optional
 from urllib.parse import unquote, urlencode
@@ -164,6 +165,30 @@ class CryptoExchange(BaseExchange):
         logger.debug(f"현재가 조회 {symbol}: {price}")
         return price
 
+    def get_recent_minute_closes(self, symbol: str, unit: int, count: int) -> list[Decimal]:
+        """최근 완료된 분 캔들 종가 목록 조회."""
+        if count <= 0:
+            return []
+
+        data = self._get(
+            f"/v1/candles/minutes/{unit}",
+            params={
+                "market": symbol,
+                "count": count + 1,
+            },
+        )
+        now_utc = datetime.now(timezone.utc)
+        closes: list[Decimal] = []
+        for candle in data:
+            candle_start = datetime.fromisoformat(candle["candle_date_time_utc"]).replace(tzinfo=timezone.utc)
+            if now_utc < candle_start + timedelta(minutes=unit):
+                continue
+            closes.append(to_decimal(candle["trade_price"]))
+            if len(closes) >= count:
+                break
+        logger.debug(f"분 캔들 종가 조회 {symbol} unit={unit} count={count}: {closes}")
+        return closes
+
     def get_balance(self) -> Decimal:
         """KRW 주문 가능 잔고 조회"""
         accounts = self._get("/v1/accounts", auth=True)
@@ -188,6 +213,30 @@ class CryptoExchange(BaseExchange):
                 logger.debug(f"{currency} 보유: {format_decimal(qty)}")
                 return qty
         return DECIMAL_ZERO
+
+    def get_minute_candle_closes(
+        self,
+        symbol: str,
+        *,
+        unit_minutes: int,
+        count: int,
+        to: datetime | None = None,
+    ) -> list[Decimal]:
+        """업비트 분 캔들 종가 목록을 최신순으로 반환한다."""
+        params: dict[str, Any] = {
+            "market": symbol,
+            "count": count,
+        }
+        if to is not None:
+            params["to"] = to.isoformat(timespec="seconds")
+
+        data = self._get(f"/v1/candles/minutes/{unit_minutes}", params=params)
+        closes = [to_decimal(candle["trade_price"]) for candle in data]
+        logger.debug(
+            f"{symbol} {unit_minutes}분 캔들 종가 조회: "
+            f"count={count}, fetched={len(closes)}, to={params.get('to')}"
+        )
+        return closes
 
     def place_order(self, order: Order) -> Optional[str]:
         """

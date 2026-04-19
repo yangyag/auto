@@ -124,6 +124,7 @@
 | 기능 | Method | Path | 인증 | 비고 |
 | --- | --- | --- | --- | --- |
 | 현재가 조회 | `GET` | `/v1/ticker` | 불필요 | `markets=KRW-BTC` 같은 형식 |
+| 분 캔들 조회 | `GET` | `/v1/candles/minutes/{unit}` | 불필요 | 현재 Phase 3 브레이크아웃 가드에서 `unit=15` 사용 |
 | 계정 잔고 조회 | `GET` | `/v1/accounts` | 필요 | `자산조회` 권한 |
 | 주문 가능 정보 조회 | `GET` | `/v1/orders/chance` | 필요 | `주문조회` 권한 |
 | 주문 생성 | `POST` | `/v1/orders` | 필요 | `주문하기` 권한 |
@@ -149,6 +150,22 @@
 
 - 이 API는 스냅샷 조회다.
 - 고빈도 실시간 전략이면 WebSocket Ticker 전환을 검토해야 한다.
+
+## 분 캔들 조회
+
+- 엔드포인트: `GET /v1/candles/minutes/{unit}`
+- 현재 프로젝트 사용값: `unit=15`
+- 인증: 불필요
+- 현재 코드 연결:
+  - `exchange/crypto.py::get_recent_minute_closes`
+  - `main.py::fetch_breakout_guard_status`
+
+핵심 메모:
+
+- `market`, `count` 파라미터를 사용한다.
+- 종가는 응답의 `trade_price` 필드를 사용한다.
+- 분 캔들은 체결이 발생한 구간만 생성된다.
+- 현재 프로젝트는 최근 완료된 15분 종가 4개가 같은 방향으로 밴드 밖인지 확인하는 용도로만 쓴다.
 
 ## 잔고 조회
 

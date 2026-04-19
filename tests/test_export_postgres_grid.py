@@ -29,7 +29,10 @@ class ExportPostgresGridTest(unittest.TestCase):
             "1) 100 0 105 1\n"
             "2) 90 0.25 94.5 0.5\n"
             "\n"
-            "테이블 총재고 : 0.25",
+            "테이블 총재고 : 0.25\n"
+            "총 계획매수금액 : 145\n"
+            "최상단 슬롯 계획매수금액 : 100\n"
+            "최하단 슬롯 계획매수금액 : 45",
         )
 
     def test_main_writes_rendered_snapshot_to_output_file(self):

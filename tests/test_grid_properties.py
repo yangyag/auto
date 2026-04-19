@@ -7,6 +7,7 @@ from core.grid_properties import (
     GridPropertySpec,
     build_grid_rows_from_property_spec,
     build_sell_price,
+    build_weighted_slot_buy_amounts,
     load_grid_property_spec,
 )
 
@@ -61,6 +62,7 @@ class GridPropertiesTest(unittest.TestCase):
         self.assertEqual(rows[-1].buy_price, Decimal("91623000"))
         self.assertTrue(all(row.held_qty == Decimal("0") for row in rows))
         self.assertTrue(all(row.planned_qty > Decimal("0") for row in rows))
+        self.assertGreater(rows[-1].planned_qty, rows[0].planned_qty)
         self.assertEqual(rows[0].sell_price, build_sell_price(rows[0].buy_price, spec.sell_percent))
         self.assertEqual(rows[-1].sell_price, build_sell_price(rows[-1].buy_price, spec.sell_percent))
         self.assertGreater(rows[0].sell_price, rows[0].buy_price)
@@ -78,7 +80,23 @@ class GridPropertiesTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_grid_rows_from_property_spec(spec)
 
-    def test_build_grid_rows_from_property_spec_computes_slot_qty_from_buy_amount(self):
+    def test_build_weighted_slot_buy_amounts_preserve_total_budget_for_uneven_grid_count(self):
+        spec = GridPropertySpec(
+            min_buy_price=Decimal("100000000"),
+            max_buy_price=Decimal("130000000"),
+            buy_amount_krw=Decimal("200000"),
+            grid_count=4,
+            sell_percent=Decimal("5"),
+        )
+
+        slot_buy_amounts = build_weighted_slot_buy_amounts(spec)
+
+        self.assertEqual(len(slot_buy_amounts), 4)
+        self.assertLess(slot_buy_amounts[0], spec.buy_amount_krw)
+        self.assertGreater(slot_buy_amounts[-1], spec.buy_amount_krw)
+        self.assertLess(abs(sum(slot_buy_amounts, Decimal("0")) - (spec.buy_amount_krw * spec.grid_count)), Decimal("0.0001"))
+
+    def test_build_grid_rows_from_property_spec_computes_slot_qty_from_weighted_buy_amount(self):
         spec = GridPropertySpec(
             min_buy_price=Decimal("100000000"),
             max_buy_price=Decimal("120000000"),
@@ -89,12 +107,27 @@ class GridPropertiesTest(unittest.TestCase):
 
         rows = build_grid_rows_from_property_spec(spec)
 
-        self.assertEqual(rows[0].planned_qty, Decimal("0.00166666"))
+        self.assertEqual(build_weighted_slot_buy_amounts(spec), [Decimal("140000.0"), Decimal("200000.0"), Decimal("260000.0")])
+        self.assertEqual(rows[0].planned_qty, Decimal("0.00116666"))
         self.assertEqual(rows[1].planned_qty, Decimal("0.00182575"))
-        self.assertEqual(rows[2].planned_qty, Decimal("0.00200000"))
+        self.assertEqual(rows[2].planned_qty, Decimal("0.00260000"))
+        self.assertLess(rows[0].buy_price * rows[0].planned_qty, spec.buy_amount_krw)
+        self.assertGreater(rows[2].buy_price * rows[2].planned_qty, spec.buy_amount_krw)
         self.assertEqual(rows[0].sell_price, build_sell_price(rows[0].buy_price, spec.sell_percent))
         self.assertEqual(rows[1].sell_price, build_sell_price(rows[1].buy_price, spec.sell_percent))
         self.assertEqual(rows[2].sell_price, build_sell_price(rows[2].buy_price, spec.sell_percent))
+
+    def test_build_grid_rows_from_property_spec_rejects_weighted_top_slot_below_minimum_order_amount(self):
+        spec = GridPropertySpec(
+            min_buy_price=Decimal("100000000"),
+            max_buy_price=Decimal("120000000"),
+            buy_amount_krw=Decimal("5000"),
+            grid_count=3,
+            sell_percent=Decimal("5"),
+        )
+
+        with self.assertRaisesRegex(ValueError, "슬롯 1 매수 금액이 업비트 최소 주문 금액보다 작습니다."):
+            build_grid_rows_from_property_spec(spec)
 
 
 if __name__ == "__main__":

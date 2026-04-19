@@ -10,6 +10,7 @@ import config.settings as cfg
 from storage.interfaces import GridSnapshot
 from storage.postgres_grid_repository import PostgresGridRepository
 from utils.decimal_utils import DECIMAL_ZERO, format_decimal
+from utils.grid_reporting import summarize_planned_buy_budget
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,8 +35,12 @@ def render_grid_text(snapshot: GridSnapshot) -> str:
         )
 
     total_inventory = sum((row.held_qty for row in snapshot.rows), DECIMAL_ZERO)
+    budget_summary = summarize_planned_buy_budget(snapshot.rows)
     lines.append("")
     lines.append(f"테이블 총재고 : {format_decimal(total_inventory)}")
+    lines.append(f"총 계획매수금액 : {format_decimal(budget_summary.total)}")
+    lines.append(f"최상단 슬롯 계획매수금액 : {format_decimal(budget_summary.top_slot)}")
+    lines.append(f"최하단 슬롯 계획매수금액 : {format_decimal(budget_summary.bottom_slot)}")
     return "\n".join(lines)
 
 

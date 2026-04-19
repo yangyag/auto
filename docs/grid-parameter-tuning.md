@@ -29,7 +29,8 @@
 - `buy_price`는 `MAX_BUY_PRICE`부터 `MIN_BUY_PRICE`까지 기하비율로 나눈다.
 - 각 `buy_price`는 업비트 KRW 호가 단위로 보정된다.
 - `sell_price = buy_price * (1 + SELL_PERCENT / 100)` 후 다시 호가 단위로 보정된다.
-- `planned_qty = BUY_AMOUNT_KRW / buy_price`를 BTC 최소 step 단위로 내림한다.
+- 총예산은 `BUY_AMOUNT_KRW * GRID_COUNT` 로 보고, 슬롯별 예산은 상단/중단/하단 `0.7x / 1.0x / 1.3x` 가중치를 실제 슬롯 수에 맞춰 정규화해 나눈다.
+- `planned_qty = slot_budget / buy_price`를 BTC 최소 step 단위로 내림한다.
 
 ### 전략 평가
 

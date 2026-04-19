@@ -3,6 +3,7 @@
 신규 거래소 추가 시 이 클래스를 상속해서 구현한다.
 """
 from abc import ABC, abstractmethod
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -16,12 +17,27 @@ class BaseExchange(ABC):
         """현재가 조회"""
 
     @abstractmethod
+    def get_recent_minute_closes(self, symbol: str, unit: int, count: int) -> list[Decimal]:
+        """최근 분 캔들 종가 목록 조회"""
+
+    @abstractmethod
     def get_balance(self) -> Decimal:
         """주문 가능 잔고 조회 (현금)"""
 
     @abstractmethod
     def get_holdings(self, symbol: str) -> Decimal:
         """보유 수량 조회"""
+
+    @abstractmethod
+    def get_minute_candle_closes(
+        self,
+        symbol: str,
+        *,
+        unit_minutes: int,
+        count: int,
+        to: datetime | None = None,
+    ) -> list[Decimal]:
+        """완료된 분 캔들 종가 목록 조회. `to` 는 exclusive 상한 시각."""
 
     @abstractmethod
     def place_order(self, order: Order) -> Optional[str]:

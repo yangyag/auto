@@ -58,6 +58,13 @@ python3 scripts/apply_grid_properties_to_postgres.py --force
 - 현재 `.env`의 `STATE_BOT_KEY`
 - 현재 `.env`의 PostgreSQL 접속정보
 
+Phase 2 하단 가중 배분을 확인할 때는 출력의 아래 항목을 같이 본다:
+- `planned_buy_budget_total`
+- `top_slot_planned_buy_budget`
+- `bottom_slot_planned_buy_budget`
+
+하단 가중이 적용된 새 그리드라면 보통 `bottom_slot_planned_buy_budget > top_slot_planned_buy_budget` 이어야 한다.
+
 ### 다른 properties 파일을 쓰고 싶을 때
 ```bash
 python3 scripts/apply_grid_properties_to_postgres.py --properties-file my-grid.properties --force
@@ -92,7 +99,7 @@ python3 scripts/show_grid_state.py
 - `.env`의 `PGSCHEMA`
 - PostgreSQL 접속정보
 
-출력에는 조회 source, 슬롯별 `buy/held/sell/planned/status`, 총재고가 포함된다.
+출력에는 조회 source, 슬롯별 `buy/held/sell/planned/planned_krw/status`, 총재고, 상단/하단/총 계획매수금액 요약이 포함된다.
 
 ## 7) 테스트
 
@@ -140,7 +147,7 @@ SELL_PERCENT=5
 의미:
 - `MIN_BUY_PRICE`: 최하단 슬롯 buy_price
 - `MAX_BUY_PRICE`: 최상단 슬롯 buy_price
-- `BUY_AMOUNT_KRW`: 각 슬롯별 목표 매수금액
+- `BUY_AMOUNT_KRW`: 슬롯 평균 목표 매수금액
 - `GRID_COUNT`: 슬롯 개수
 - `SELL_PERCENT`: 매도 퍼센트, `5`는 `5%`를 뜻함
 

@@ -44,8 +44,18 @@ class ShowGridStateScriptTest(unittest.TestCase):
         self.assertIn("symbol: KRW-BTC", output)
         self.assertIn("rows: 2", output)
         self.assertIn("total_inventory: 0.25", output)
-        self.assertIn("1) buy=             100 held=               0 sell=             105 planned=               1 status=empty", output)
-        self.assertIn("2) buy=              90 held=            0.25 sell=            94.5 planned=             0.5 status=holding", output)
+        self.assertIn("planned_buy_budget_total: 145", output)
+        self.assertIn("top_slot_planned_buy_budget: 100", output)
+        self.assertIn("bottom_slot_planned_buy_budget: 45", output)
+        self.assertIn("slot | buy | held | sell | planned | planned_krw | status", output)
+        self.assertIn(
+            "1) buy=             100 held=               0 sell=             105 planned=               1 planned_krw=             100 status=empty",
+            output,
+        )
+        self.assertIn(
+            "2) buy=              90 held=            0.25 sell=            94.5 planned=             0.5 planned_krw=              45 status=holding",
+            output,
+        )
 
     def test_main_uses_repository_loader_for_postgres_backend(self):
         snapshot = GridSnapshot(
@@ -76,7 +86,13 @@ class ShowGridStateScriptTest(unittest.TestCase):
         self.assertIn("symbol: KRW-BTC", output)
         self.assertIn("rows: 1", output)
         self.assertIn("total_inventory: 0.1", output)
-        self.assertIn("1) buy=             100 held=             0.1 sell=             105 planned=               1 status=holding", output)
+        self.assertIn("planned_buy_budget_total: 100", output)
+        self.assertIn("top_slot_planned_buy_budget: 100", output)
+        self.assertIn("bottom_slot_planned_buy_budget: 100", output)
+        self.assertIn(
+            "1) buy=             100 held=             0.1 sell=             105 planned=               1 planned_krw=             100 status=holding",
+            output,
+        )
 
 
 if __name__ == "__main__":

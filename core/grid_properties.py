@@ -11,6 +11,14 @@ from utils.decimal_utils import BTC_QUANTITY_STEP, DECIMAL_ZERO, quantize_to_ste
 from utils.upbit_market import MIN_KRW_ORDER_AMOUNT, normalize_krw_price
 
 DEFAULT_SELL_PERCENT = Decimal("5")
+DEFAULT_TOP_THIRD_WEIGHT = Decimal("0.7")
+DEFAULT_MIDDLE_THIRD_WEIGHT = Decimal("1.0")
+DEFAULT_BOTTOM_THIRD_WEIGHT = Decimal("1.3")
+DEFAULT_GRID_ALLOCATION_WEIGHTS = (
+    DEFAULT_TOP_THIRD_WEIGHT,
+    DEFAULT_MIDDLE_THIRD_WEIGHT,
+    DEFAULT_BOTTOM_THIRD_WEIGHT,
+)
 
 
 @dataclass(frozen=True)
@@ -62,6 +70,29 @@ def build_sell_price(buy_price: Decimal, sell_percent: Decimal) -> Decimal:
     return sell_price
 
 
+def build_weighted_slot_buy_amounts(spec: GridPropertySpec) -> list[Decimal]:
+    """grid.properties 경로 전용 슬롯별 KRW 예산을 계산한다.
+
+    BUY_AMOUNT_KRW는 슬롯 평균 예산으로 해석하고, 상/중/하단 가중치를 정규화해
+    총예산은 기존과 동일하게 유지한다.
+    """
+    grid_count = int(spec.grid_count)
+    if grid_count < 2:
+        raise ValueError("GRID_COUNT는 2 이상이어야 합니다.")
+
+    if grid_count == 2:
+        raw_weights = [DEFAULT_TOP_THIRD_WEIGHT, DEFAULT_BOTTOM_THIRD_WEIGHT]
+    else:
+        raw_weights = []
+        for zero_based_index in range(grid_count):
+            bucket = min((zero_based_index * 3) // (grid_count - 1), 2)
+            raw_weights.append(DEFAULT_GRID_ALLOCATION_WEIGHTS[bucket])
+
+    weight_sum = sum(raw_weights, DECIMAL_ZERO)
+    normalized_scale = to_decimal(grid_count) / weight_sum
+    return [to_decimal(spec.buy_amount_krw) * weight * normalized_scale for weight in raw_weights]
+
+
 def build_grid_rows_from_property_spec(spec: GridPropertySpec) -> list[GridRow]:
     raw_min_buy_price = to_decimal(spec.min_buy_price)
     raw_max_buy_price = to_decimal(spec.max_buy_price)
@@ -99,11 +130,12 @@ def build_grid_rows_from_property_spec(spec: GridPropertySpec) -> list[GridRow]:
     if len(set(buy_prices_desc)) != grid_count:
         raise ValueError("호가 단위 적용 후 buy_price 레벨이 중복되었습니다. 범위를 넓히거나 슬롯 수를 줄이세요.")
 
+    slot_buy_amounts = build_weighted_slot_buy_amounts(spec)
     rows: list[GridRow] = []
-    for index, buy_price in enumerate(buy_prices_desc, start=1):
+    for index, (buy_price, slot_buy_amount) in enumerate(zip(buy_prices_desc, slot_buy_amounts), start=1):
         sell_price = build_sell_price(buy_price, spec.sell_percent)
         planned_qty = quantize_to_step(
-            buy_amount_krw / buy_price,
+            slot_buy_amount / buy_price,
             BTC_QUANTITY_STEP,
             rounding=ROUND_DOWN,
         )

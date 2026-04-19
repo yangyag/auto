@@ -218,7 +218,7 @@ SELL_PERCENT=5
 의미:
 - `MIN_BUY_PRICE`: 최하단 슬롯 buy_price
 - `MAX_BUY_PRICE`: 최상단 슬롯 buy_price
-- `BUY_AMOUNT_KRW`: 슬롯별 목표 매수금액
+- `BUY_AMOUNT_KRW`: 슬롯 평균 목표 매수금액
 - `GRID_COUNT`: 슬롯 개수
 - `SELL_PERCENT`: 매도 퍼센트, `5`는 `5%`를 뜻한다
 

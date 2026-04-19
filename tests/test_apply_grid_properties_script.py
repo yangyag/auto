@@ -14,6 +14,7 @@ from tests.postgres_test_utils import (
     drop_test_schema,
     postgres_test_config,
 )
+from utils.decimal_utils import format_decimal
 
 
 class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
@@ -78,10 +79,19 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
         self.assertEqual(snapshot.rows[-1].buy_price, Decimal("91623000"))
         self.assertEqual(snapshot.rows[0].sell_price, build_sell_price(snapshot.rows[0].buy_price, Decimal("5")))
         self.assertEqual(snapshot.rows[1].sell_price, build_sell_price(snapshot.rows[1].buy_price, Decimal("5")))
+        self.assertGreater(snapshot.rows[-1].planned_qty, snapshot.rows[0].planned_qty)
+        self.assertLess(snapshot.rows[0].buy_price * snapshot.rows[0].planned_qty, Decimal("200000"))
+        self.assertGreater(snapshot.rows[-1].buy_price * snapshot.rows[-1].planned_qty, Decimal("200000"))
         self.assertGreater(snapshot.rows[0].sell_price, snapshot.rows[0].buy_price)
+        top_budget = snapshot.rows[0].buy_price * snapshot.rows[0].planned_qty
+        bottom_budget = snapshot.rows[-1].buy_price * snapshot.rows[-1].planned_qty
+        total_budget = sum((row.buy_price * row.planned_qty for row in snapshot.rows), Decimal("0"))
         self.assertIn("rows: 20", result.stdout)
         self.assertIn("top_buy_price: 127886000", result.stdout)
         self.assertIn("bottom_buy_price: 91623000", result.stdout)
+        self.assertIn(f"planned_buy_budget_total: {format_decimal(total_budget)}", result.stdout)
+        self.assertIn(f"top_slot_planned_buy_budget: {format_decimal(top_budget)}", result.stdout)
+        self.assertIn(f"bottom_slot_planned_buy_budget: {format_decimal(bottom_budget)}", result.stdout)
 
     def test_script_uses_project_root_grid_properties_when_run_from_scripts_dir(self):
         project_properties = self.project_root / "grid.properties"
@@ -125,6 +135,9 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
 
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertIn("rows: 20", result.stdout)
+        self.assertIn("planned_buy_budget_total:", result.stdout)
+        self.assertIn("top_slot_planned_buy_budget:", result.stdout)
+        self.assertIn("bottom_slot_planned_buy_budget:", result.stdout)
 
 
 if __name__ == "__main__":

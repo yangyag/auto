@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -25,6 +26,53 @@ class CryptoExchangeBalanceTest(unittest.TestCase):
 
         with patch.object(self.exchange, "_get", return_value=accounts):
             self.assertEqual(self.exchange.get_balance(), Decimal("0"))
+
+    def test_get_recent_minute_closes_calls_minute_candle_api_and_parses_trade_price(self):
+        now_utc = datetime.now(timezone.utc)
+        current_slot_start = now_utc.replace(
+            minute=now_utc.minute - (now_utc.minute % 15),
+            second=0,
+            microsecond=0,
+        )
+        payload = [
+            {
+                "trade_price": "111500000",
+                "candle_date_time_utc": current_slot_start.replace(tzinfo=None).isoformat(timespec="seconds"),
+            },
+            {
+                "trade_price": "111000000",
+                "candle_date_time_utc": (current_slot_start - timedelta(minutes=15)).replace(tzinfo=None).isoformat(timespec="seconds"),
+            },
+            {
+                "trade_price": "110500000",
+                "candle_date_time_utc": (current_slot_start - timedelta(minutes=30)).replace(tzinfo=None).isoformat(timespec="seconds"),
+            },
+            {
+                "trade_price": "110000000",
+                "candle_date_time_utc": (current_slot_start - timedelta(minutes=45)).replace(tzinfo=None).isoformat(timespec="seconds"),
+            },
+            {
+                "trade_price": "109500000",
+                "candle_date_time_utc": (current_slot_start - timedelta(minutes=60)).replace(tzinfo=None).isoformat(timespec="seconds"),
+            },
+        ]
+
+        with patch.object(self.exchange, "_get", return_value=payload) as get:
+            closes = self.exchange.get_recent_minute_closes("KRW-BTC", 15, 4)
+
+        self.assertEqual(
+            closes,
+            [
+                Decimal("111000000"),
+                Decimal("110500000"),
+                Decimal("110000000"),
+                Decimal("109500000"),
+            ],
+        )
+        get.assert_called_once_with(
+            "/v1/candles/minutes/15",
+            params={"market": "KRW-BTC", "count": 5},
+        )
 
     def test_get_order_status_parses_upbit_response(self):
         payload = {

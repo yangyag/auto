@@ -72,10 +72,20 @@ auto/
 - `exchange/stock.py`는 미구현 상태다. 주식 기능 요청을 처리할 때는 stub 제거 범위와 누락된 메서드를 먼저 명시한다.
 - 현재 주문 수량 모델은 `Decimal` 기준이다. KRW-BTC 운영에서는 소수 BTC 수량이 기본 경로다.
 - KRW-BTC 운영 시 수량은 소수 BTC 단위로 관리하고, 가격은 업비트 KRW 마켓 호가 단위에 맞춰야 한다.
-- `grid.properties` 기반 DB 그리드 생성 도구가 있다. `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `BUY_AMOUNT_KRW`, `GRID_COUNT`, `SELL_PERCENT`를 채우면 `scripts/apply_grid_properties_to_postgres.py`가 최상단/최하단 buy_price를 그 범위에 맞추고, 각 슬롯 `planned_qty`는 `BUY_AMOUNT_KRW / buy_price`를 소수 BTC 단위 내림으로 계산해 PostgreSQL에 직접 저장한다.
+- `grid.properties` 기반 DB 그리드 생성 도구가 있다. `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `BUY_AMOUNT_KRW`, `GRID_COUNT`, `SELL_PERCENT`를 채우면 `scripts/apply_grid_properties_to_postgres.py`가 최상단/최하단 buy_price를 그 범위에 맞추고, 총예산 `BUY_AMOUNT_KRW * GRID_COUNT`를 상단/중단/하단 `0.7x / 1.0x / 1.3x` 가중치로 실제 슬롯 수에 맞게 정규화해 분배한 뒤 각 슬롯 `planned_qty`를 `slot_budget / buy_price` 기준 소수 BTC 단위 내림으로 계산해 PostgreSQL에 직접 저장한다.
 - 이 도구에서 중간 슬롯 buy_price는 기하비율로 계산하며, 각 슬롯의 `sell_price`는 `buy_price * (1 + SELL_PERCENT / 100)` 기준으로 계산한다. `SELL_PERCENT=5`는 5%를 뜻한다.
 - 백그라운드 실행/종료는 가능하면 `./run.sh`, `./stop.sh`를 우선 사용한다. 직접 `nohup python3 main.py`를 실행하면 PID 추적과 로그 해석이 꼬일 수 있다.
 - 운영 로그는 `logs/trading-YYYY-MM-DD.log`를 기준으로 본다. 테스트 로그가 같은 날짜 파일에 남을 수 있으므로 로거 이름 `__main__`/`main`도 함께 확인한다.
+
+## Python 실행 환경 메모
+- 이 작업 디렉터리는 시스템 `python3 -m venv .venv` 가 `ensurepip` 부재로 실패할 수 있다.
+- 같은 문제가 다시 나오면 우선 `uv`로 가상환경을 만든다.
+  - `~/.local/bin/uv venv --clear .venv`
+  - `~/.local/bin/uv pip install --python .venv/bin/python pip`
+- 이후 의존성 설치와 검증은 가능하면 `.venv/bin/python` 기준으로 실행한다.
+  - `.venv/bin/python -m pip install -r requirements.txt`
+  - `.venv/bin/python -c "import main"`
+  - `.venv/bin/python -m unittest discover -s tests -v`
 
 ## 작업 파이프라인
 
@@ -118,8 +128,12 @@ auto/
 - 거래 심볼은 `config/settings.py`의 `SYMBOL`과 PostgreSQL 그리드 상태에 함께 존재한다. 실제 주문은 `cfg.SYMBOL`을 사용하고, 상태 저장은 그리드 저장소 계약을 따른다.
 - `core/grid_builder.py::build_cash_only_grid()`는 상단/하단 매수 경계를 고정한 뒤 그 사이를 슬롯 수만큼 분할하고, 첫 슬롯 `buy_price` 기준 `GRID_FIRST_BUY_AMOUNT_KRW` 만큼 살 수 있는 BTC 수량을 모든 슬롯의 고정 수량으로 사용한다. 각 슬롯 `sell_price`는 `GRID_SELL_PERCENT` 기준으로 계산한다.
 - `python3 main.py init-grid`의 생성 기준은 총예산 분배가 아니라 `--first-buy-amount` 기반이다. 현재 기본값은 `config/settings.py::GRID_FIRST_BUY_AMOUNT_KRW`를 따르며, 매도 가격은 `--sell-percent` 또는 `config/settings.py::GRID_SELL_PERCENT`를 따른다.
-- `strategy/grid_strategy.py`의 트리거는 절대값 판정이 아니라 poll 구간 기준 가격 조건 판정이다. 첫 가격 스냅샷에서는 빈 슬롯 매수 주문을 내지 않고, 이후 빈 슬롯은 `previous_price > buy_price >= current_price` 이면 지정가 매수한다. 하락 구간에서 여러 `buy_price`를 한 poll 안에 함께 통과하면 그 empty 슬롯들은 모두 매수 후보가 된다. 상승 구간에서는 `previous_price < buy_price <= current_price` 인 empty 슬롯이 한 poll 동안 정확히 1개일 때만 그 슬롯을 시장가 예산매수하고, 2개 이상을 한 번에 뛰어넘으면 그 상승 구간 매수는 모두 건너뛴다. 보유 슬롯은 현재가가 `sell_price` 이상이면 즉시 매도 후보가 된다.
-- 하락 교차 매수와 매도는 지정가 주문이다. 상승 시 단일 슬롯 상향 돌파 매수만 업비트 `ord_type=price` 시장가 예산매수를 사용한다. `wait`/`watch` pending 슬롯은 중복 주문 대상에서 제외된다.
+- `grid.properties` 기반 경로와 `python3 main.py init-grid` 경로는 같은 초기화 계약이 아니다. 전자는 `BUY_AMOUNT_KRW * GRID_COUNT` 총예산을 하단 가중 분배한 슬롯별 `slot_budget / buy_price` 기반이고, 후자는 첫 슬롯 기준 고정 수량 기반이다. 숫자를 단순 동기화하지 말고 어느 경로를 쓰는지 먼저 고정한다.
+- `strategy/grid_strategy.py`의 트리거는 절대값 판정이 아니라 poll 구간 기준 가격 조건 판정이다. 첫 가격 스냅샷에서는 빈 슬롯 매수 주문을 내지 않고, 이후 빈 슬롯은 `previous_price > buy_price >= current_price` 이면 지정가 매수한다. 하락 구간에서 여러 `buy_price`를 한 poll 안에 함께 통과하면 그 empty 슬롯들은 모두 매수 후보가 된다. 다만 모든 신규 매수는 inventory-target gate 를 먼저 통과해야 한다. 기본 계약은 `q_current = 현재 보유 슬롯의 (buy_price * held_qty) 합 / MAX_OPERATING_BUDGET_KRW`, `z = (ln(P) - ln(L)) / (ln(U) - ln(L))`, `q_target(z) = q_min + (q_max - q_min) * (1 - z)^gamma`, 허용 조건은 `q_current < q_target(z) - epsilon` 이다. 상승 구간의 `previous_price < buy_price <= current_price` 단일 슬롯 시장가 예산매수 기능은 옵션이며 `UPWARD_BUY_ENABLED=True` 일 때만 켜지고 기본값은 OFF 다. 보유 슬롯은 현재가가 `sell_price` 이상이면 즉시 매도 후보가 된다.
+- `main.py`는 전략 평가 뒤에 브레이크아웃 가드를 한 번 더 적용한다. 최근 완료된 `BREAKOUT_GUARD_CANDLE_UNIT` 분 캔들 종가가 `BREAKOUT_GUARD_CONSECUTIVE_CANDLES` 개 연속으로 밴드 밖에 있으면 신규 매수 주문은 모두 제거하고, 보유 슬롯 매도만 계속 허용한다.
+- 브레이크아웃 가드의 밴드는 설정 상수보다 현재 PostgreSQL 그리드의 실제 `buy_price` 최상단/최하단을 기준으로 본다. `grid.properties` 경로와 `init-grid` 경로가 섞여 있어도 저장된 런타임 그리드 기준으로 판정한다.
+- 업비트 캔들 조회 실패 시 기본값은 `BREAKOUT_GUARD_FAIL_OPEN=True` 이다. 즉, 경고 로그를 남기고 기존 매수/매도 흐름을 유지한다. 운영 중 보수적으로 막고 싶으면 설정에서 fail-close 로 바꾼다.
+- 하락 교차 매수와 매도는 지정가 주문이다. 상승 시 단일 슬롯 상향 돌파 매수를 사용할 때만 업비트 `ord_type=price` 시장가 예산매수를 쓴다. 이 상향 매수도 정확히 1개 empty 슬롯 상향 돌파일 때만 후보가 되며, inventory-target gate 와 `wait`/`watch` pending 슬롯 제외 규칙을 함께 따른다.
 - `main.py`는 같은 루프의 매도/매수 후보가 함께 생겨도 매수 주문은 현재 주문 가능 KRW 기준으로 독립 판단한다. 매도는 먼저 접수할 수 있지만, 같은 사이클에서 체결된 매도대금을 즉시 상위 매수 재원으로 재사용하지는 않는다.
 - 주문 생성 성공은 체결 완료와 다르다. `main.py`는 업비트 `GET /v1/order`로 주문 상태를 재조회해 `state=done`일 때만 PostgreSQL 그리드 상태를 갱신한다. `wait`/`watch` 상태 주문은 pending으로 유지한다.
 - `exchange/crypto.py`는 외부 업비트 API를 호출하므로 네트워크, 인증, 주문 부작용을 항상 고려해야 한다.
@@ -143,6 +157,7 @@ python3 scripts/show_grid_state.py
 - 신규 거래소 추가 시 `exchange/base.py`를 상속하고 `main.py`의 `build_exchange()` 분기도 함께 갱신한다.
 - 그리드 저장 포맷을 바꾸면 `core/grid.py`의 `load()`와 `save()`를 같이 수정한다.
 - 리스크 정책 변경은 `config/settings.py`와 `main.py::check_risk()`를 함께 본다.
+- `MAX_TOTAL_BUDGET_KRW`는 총배정금액 한도 검사이고, `MAX_OPERATING_BUDGET_KRW`는 재고 비율 계산용 분모다. 둘을 같은 값으로 취급한다고 가정하지 말고 의도를 먼저 확인한다. `MAX_OPERATING_BUDGET_KRW` 가 비어 있으면 inventory-target gate 는 형식만 남고 의미가 약해진다.
 - 초기 그리드 생성 수량/매도 퍼센트 기준을 바꾸면 `config/settings.py`의 `GRID_FIRST_BUY_AMOUNT_KRW`, `GRID_SELL_PERCENT`, `main.py init-grid` 인자, `core/grid_builder.py` 계산식을 함께 맞춘다.
 - BTC 그리드는 총 수량 한도보다 총 투입 KRW 예산과 최소 유보 잔고 기준으로 점검한다.
 - 기능은 가능한 한 파일 단위 책임을 유지하고 `main.py`에서 조립한다.

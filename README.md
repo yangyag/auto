@@ -7,7 +7,7 @@ Python 기반 그리드 자동매매 시스템이다. 현재 운영 기준은 �
 - 핵심 경로는 `exchange/crypto.py` 기반 업비트 연동이다.
 - 상태 저장은 PostgreSQL 전용이다.
 - 전략은 가격 절대값이 아니라 직전 가격 대비 `buy_price`/`sell_price` 교차 여부로 주문을 만든다.
-- 빈 슬롯은 `previous_price > buy_price >= current_price` 인 하락 교차 시 지정가 매수한다. 한 poll 안에 여러 `buy_price`를 아래로 통과하면 그 empty 슬롯들은 모두 매수 후보가 된다. 상승 시에는 `previous_price < buy_price <= current_price` 인 empty 슬롯이 한 poll에서 정확히 1개일 때만 해당 슬롯을 시장가 예산매수하고, 여러 슬롯을 한 번에 뛰어넘으면 그 상승 구간은 매수하지 않는다. 보유 슬롯은 현재가가 `sell_price` 이상이면 전부 매도한다.
+- 빈 슬롯은 `previous_price > buy_price >= current_price` 인 하락 교차 시 지정가 매수한다. 한 poll 안에 여러 `buy_price`를 아래로 통과하면 그 empty 슬롯들은 모두 매수 후보가 된다. 다만 모든 신규 매수는 먼저 inventory-target gate 를 통과해야 한다. `q_current = Σ(buy_price * held_qty) / MAX_OPERATING_BUDGET_KRW`, `z = (ln(P) - ln(L)) / (ln(U) - ln(L))`, `q_target(z) = q_min + (q_max - q_min) * (1 - z)^gamma`, 허용 조건은 `q_current < q_target(z) - epsilon` 이다. 추가로 최근 완료된 15분 종가가 밴드 밖에서 4개 연속 나오면 브레이크아웃 가드가 켜져 신규 매수는 전부 차단되고, 보유 슬롯 매도만 계속 허용된다. 상승 시 단일 슬롯 상향 돌파 시장가 예산매수는 `UPWARD_BUY_ENABLED=True` 일 때만 켜지며, 그때도 `previous_price < buy_price <= current_price` 인 empty 슬롯이 한 poll 에서 정확히 1개일 때만 후보가 된다. 보유 슬롯은 현재가가 `sell_price` 이상이면 전부 매도한다.
 - 주문 접수만으로는 그리드 상태를 바꾸지 않고, `GET /v1/order` 재조회 결과가 `done`일 때만 반영한다.
 - `run.sh` / `stop.sh` 기반 백그라운드 실행과 `logs/trading-YYYY-MM-DD.log` 날짜별 로그가 준비되어 있다.
 - 최신 날짜 로그를 바로 따라가려면 `./tail-latest-log.sh`를 사용한다.
@@ -70,11 +70,24 @@ Grid3 SYMBOL
 ```
 
 - `held_qty > 0`: 보유 중 슬롯이다. 현재가가 `sell_price` 이상이면 매도 후보가 된다.
-- `held_qty = 0` and `planned_qty > 0`: 빈 슬롯이다. `previous_price > buy_price >= current_price` 이면 지정가 매수 후보가 된다. 이 하락 구간에서 여러 슬롯을 한 poll 안에 함께 통과하면 그 슬롯들은 모두 매수 후보가 된다. `previous_price < buy_price <= current_price` 인 empty 슬롯이 한 poll에서 정확히 1개뿐이면 그 슬롯만 시장가 예산매수 후보가 된다.
+- `held_qty = 0` and `planned_qty > 0`: 빈 슬롯이다. `previous_price > buy_price >= current_price` 이면 지정가 매수 후보가 된다. 이 하락 구간에서 여러 슬롯을 한 poll 안에 함께 통과하면 그 슬롯들은 모두 매수 후보가 된다. 다만 모든 신규 매수는 `q_current < q_target(z) - epsilon` 을 만족해야만 생성된다. `q_current` 는 현재 보유 슬롯의 `buy_price * held_qty` 합을 `MAX_OPERATING_BUDGET_KRW` 로 나눈 값이고, `q_target(z)` 는 현재 가격 위치 `z` 에서의 목표 재고 비율이다. 여기에 더해 최근 완료된 15분 종가 4개가 같은 방향으로 밴드 밖에 연속 존재하면 브레이크아웃 가드가 켜져 신규 매수 후보는 최종 제출 전에 모두 제거된다. `previous_price < buy_price <= current_price` 인 empty 슬롯 단일 상향 돌파 시장가 예산매수는 옵션 기능이며 기본값은 꺼져 있고 `UPWARD_BUY_ENABLED=True` 일 때만 활성화된다.
 - 매수 주문은 접수만으로 holding 이 되지 않고, 거래소 재조회 결과가 `done`일 때만 해당 슬롯의 `held_qty`가 채워진다.
 - 보유 슬롯에서도 `planned_qty`는 다음 빈 슬롯 복원용 목표 수량으로 유지될 수 있다.
 - `grid.properties` 기반 DB 그리드 생성은 `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `BUY_AMOUNT_KRW`, `GRID_COUNT`, `SELL_PERCENT`를 읽는다.
 - 각 슬롯 `sell_price`는 `buy_price * (1 + SELL_PERCENT / 100)` 기준으로 계산한다. `SELL_PERCENT=5`는 5%를 뜻한다.
+
+## 설정 메모
+
+- `MAX_TOTAL_BUDGET_KRW`: 전체 그리드 총배정금액 한도 검사에만 사용한다.
+- `MAX_OPERATING_BUDGET_KRW`: 재고 비율 `q_current` 계산 분모다. 비어 있으면 inventory-target gate 는 형식만 남고 실질 의미가 없다.
+- `UPWARD_BUY_ENABLED`: 상승 1칸 돌파 시장가 예산매수 기능 토글이다. 기본값은 `False` 다.
+- `BREAKOUT_GUARD_ENABLED`: 15분 캔들 기반 브레이크아웃 가드 토글이다. 기본값은 `True` 다.
+- `BREAKOUT_GUARD_CANDLE_UNIT=15`, `BREAKOUT_GUARD_CONSECUTIVE_CANDLES=4`: 최근 15분 종가 4개를 본다.
+- `BREAKOUT_GUARD_FAIL_OPEN=True`: 캔들 조회 실패 시 런타임을 멈추지 않고 기존 매수/매도 흐름을 유지한다.
+- Phase 1 기본 inventory-target 파라미터는 `q_min=0.10`, `q_max=0.85`, `gamma=1.5`, `epsilon=0.03` 이다.
+- `python3 main.py init-grid` 와 `scripts/apply_grid_properties_to_postgres.py` 는 같은 초기화 경로가 아니다.
+  - `init-grid`: 첫 슬롯 기준 고정 수량
+  - `grid.properties`: 총예산 `BUY_AMOUNT_KRW * GRID_COUNT` 를 가중 배분한 슬롯별 `slot_budget / buy_price`
 
 ## 실행 및 검증
 
