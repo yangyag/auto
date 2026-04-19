@@ -70,6 +70,7 @@ auto/
 - API 키는 환경변수 `UPBIT_ACCESS_KEY`, `UPBIT_SECRET_KEY`로만 주입한다. 민감정보를 문서, 샘플 파일, 커밋에 복제하지 않는다.
 - PostgreSQL 상태 계약은 깨지면 안 된다. 스키마, 저장소 구현, export/show 스크립트의 출력 의미를 함께 맞춘다.
 - Phase 6부터 `grid_slots.filled_at` 는 보유 슬롯 age 추적용 계약이다. BUY 체결 시 기록되고 SELL 체결 시 비워진다.
+- Phase 7부터 pending/open 주문 저장 계약은 업비트 `uuid` 외에 nullable `identifier` 를 포함한다. 현재 reconciliation 주키는 여전히 `uuid` 다. 업비트 문서의 계정 전체 유일 제약에 맞춰 현재 구현은 `identifier` 를 PostgreSQL schema 단위로도 유일하게 본다.
 - `Generator`는 외부 플러그인이나 별도 Codex 호출이 아니라, 메인 Codex가 직접 하위 에이전트를 병렬로 생성해서 운영한다.
 - 코인 거래 로직과 업비트 연동은 현재 시스템의 기준 경로다. 관련 동작을 바꿀 때는 설정, 전략, 주문 파라미터를 함께 점검한다.
 - 거래소 인터페이스를 바꾸면 `exchange/base.py`만 고치지 말고 `main.py`, `strategy/grid_strategy.py`, 구현체까지 함께 맞춘다.
@@ -142,6 +143,8 @@ auto/
 - 하락 교차 매수와 매도는 지정가 주문이다. 상승 시 단일 슬롯 상향 돌파 매수를 사용할 때만 업비트 `ord_type=price` 시장가 예산매수를 쓴다. 이 상향 매수도 정확히 1개 empty 슬롯 상향 돌파일 때만 후보가 되며, inventory-target gate 와 `wait`/`watch` pending 슬롯 제외 규칙을 함께 따른다.
 - `main.py`는 같은 루프의 매도/매수 후보가 함께 생겨도 매수 주문은 현재 주문 가능 KRW 기준으로 독립 판단한다. 매도는 먼저 접수할 수 있지만, 같은 사이클에서 체결된 매도대금을 즉시 상위 매수 재원으로 재사용하지는 않는다.
 - 주문 생성 성공은 체결 완료와 다르다. `main.py`는 업비트 `GET /v1/order`로 주문 상태를 재조회해 `state=done`일 때만 PostgreSQL 그리드 상태를 갱신한다. `wait`/`watch` 상태 주문은 pending으로 유지한다.
+- Phase 7 주문 제출 경로는 `GET /v1/orders/chance` -> `POST /v1/orders/test` -> `POST /v1/orders` 순서다. 실주문 body 에만 `identifier` 를 넣고, `orders/test` body 에는 넣지 않는다.
+- 업비트 rate limit 대응은 `Remaining-Req` 기반 자체 제한 + 429 및 짧은 418 차단에 대한 bounded backoff 로만 다룬다. `POST /v1/orders` timeout/network 오류처럼 체결 여부가 모호한 경우는 자동 재시도하지 않는다.
 - Phase 6 age TP 는 저장된 `sell_price` 를 덮어쓰지 않는다. 런타임 매도 판정에서만 `filled_at` 기준 `effective_sell_price` 를 계산한다.
 - Phase 6 age TP 는 현재 런타임 `GRID_TP_K_BASE` / `GRID_TP_K_FLOOR` 가 현재 DB 그리드를 만들 때 사용한 값과 같다는 전제를 둔다. 다른 값으로 만든 그리드를 그대로 운영하면 압축 폭이 달라질 수 있다.
 - `scripts/preview_recenter_plan.py` 는 preview-only 경로다. DB write, 주문 제출, 주문 취소를 넣지 않는다.

@@ -4,6 +4,7 @@
 import argparse
 import sys
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -83,6 +84,17 @@ def format_order_log(order: Order) -> str:
     )
 
 
+def ensure_order_identifier(order: Order) -> str:
+    if order.identifier:
+        return order.identifier
+
+    order.identifier = (
+        f"{cfg.STATE_BOT_KEY}-{order.side.value.lower()}-{order.slot_index}-"
+        f"{int(time.time() * 1000)}-{uuid.uuid4().hex[:12]}"
+    )
+    return order.identifier
+
+
 def reconcile_pending_orders(
     exchange: BaseExchange,
     pending_orders: dict[str, Order],
@@ -142,6 +154,7 @@ def submit_orders(
     submitted = 0
 
     for order in approved_orders:
+        ensure_order_identifier(order)
         order_id = exchange.place_order(order)
         if order_id:
             order.order_id = order_id

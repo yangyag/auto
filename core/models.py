@@ -56,6 +56,7 @@ class Order:
     execution_type: OrderExecutionType = OrderExecutionType.LIMIT
     spend_amount: Optional[Decimal] = None  # 시장가 매수 시 사용할 KRW 금액
     order_id: Optional[str] = None   # 거래소 체결 후 채워짐
+    identifier: Optional[str] = None  # 업비트 사용자 지정 주문 식별자
     filled_at: Optional[datetime] = None
 
     @property

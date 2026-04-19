@@ -9,6 +9,7 @@ Python 기반 그리드 자동매매 시스템이다. 현재 운영 기준은 �
 - 전략은 가격 절대값이 아니라 직전 가격 대비 `buy_price`/`sell_price` 교차 여부로 주문을 만든다.
 - 빈 슬롯은 `previous_price > buy_price >= current_price` 인 하락 교차 시 지정가 매수한다. 한 poll 안에 여러 `buy_price`를 아래로 통과하면 그 empty 슬롯들은 모두 매수 후보가 된다. 다만 모든 신규 매수는 먼저 inventory-target gate 를 통과해야 한다. `q_current = Σ(buy_price * held_qty) / MAX_OPERATING_BUDGET_KRW`, `z = (ln(P) - ln(L)) / (ln(U) - ln(L))`, `q_target(z) = q_min + (q_max - q_min) * (1 - z)^gamma`, 허용 조건은 `q_current < q_target(z) - epsilon` 이다. 추가로 최근 완료된 15분 종가가 밴드 밖에서 4개 연속 나오면 브레이크아웃 가드가 켜져 신규 매수는 전부 차단되고, 보유 슬롯 매도만 계속 허용된다. 상승 시 단일 슬롯 상향 돌파 시장가 예산매수는 `UPWARD_BUY_ENABLED=True` 일 때만 켜지며, 그때도 `previous_price < buy_price <= current_price` 인 empty 슬롯이 한 poll 에서 정확히 1개일 때만 후보가 된다. 보유 슬롯은 현재가가 저장된 `sell_price` 가 아니라 Phase 6 age-aware `effective_sell_price` 이상이면 매도한다. `k` 기반 holding 슬롯은 `filled_at` 기준 48시간 이후 `k - 0.5`, 7일 이후 `k - 1.0` 로 TP 가 압축되지만, 저장된 `sell_price` 자체를 덮어쓰지는 않는다.
 - 주문 접수만으로는 그리드 상태를 바꾸지 않고, `GET /v1/order` 재조회 결과가 `done`일 때만 반영한다.
+- Phase 7부터 업비트 주문 접수는 `GET /v1/orders/chance` 확인, `POST /v1/orders/test` 프리플라이트, 실제 `POST /v1/orders` 순서로 진행한다. 실주문에는 `identifier` 를 포함해 저장소에 함께 남기고, `429` 와 짧은 `418` 차단만 제한적으로 재시도하며 timeout/network 오류는 자동 재시도하지 않는다.
 - `run.sh` / `stop.sh` 기반 백그라운드 실행과 `logs/trading-YYYY-MM-DD.log` 날짜별 로그가 준비되어 있다.
 - 최신 날짜 로그를 바로 따라가려면 `./tail-latest-log.sh`를 사용한다.
 - `scripts/show_grid_state.py`와 `scripts/export_postgres_grid.py`는 현재 DB 상태를 확인하는 보조 도구다. holding 슬롯에 `filled_at`가 있으면 age TP 메타데이터도 함께 보여준다.
@@ -50,7 +51,8 @@ auto/
 │   └── show_grid_state.py
 ├── db/migrations/
 │   ├── 001_auto_trading_schema.sql
-│   └── 002_add_grid_slots_filled_at.sql
+│   ├── 002_add_grid_slots_filled_at.sql
+│   └── 003_add_orders_identifier.sql
 ├── docs/
 │   ├── UPBIT_API_REFERENCE.md
 │   ├── quick-commands.md
@@ -91,6 +93,7 @@ Grid3 SYMBOL
 - `GRID_TP_MODEL="k"`: 신규 생성 그리드의 기본 TP 모델이다.
 - `GRID_TP_K_BASE=11.0`, `GRID_TP_K_FLOOR=8.0`: 기본 `k` 기반 TP 파라미터다. Phase 5에서는 신규 생성 경로에만 적용되고, 기존 holding `sell_price`는 자동 재계산하지 않는다.
 - `filled_at`: Phase 6부터 holding 슬롯 age 추적용 메타데이터다. `grid_slots` 테이블에도 함께 저장된다.
+- `identifier`: Phase 7부터 pending/open 주문 저장소에 함께 남기는 업비트 사용자 지정 주문 식별자다. 현재 reconciliation 주키는 여전히 업비트 `uuid` 다. 업비트 계정 전체 유일 제약에 맞춰 현재 구현은 PostgreSQL schema 단위로도 유일하게 본다.
 - Phase 6 age 압축은 현재 런타임 `GRID_TP_K_BASE` / `GRID_TP_K_FLOOR` 가 현재 DB 그리드를 만들 때 사용한 값과 같다는 전제를 둔다. 다른 값으로 생성한 그리드를 계속 운용할 때는 설정을 먼저 맞춘다.
 - `ACTIVE_WINDOW_ENABLED=True`: 빈 슬롯 매수 후보를 poll 시작 가격 기준 근접 구간으로 제한한다.
 - `ACTIVE_WINDOW_BELOW_CURRENT_SLOTS=48`, `ACTIVE_WINDOW_ABOVE_CURRENT_REENTRY_SLOTS=4`: 하락 매수는 아래 최근접 슬롯 위주로, 옵션 상향 재진입은 위쪽 소수 슬롯만 사용한다.

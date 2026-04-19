@@ -24,8 +24,8 @@ class PostgresOrderRepository(PendingOrderRepository, PostgresRepositoryMixin):
                     sql.SQL(
                         "INSERT INTO {} ("
                         "bot_key, order_id, slot_index, side, price, quantity, symbol, "
-                        "execution_type, spend_amount, status, created_at, updated_at"
-                        ") VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', NOW(), NOW()) "
+                        "execution_type, spend_amount, identifier, status, created_at, updated_at"
+                        ") VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', NOW(), NOW()) "
                         "ON CONFLICT (bot_key, order_id) DO UPDATE SET "
                         "slot_index = EXCLUDED.slot_index, "
                         "side = EXCLUDED.side, "
@@ -34,6 +34,7 @@ class PostgresOrderRepository(PendingOrderRepository, PostgresRepositoryMixin):
                         "symbol = EXCLUDED.symbol, "
                         "execution_type = EXCLUDED.execution_type, "
                         "spend_amount = EXCLUDED.spend_amount, "
+                        "identifier = EXCLUDED.identifier, "
                         "status = 'open', "
                         "filled_at = NULL, "
                         "cancelled_at = NULL, "
@@ -49,6 +50,7 @@ class PostgresOrderRepository(PendingOrderRepository, PostgresRepositoryMixin):
                         order.symbol,
                         order.execution_type.value,
                         order.spend_amount,
+                        order.identifier,
                     ),
                 )
 
@@ -57,7 +59,7 @@ class PostgresOrderRepository(PendingOrderRepository, PostgresRepositoryMixin):
             with conn.cursor() as cur:
                 cur.execute(
                     sql.SQL(
-                        "SELECT slot_index, side, price, quantity, symbol, execution_type, spend_amount, order_id "
+                        "SELECT slot_index, side, price, quantity, symbol, execution_type, spend_amount, order_id, identifier "
                         "FROM {} WHERE bot_key = %s AND order_id = %s"
                     ).format(self._qualified("orders")),
                     (self.bot_key, order_id),
@@ -85,7 +87,7 @@ class PostgresOrderRepository(PendingOrderRepository, PostgresRepositoryMixin):
             with conn.cursor() as cur:
                 cur.execute(
                     sql.SQL(
-                        "SELECT slot_index, side, price, quantity, symbol, execution_type, spend_amount, order_id "
+                        "SELECT slot_index, side, price, quantity, symbol, execution_type, spend_amount, order_id, identifier "
                         "FROM {} WHERE bot_key = %s AND status = 'open' ORDER BY slot_index, order_id"
                     ).format(self._qualified("orders")),
                     (self.bot_key,),
@@ -107,7 +109,7 @@ class PostgresOrderRepository(PendingOrderRepository, PostgresRepositoryMixin):
 
     @staticmethod
     def _row_to_order(row) -> Order:
-        slot_index, side, price, quantity, symbol, execution_type, spend_amount, order_id = row
+        slot_index, side, price, quantity, symbol, execution_type, spend_amount, order_id, identifier = row
         return Order(
             slot_index=slot_index,
             side=OrderSide(side),
@@ -117,4 +119,5 @@ class PostgresOrderRepository(PendingOrderRepository, PostgresRepositoryMixin):
             execution_type=OrderExecutionType(execution_type),
             spend_amount=spend_amount,
             order_id=order_id,
+            identifier=identifier,
         )

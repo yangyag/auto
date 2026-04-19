@@ -1,6 +1,7 @@
 import unittest
 from decimal import Decimal
 
+from storage.postgres_common import psycopg
 from core.models import Order, OrderExecutionType, OrderSide
 from storage.postgres_order_repository import PostgresOrderRepository
 from tests.postgres_test_utils import (
@@ -30,6 +31,7 @@ class PostgresOrderRepositoryTest(PostgresIntegrationTestCase):
             execution_type=OrderExecutionType.MARKET_BUY_BY_PRICE,
             spend_amount=Decimal("10000"),
             order_id="order-1",
+            identifier="bot-order-1",
         )
         self.repository.add(order)
 
@@ -38,6 +40,8 @@ class PostgresOrderRepositoryTest(PostgresIntegrationTestCase):
         self.assertEqual(len(loaded), 1)
         self.assertEqual(loaded[0].order_id, "order-1")
         self.assertEqual(loaded[0].spend_amount, Decimal("10000"))
+        self.assertEqual(loaded[0].identifier, "bot-order-1")
+        self.assertEqual(self.repository.get("order-1").identifier, "bot-order-1")
 
     def test_mark_filled_removes_order_from_open_list(self):
         order = Order(
@@ -53,6 +57,37 @@ class PostgresOrderRepositoryTest(PostgresIntegrationTestCase):
 
         self.assertEqual(self.repository.list_open(), [])
         self.assertIsNotNone(self.repository.get("order-2"))
+
+    def test_add_rejects_duplicate_identifier_across_bot_keys(self):
+        other_config = postgres_test_config(schema=self.config.PGSCHEMA)
+        other_repository = PostgresOrderRepository.from_config(other_config)
+        shared_identifier = "shared-upbit-identifier"
+
+        self.repository.add(
+            Order(
+                slot_index=1,
+                side=OrderSide.BUY,
+                price=Decimal("10000"),
+                quantity=Decimal("0.001"),
+                symbol="KRW-BTC",
+                order_id="order-a",
+                identifier=shared_identifier,
+            )
+        )
+
+        self.assertEqual(self.repository.get("order-a").identifier, shared_identifier)
+        with self.assertRaises(psycopg.errors.UniqueViolation):
+            other_repository.add(
+                Order(
+                    slot_index=1,
+                    side=OrderSide.BUY,
+                    price=Decimal("10050"),
+                    quantity=Decimal("0.001"),
+                    symbol="KRW-BTC",
+                    order_id="order-b",
+                    identifier=shared_identifier,
+                )
+            )
 
 
 if __name__ == "__main__":

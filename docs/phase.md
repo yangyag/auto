@@ -466,6 +466,8 @@ Phase 1 의 기본 정의는 아래처럼 둔다.
 
 ## Phase 7 — 업비트 REST 경로 강화
 
+상태: 완료 (2026-04-20)
+
 **목표**: WebSocket 전환 전, REST 만으로도 주문 실패와 운영 리스크를 줄인다.
 
 ### 작업 항목
@@ -498,6 +500,18 @@ Phase 1 의 기본 정의는 아래처럼 둔다.
 - `orders/test` 실패 시 실주문이 발행되지 않는다
 - 주문 저장소에 `uuid` 와 `identifier` 가 함께 남는다
 - 429/418 발생 시 즉시 실패만 하지 않고 통제된 재시도를 한다
+
+### 구현 결과
+
+- `Order.identifier` 와 `orders.identifier` 컬럼을 추가해 pending/open 주문 저장소가 `uuid` 와 사용자 식별자를 함께 저장/복구한다
+- 업비트 문서의 계정 전체 유일 제약에 맞춰 `orders.identifier` 는 현재 PostgreSQL schema 단위에서도 유일하게 유지한다
+- `main.submit_orders()` 는 주문 제출 직전에 `STATE_BOT_KEY` 기반 `identifier` 를 생성하고, pending/reconcile 경로는 기존처럼 `uuid` 중심으로 유지한다
+- `exchange/crypto.py` 는 실주문 전에 `GET /v1/orders/chance` 로 최소 주문 금액, 잔고, 주문 타입 지원 여부를 확인하고 로컬 validation 을 한 번 더 수행한다
+- `POST /v1/orders/test` 프리플라이트가 실패하면 실제 `POST /v1/orders` 는 호출하지 않는다
+- 실주문 body 에만 `identifier` 를 넣고, `orders/test` body 에는 넣지 않는 보수적 구현으로 유지한다
+- `Remaining-Req` 헤더를 파싱해 그룹별 자체 rate limiter 상태를 저장하고, 429 및 짧은 418 차단에만 bounded backoff + jitter 재시도를 적용한다
+- 네트워크 timeout 이나 일반 연결 오류처럼 주문 생성 결과가 모호한 경우에는 `POST /v1/orders` 를 자동 재시도하지 않는다
+- 검증은 `PGPORT=5433 ./.venv/bin/python -c "import main"` 과 `PGPORT=5433 ./.venv/bin/python -m unittest discover -s tests -v` 로 확인한다
 
 ### 리스크
 

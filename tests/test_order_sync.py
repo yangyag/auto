@@ -157,6 +157,58 @@ class PendingOrderSyncTest(unittest.TestCase):
         self.assertEqual(len(repository.list_open()), 1)
         self.assertEqual(repository.list_open()[0].order_id, "uuid-1")
 
+    def test_submit_orders_generates_identifier_before_exchange_submission(self):
+        exchange = Mock()
+        exchange.place_order.return_value = "uuid-1"
+        pending_orders = {}
+        repository = InMemoryPendingOrderRepository()
+        order = Order(
+            slot_index=1,
+            side=OrderSide.BUY,
+            price=Decimal("100"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+        )
+
+        with patch.object(main.cfg, "STATE_BOT_KEY", "phase7-bot"):
+            submitted = main.submit_orders(
+                [order],
+                exchange,
+                pending_orders,
+                pending_order_repository=repository,
+            )
+
+        self.assertEqual(submitted, 1)
+        self.assertIsNotNone(order.identifier)
+        self.assertTrue(order.identifier.startswith("phase7-bot-buy-1-"))
+        self.assertEqual(pending_orders["uuid-1"].identifier, order.identifier)
+        self.assertEqual(repository.get("uuid-1").identifier, order.identifier)
+        exchange.place_order.assert_called_once_with(order)
+
+    def test_submit_orders_leaves_pending_state_untouched_when_exchange_rejects_order(self):
+        exchange = Mock()
+        exchange.place_order.return_value = None
+        pending_orders = {}
+        repository = Mock()
+        order = Order(
+            slot_index=1,
+            side=OrderSide.BUY,
+            price=Decimal("100"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+        )
+
+        submitted = main.submit_orders(
+            [order],
+            exchange,
+            pending_orders,
+            pending_order_repository=repository,
+        )
+
+        self.assertEqual(submitted, 0)
+        self.assertEqual(pending_orders, {})
+        repository.add.assert_not_called()
+
     def test_submit_orders_stops_when_repository_add_fails(self):
         exchange = Mock()
         exchange.place_order.return_value = "uuid-1"
