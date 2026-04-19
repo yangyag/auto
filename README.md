@@ -7,11 +7,12 @@ Python 기반 그리드 자동매매 시스템이다. 현재 운영 기준은 �
 - 핵심 경로는 `exchange/crypto.py` 기반 업비트 연동이다.
 - 상태 저장은 PostgreSQL 전용이다.
 - 전략은 가격 절대값이 아니라 직전 가격 대비 `buy_price`/`sell_price` 교차 여부로 주문을 만든다.
-- 빈 슬롯은 `previous_price > buy_price >= current_price` 인 하락 교차 시 지정가 매수한다. 한 poll 안에 여러 `buy_price`를 아래로 통과하면 그 empty 슬롯들은 모두 매수 후보가 된다. 다만 모든 신규 매수는 먼저 inventory-target gate 를 통과해야 한다. `q_current = Σ(buy_price * held_qty) / MAX_OPERATING_BUDGET_KRW`, `z = (ln(P) - ln(L)) / (ln(U) - ln(L))`, `q_target(z) = q_min + (q_max - q_min) * (1 - z)^gamma`, 허용 조건은 `q_current < q_target(z) - epsilon` 이다. 추가로 최근 완료된 15분 종가가 밴드 밖에서 4개 연속 나오면 브레이크아웃 가드가 켜져 신규 매수는 전부 차단되고, 보유 슬롯 매도만 계속 허용된다. 상승 시 단일 슬롯 상향 돌파 시장가 예산매수는 `UPWARD_BUY_ENABLED=True` 일 때만 켜지며, 그때도 `previous_price < buy_price <= current_price` 인 empty 슬롯이 한 poll 에서 정확히 1개일 때만 후보가 된다. 보유 슬롯은 현재가가 `sell_price` 이상이면 전부 매도한다.
+- 빈 슬롯은 `previous_price > buy_price >= current_price` 인 하락 교차 시 지정가 매수한다. 한 poll 안에 여러 `buy_price`를 아래로 통과하면 그 empty 슬롯들은 모두 매수 후보가 된다. 다만 모든 신규 매수는 먼저 inventory-target gate 를 통과해야 한다. `q_current = Σ(buy_price * held_qty) / MAX_OPERATING_BUDGET_KRW`, `z = (ln(P) - ln(L)) / (ln(U) - ln(L))`, `q_target(z) = q_min + (q_max - q_min) * (1 - z)^gamma`, 허용 조건은 `q_current < q_target(z) - epsilon` 이다. 추가로 최근 완료된 15분 종가가 밴드 밖에서 4개 연속 나오면 브레이크아웃 가드가 켜져 신규 매수는 전부 차단되고, 보유 슬롯 매도만 계속 허용된다. 상승 시 단일 슬롯 상향 돌파 시장가 예산매수는 `UPWARD_BUY_ENABLED=True` 일 때만 켜지며, 그때도 `previous_price < buy_price <= current_price` 인 empty 슬롯이 한 poll 에서 정확히 1개일 때만 후보가 된다. 보유 슬롯은 현재가가 저장된 `sell_price` 가 아니라 Phase 6 age-aware `effective_sell_price` 이상이면 매도한다. `k` 기반 holding 슬롯은 `filled_at` 기준 48시간 이후 `k - 0.5`, 7일 이후 `k - 1.0` 로 TP 가 압축되지만, 저장된 `sell_price` 자체를 덮어쓰지는 않는다.
 - 주문 접수만으로는 그리드 상태를 바꾸지 않고, `GET /v1/order` 재조회 결과가 `done`일 때만 반영한다.
 - `run.sh` / `stop.sh` 기반 백그라운드 실행과 `logs/trading-YYYY-MM-DD.log` 날짜별 로그가 준비되어 있다.
 - 최신 날짜 로그를 바로 따라가려면 `./tail-latest-log.sh`를 사용한다.
-- `scripts/show_grid_state.py`와 `scripts/export_postgres_grid.py`는 현재 DB 상태를 확인하는 보조 도구다.
+- `scripts/show_grid_state.py`와 `scripts/export_postgres_grid.py`는 현재 DB 상태를 확인하는 보조 도구다. holding 슬롯에 `filled_at`가 있으면 age TP 메타데이터도 함께 보여준다.
+- `scripts/preview_recenter_plan.py`는 재중심화 가능 여부를 preview-only 로 계산한다. DB write, 주문 제출, 주문 취소는 하지 않는다.
 - `grid.properties` 튜닝은 [docs/grid-parameter-tuning.md](docs/grid-parameter-tuning.md) 기준으로 계산한다.
 
 ## 디렉터리 구조
@@ -35,7 +36,9 @@ auto/
 │   ├── postgres_grid_repository.py       # PostgreSQL grid 저장소
 │   ├── postgres_order_repository.py      # PostgreSQL pending/open order 저장소
 │   └── postgres_common.py                # PostgreSQL 공통 연결/락 유틸
-├── strategy/grid_strategy.py             # 가격 교차 기반 주문 후보 생성
+├── strategy/
+│   ├── grid_strategy.py                  # 가격 교차 기반 주문 후보 생성
+│   └── recenter_preview.py               # Phase 6 preview-only 재중심화 계산
 ├── utils/
 │   ├── decimal_utils.py                  # Decimal 연산 유틸
 │   ├── upbit_market.py                   # KRW 마켓 호가 단위 / 최소 주문 금액
@@ -43,8 +46,11 @@ auto/
 ├── scripts/
 │   ├── apply_grid_properties_to_postgres.py
 │   ├── export_postgres_grid.py
+│   ├── preview_recenter_plan.py
 │   └── show_grid_state.py
-├── db/migrations/001_auto_trading_schema.sql
+├── db/migrations/
+│   ├── 001_auto_trading_schema.sql
+│   └── 002_add_grid_slots_filled_at.sql
 ├── docs/
 │   ├── UPBIT_API_REFERENCE.md
 │   ├── quick-commands.md
@@ -69,12 +75,13 @@ Grid3 SYMBOL
 테이블 총재고 : N
 ```
 
-- `held_qty > 0`: 보유 중 슬롯이다. 현재가가 `sell_price` 이상이면 매도 후보가 된다.
+- `held_qty > 0`: 보유 중 슬롯이다. 현재가가 런타임 `effective_sell_price` 이상이면 매도 후보가 된다. 기본값은 저장된 `sell_price` 이고, Phase 6 age 압축이 활성인 `k` 기반 holding 슬롯만 더 낮아질 수 있다.
 - `held_qty = 0` and `planned_qty > 0`: 빈 슬롯이다. `previous_price > buy_price >= current_price` 이면 지정가 매수 후보가 된다. 이 하락 구간에서 여러 슬롯을 한 poll 안에 함께 통과하면 그 슬롯들은 모두 매수 후보가 된다. 다만 Phase 4부터는 `previous_price` 기준 활성 윈도우 안의 empty 슬롯만 실제 매수 후보가 된다. 기본값은 현재가 아래 최근접 `48` 슬롯과 위쪽 재진입 후보 `4` 슬롯이다. 모든 신규 매수는 여기에 더해 `q_current < q_target(z) - epsilon` 을 만족해야만 생성된다. `q_current` 는 현재 보유 슬롯의 `buy_price * held_qty` 합을 `MAX_OPERATING_BUDGET_KRW` 로 나눈 값이고, `q_target(z)` 는 현재 가격 위치 `z` 에서의 목표 재고 비율이다. 최근 완료된 15분 종가 4개가 같은 방향으로 밴드 밖에 연속 존재하면 브레이크아웃 가드가 켜져 신규 매수 후보는 최종 제출 전에 모두 제거된다. `previous_price < buy_price <= current_price` 인 empty 슬롯 단일 상향 돌파 시장가 예산매수는 옵션 기능이며 기본값은 꺼져 있고 `UPWARD_BUY_ENABLED=True` 일 때만 활성화된다.
-- 매수 주문은 접수만으로 holding 이 되지 않고, 거래소 재조회 결과가 `done`일 때만 해당 슬롯의 `held_qty`가 채워진다.
+- 매수 주문은 접수만으로 holding 이 되지 않고, 거래소 재조회 결과가 `done`일 때만 해당 슬롯의 `held_qty`가 채워진다. 이때 `filled_at` 도 함께 기록된다.
 - 보유 슬롯에서도 `planned_qty`는 다음 빈 슬롯 복원용 목표 수량으로 유지될 수 있다.
 - `grid.properties` 기반 DB 그리드 생성은 기본적으로 `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `BUY_AMOUNT_KRW`, `GRID_COUNT`를 읽고, TP는 기본 `k` 모델로 계산한다. 필요하면 `TP_MODEL`, `TP_K_BASE`, `TP_K_FLOOR`를 추가로 줄 수 있다.
 - 기본 TP 모델은 `k`다. 각 슬롯 `sell_price`는 현재 생성 경로의 로그 간격 `delta`에 대해 `exp(k * delta)` 배수로 계산한다. `SELL_PERCENT`는 `TP_MODEL=percent` fallback을 명시적으로 쓸 때만 의미가 있다.
+- Phase 6부터 holding 슬롯은 `filled_at` 기반 age-aware TP 압축을 사용한다. 48시간 경과 시 `k - 0.5`, 7일 경과 시 `k - 1.0`, 최저치는 `k_floor` 이다.
 
 ## 설정 메모
 
@@ -83,6 +90,8 @@ Grid3 SYMBOL
 - `UPWARD_BUY_ENABLED`: 상승 1칸 돌파 시장가 예산매수 기능 토글이다. 기본값은 `False` 다.
 - `GRID_TP_MODEL="k"`: 신규 생성 그리드의 기본 TP 모델이다.
 - `GRID_TP_K_BASE=11.0`, `GRID_TP_K_FLOOR=8.0`: 기본 `k` 기반 TP 파라미터다. Phase 5에서는 신규 생성 경로에만 적용되고, 기존 holding `sell_price`는 자동 재계산하지 않는다.
+- `filled_at`: Phase 6부터 holding 슬롯 age 추적용 메타데이터다. `grid_slots` 테이블에도 함께 저장된다.
+- Phase 6 age 압축은 현재 런타임 `GRID_TP_K_BASE` / `GRID_TP_K_FLOOR` 가 현재 DB 그리드를 만들 때 사용한 값과 같다는 전제를 둔다. 다른 값으로 생성한 그리드를 계속 운용할 때는 설정을 먼저 맞춘다.
 - `ACTIVE_WINDOW_ENABLED=True`: 빈 슬롯 매수 후보를 poll 시작 가격 기준 근접 구간으로 제한한다.
 - `ACTIVE_WINDOW_BELOW_CURRENT_SLOTS=48`, `ACTIVE_WINDOW_ABOVE_CURRENT_REENTRY_SLOTS=4`: 하락 매수는 아래 최근접 슬롯 위주로, 옵션 상향 재진입은 위쪽 소수 슬롯만 사용한다.
 - `BREAKOUT_GUARD_ENABLED`: 15분 캔들 기반 브레이크아웃 가드 토글이다. 기본값은 `True` 다.
@@ -120,6 +129,9 @@ python3 scripts/export_postgres_grid.py
 
 # 현재 DB 상태 보기
 python3 scripts/show_grid_state.py
+
+# 재중심화 preview-only 평가
+python3 scripts/preview_recenter_plan.py
 
 # 백그라운드 실행 / 종료
 ./run.sh

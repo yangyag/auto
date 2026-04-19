@@ -40,7 +40,8 @@ auto/
 │   ├── crypto.py              # 업비트 구현
 │   └── stock.py               # 주식 거래소 stub
 ├── strategy/
-│   └── grid_strategy.py       # 그리드 전략 핵심 로직
+│   ├── grid_strategy.py       # 그리드 전략 핵심 로직
+│   └── recenter_preview.py    # Phase 6 preview-only 재중심화 계산
 ├── storage/
 │   ├── factory.py             # 저장소 선택
 │   ├── postgres_grid_repository.py
@@ -49,10 +50,12 @@ auto/
 ├── scripts/
 │   ├── apply_grid_properties_to_postgres.py
 │   ├── export_postgres_grid.py
+│   ├── preview_recenter_plan.py
 │   └── show_grid_state.py
 ├── utils/
 │   └── logger.py              # 공용 로거
 ├── logs/                      # 날짜별 실행 로그 (런타임 생성)
+├── db/migrations/             # PostgreSQL 스키마/확장 마이그레이션
 ├── run.sh                     # 백그라운드 실행 스크립트
 ├── stop.sh                    # 백그라운드 종료 스크립트
 ├── grid.properties            # 그리드 생성 입력 파일
@@ -66,6 +69,7 @@ auto/
 - 기본 검증은 비파괴 방식으로 한다. 우선순위는 `python -c "import main"` 같은 임포트/정적 검증이다.
 - API 키는 환경변수 `UPBIT_ACCESS_KEY`, `UPBIT_SECRET_KEY`로만 주입한다. 민감정보를 문서, 샘플 파일, 커밋에 복제하지 않는다.
 - PostgreSQL 상태 계약은 깨지면 안 된다. 스키마, 저장소 구현, export/show 스크립트의 출력 의미를 함께 맞춘다.
+- Phase 6부터 `grid_slots.filled_at` 는 보유 슬롯 age 추적용 계약이다. BUY 체결 시 기록되고 SELL 체결 시 비워진다.
 - `Generator`는 외부 플러그인이나 별도 Codex 호출이 아니라, 메인 Codex가 직접 하위 에이전트를 병렬로 생성해서 운영한다.
 - 코인 거래 로직과 업비트 연동은 현재 시스템의 기준 경로다. 관련 동작을 바꿀 때는 설정, 전략, 주문 파라미터를 함께 점검한다.
 - 거래소 인터페이스를 바꾸면 `exchange/base.py`만 고치지 말고 `main.py`, `strategy/grid_strategy.py`, 구현체까지 함께 맞춘다.
@@ -129,7 +133,7 @@ auto/
 - `core/grid_builder.py::build_cash_only_grid()`는 상단/하단 매수 경계를 고정한 뒤 그 사이를 슬롯 수만큼 분할하고, 첫 슬롯 `buy_price` 기준 `GRID_FIRST_BUY_AMOUNT_KRW` 만큼 살 수 있는 BTC 수량을 모든 슬롯의 고정 수량으로 사용한다. 각 슬롯 `sell_price`는 기본적으로 `GRID_TP_MODEL="k"` 와 `GRID_TP_K_BASE` 기준으로 계산한다.
 - `python3 main.py init-grid`의 생성 기준은 총예산 분배가 아니라 `--first-buy-amount` 기반이다. 현재 기본값은 `config/settings.py::GRID_FIRST_BUY_AMOUNT_KRW`를 따르며, TP는 기본적으로 `--tp-model k` / `GRID_TP_K_BASE` 를 따른다. `--sell-percent` 는 레거시 percent fallback용이다.
 - `grid.properties` 기반 경로와 `python3 main.py init-grid` 경로는 같은 초기화 계약이 아니다. 전자는 `BUY_AMOUNT_KRW * GRID_COUNT` 총예산을 하단 가중 분배한 슬롯별 `slot_budget / buy_price` 기반이고, 후자는 첫 슬롯 기준 고정 수량 기반이다. 숫자를 단순 동기화하지 말고 어느 경로를 쓰는지 먼저 고정한다.
-- `strategy/grid_strategy.py`의 트리거는 절대값 판정이 아니라 poll 구간 기준 가격 조건 판정이다. 첫 가격 스냅샷에서는 빈 슬롯 매수 주문을 내지 않고, 이후 빈 슬롯은 `previous_price > buy_price >= current_price` 이면 지정가 매수한다. 하락 구간에서 여러 `buy_price`를 한 poll 안에 함께 통과하면 그 empty 슬롯들은 모두 매수 후보가 된다. 다만 모든 신규 매수는 inventory-target gate 를 먼저 통과해야 한다. 기본 계약은 `q_current = 현재 보유 슬롯의 (buy_price * held_qty) 합 / MAX_OPERATING_BUDGET_KRW`, `z = (ln(P) - ln(L)) / (ln(U) - ln(L))`, `q_target(z) = q_min + (q_max - q_min) * (1 - z)^gamma`, 허용 조건은 `q_current < q_target(z) - epsilon` 이다. 상승 구간의 `previous_price < buy_price <= current_price` 단일 슬롯 시장가 예산매수 기능은 옵션이며 `UPWARD_BUY_ENABLED=True` 일 때만 켜지고 기본값은 OFF 다. 보유 슬롯은 현재가가 `sell_price` 이상이면 즉시 매도 후보가 된다.
+- `strategy/grid_strategy.py`의 트리거는 절대값 판정이 아니라 poll 구간 기준 가격 조건 판정이다. 첫 가격 스냅샷에서는 빈 슬롯 매수 주문을 내지 않고, 이후 빈 슬롯은 `previous_price > buy_price >= current_price` 이면 지정가 매수한다. 하락 구간에서 여러 `buy_price`를 한 poll 안에 함께 통과하면 그 empty 슬롯들은 모두 매수 후보가 된다. 다만 모든 신규 매수는 inventory-target gate 를 먼저 통과해야 한다. 기본 계약은 `q_current = 현재 보유 슬롯의 (buy_price * held_qty) 합 / MAX_OPERATING_BUDGET_KRW`, `z = (ln(P) - ln(L)) / (ln(U) - ln(L))`, `q_target(z) = q_min + (q_max - q_min) * (1 - z)^gamma`, 허용 조건은 `q_current < q_target(z) - epsilon` 이다. 상승 구간의 `previous_price < buy_price <= current_price` 단일 슬롯 시장가 예산매수 기능은 옵션이며 `UPWARD_BUY_ENABLED=True` 일 때만 켜지고 기본값은 OFF 다. 보유 슬롯은 현재가가 런타임 `effective_sell_price` 이상이면 즉시 매도 후보가 된다.
 - Phase 4 활성 윈도우는 `current_price` 가 아니라 poll 시작 가격 `previous_price` 기준으로 계산한다. 기본값은 `ACTIVE_WINDOW_BELOW_CURRENT_SLOTS=48`, `ACTIVE_WINDOW_ABOVE_CURRENT_REENTRY_SLOTS=4` 이고, empty 슬롯만 활성 후보로 본다.
 - pending BUY 슬롯은 활성 윈도우 안에 있어도 신규 매수 제출 대상에서는 제외된다. 현재 구현은 더 먼 empty 슬롯으로 backfill 하지 않는 보수적 계약이다.
 - `main.py`는 전략 평가 뒤에 브레이크아웃 가드를 한 번 더 적용한다. 최근 완료된 `BREAKOUT_GUARD_CANDLE_UNIT` 분 캔들 종가가 `BREAKOUT_GUARD_CONSECUTIVE_CANDLES` 개 연속으로 밴드 밖에 있으면 신규 매수 주문은 모두 제거하고, 보유 슬롯 매도만 계속 허용한다.
@@ -138,6 +142,9 @@ auto/
 - 하락 교차 매수와 매도는 지정가 주문이다. 상승 시 단일 슬롯 상향 돌파 매수를 사용할 때만 업비트 `ord_type=price` 시장가 예산매수를 쓴다. 이 상향 매수도 정확히 1개 empty 슬롯 상향 돌파일 때만 후보가 되며, inventory-target gate 와 `wait`/`watch` pending 슬롯 제외 규칙을 함께 따른다.
 - `main.py`는 같은 루프의 매도/매수 후보가 함께 생겨도 매수 주문은 현재 주문 가능 KRW 기준으로 독립 판단한다. 매도는 먼저 접수할 수 있지만, 같은 사이클에서 체결된 매도대금을 즉시 상위 매수 재원으로 재사용하지는 않는다.
 - 주문 생성 성공은 체결 완료와 다르다. `main.py`는 업비트 `GET /v1/order`로 주문 상태를 재조회해 `state=done`일 때만 PostgreSQL 그리드 상태를 갱신한다. `wait`/`watch` 상태 주문은 pending으로 유지한다.
+- Phase 6 age TP 는 저장된 `sell_price` 를 덮어쓰지 않는다. 런타임 매도 판정에서만 `filled_at` 기준 `effective_sell_price` 를 계산한다.
+- Phase 6 age TP 는 현재 런타임 `GRID_TP_K_BASE` / `GRID_TP_K_FLOOR` 가 현재 DB 그리드를 만들 때 사용한 값과 같다는 전제를 둔다. 다른 값으로 만든 그리드를 그대로 운영하면 압축 폭이 달라질 수 있다.
+- `scripts/preview_recenter_plan.py` 는 preview-only 경로다. DB write, 주문 제출, 주문 취소를 넣지 않는다.
 - `exchange/crypto.py`는 외부 업비트 API를 호출하므로 네트워크, 인증, 주문 부작용을 항상 고려해야 한다.
 - `exchange/stock.py`는 모든 핵심 메서드가 `NotImplementedError`를 던진다.
 - `main.py`는 무한 루프 구조라서, 단순 검증 용도로 직접 실행하는 것은 적절하지 않다.
@@ -150,6 +157,7 @@ python3 main.py balance
 python3 main.py init-grid --first-buy-amount 200000 --sell-percent 5
 python3 scripts/apply_grid_properties_to_postgres.py --properties-file grid.properties --force
 python3 scripts/export_postgres_grid.py
+python3 scripts/preview_recenter_plan.py
 python3 scripts/show_grid_state.py
 ./run.sh
 ./stop.sh

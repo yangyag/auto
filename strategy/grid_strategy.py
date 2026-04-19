@@ -177,26 +177,34 @@ class GridStrategy:
     def _make_sell_orders(self, current_price: Decimal) -> List[Order]:
         orders = []
         for row in self.grid.rows:
-            if not row.is_holding or current_price < row.sell_price:
+            if not row.is_holding:
+                continue
+
+            effective_sell_price = self.grid.effective_sell_price(row.index)
+            if current_price < effective_sell_price:
                 continue
 
             orders.append(Order(
                 slot_index=row.index,
                 side=OrderSide.SELL,
-                price=row.sell_price,
+                price=effective_sell_price,
                 quantity=row.held_qty,
                 symbol=self.symbol,
             ))
             logger.info(
                 f"매도 조건 충족 → 슬롯 {row.index}: "
-                f"current={current_price} / {row.sell_price} x {row.held_qty}"
+                f"current={current_price} / {effective_sell_price} x {row.held_qty}"
             )
         return orders
 
     def apply_filled_order(self, order: Order):
         """체결된 주문을 그리드 상태에 반영한다."""
         if order.side == OrderSide.BUY:
-            self.grid.apply_buy(order.slot_index, order.quantity)
+            self.grid.apply_buy(
+                order.slot_index,
+                order.quantity,
+                filled_at=order.filled_at,
+            )
             logger.info(f"매수 체결 반영 → 슬롯 {order.slot_index}")
         else:
             self.grid.apply_sell(order.slot_index)

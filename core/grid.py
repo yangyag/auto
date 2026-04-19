@@ -1,15 +1,24 @@
 """
 그리드 도메인 상태 관리
 """
-from math import log
+from math import exp, log
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional
 
 import config.settings as cfg
+from core.grid_properties import (
+    build_sell_price,
+    build_sell_price_from_k,
+    normalize_tp_model,
+    resolve_tp_k_values,
+)
 from core.models import GridRow
 from storage.interfaces import GridSnapshot, RepositoryMetadata
+from strategy.recenter_preview import evaluate_recenter_preview
 from utils.decimal_utils import DECIMAL_ZERO, format_decimal
+from utils.upbit_market import normalize_krw_price
 
 
 def _copy_row(row: GridRow) -> GridRow:
@@ -81,14 +90,21 @@ class GridState:
         """현재가 이상의 sell_price를 가진 보유 슬롯 (매도 조건 충족)"""
         return [
             r for r in self.rows
-            if r.is_holding and current_price >= r.sell_price
+            if r.is_holding and current_price >= self.effective_sell_price(r.index)
         ]
 
-    def apply_buy(self, slot_index: int, filled_qty: Decimal | None = None):
+    def apply_buy(
+        self,
+        slot_index: int,
+        filled_qty: Decimal | None = None,
+        *,
+        filled_at: datetime | None = None,
+    ):
         """매수 체결: 실제 체결 수량을 보유 슬롯에 반영"""
         row = self._get_row(slot_index)
         if row and row.is_empty:
             row.held_qty = filled_qty if filled_qty is not None else row.planned_qty
+            row.filled_at = self._normalize_timestamp(filled_at) or datetime.now(timezone.utc)
 
     def apply_sell(self, slot_index: int):
         """매도 체결: 보유 중 → 빈 슬롯으로 전환"""
@@ -98,6 +114,7 @@ class GridState:
                 reference_qty = self._get_uniform_planned_qty()
                 row.planned_qty = reference_qty if reference_qty is not None else row.held_qty
             row.held_qty = DECIMAL_ZERO
+            row.filled_at = None
 
     def band_position_z(
         self,
@@ -195,11 +212,143 @@ class GridState:
         active_rows = below_rows[:lower_count] + above_rows[:upper_count]
         return {row.index for row in active_rows}
 
+    def effective_tp_k(
+        self,
+        slot_index: int,
+        *,
+        now: datetime | None = None,
+        tp_k_base: Decimal | None = None,
+        tp_k_floor: Decimal | None = None,
+    ) -> Decimal:
+        row = self._require_row(slot_index)
+        base_k, floor_k = resolve_tp_k_values(tp_k_base, tp_k_floor)
+        filled_at = self._normalize_timestamp(row.filled_at)
+        if not row.is_holding or filled_at is None:
+            return base_k
+
+        current_time = self._normalize_timestamp(now) or datetime.now(timezone.utc)
+        age = current_time - filled_at
+        effective_k = base_k
+        if age >= timedelta(days=7):
+            effective_k -= Decimal("1.0")
+        elif age >= timedelta(hours=48):
+            effective_k -= Decimal("0.5")
+
+        return effective_k if effective_k >= floor_k else floor_k
+
+    def effective_sell_price(
+        self,
+        slot_index: int,
+        *,
+        now: datetime | None = None,
+        tp_model: str | None = None,
+        sell_percent: Decimal | None = None,
+        tp_k_base: Decimal | None = None,
+        tp_k_floor: Decimal | None = None,
+    ) -> Decimal:
+        row = self._require_row(slot_index)
+        if not self.is_age_compressed_tp_active(
+            slot_index,
+            tp_model=tp_model,
+            sell_percent=sell_percent,
+            tp_k_base=tp_k_base,
+            tp_k_floor=tp_k_floor,
+        ):
+            return row.sell_price
+
+        base_k, _ = resolve_tp_k_values(tp_k_base, tp_k_floor)
+        effective_k = self.effective_tp_k(
+            slot_index,
+            now=now,
+            tp_k_base=tp_k_base,
+            tp_k_floor=tp_k_floor,
+        )
+        if effective_k >= base_k or row.buy_price <= DECIMAL_ZERO or row.sell_price <= row.buy_price:
+            return row.sell_price
+
+        base_log_gap = Decimal(str(log(float(row.sell_price / row.buy_price))))
+        compressed_log_gap = base_log_gap * effective_k / base_k
+        raw_sell_price = row.buy_price * Decimal(str(exp(float(compressed_log_gap))))
+        compressed_sell_price = normalize_krw_price(raw_sell_price)
+        if compressed_sell_price <= row.buy_price:
+            return row.sell_price
+        if compressed_sell_price >= row.sell_price:
+            return row.sell_price
+        return compressed_sell_price
+
+    def is_age_compressed_tp_active(
+        self,
+        slot_index: int,
+        *,
+        tp_model: str | None = None,
+        sell_percent: Decimal | None = None,
+        tp_k_base: Decimal | None = None,
+        tp_k_floor: Decimal | None = None,
+    ) -> bool:
+        row = self._require_row(slot_index)
+        if not row.is_holding or row.filled_at is None:
+            return False
+
+        try:
+            model = normalize_tp_model(tp_model)
+        except ValueError:
+            return False
+        if model != "k":
+            return False
+        if self._looks_like_percent_sell_grid(sell_percent=sell_percent):
+            return False
+        return self._matches_current_k_grid(
+            tp_k_base=tp_k_base,
+            tp_k_floor=tp_k_floor,
+        )
+
+    def build_recenter_preview(
+        self,
+        *,
+        current_price: Decimal,
+        breakout_duration: timedelta,
+        open_buy_order_count: int,
+        min_breakout_duration: timedelta = timedelta(hours=24),
+        max_inventory_ratio: Decimal = Decimal("0.20"),
+    ):
+        candle_unit_minutes = 15
+        required_breakout_candles = max(
+            int(min_breakout_duration.total_seconds() // (candle_unit_minutes * 60)),
+            1,
+        )
+        breakout_run_count = max(
+            int(breakout_duration.total_seconds() // (candle_unit_minutes * 60)),
+            0,
+        )
+        bounds = self._resolve_band_bounds()
+        close_prices = self._synthetic_breakout_closes(
+            current_price=current_price,
+            breakout_run_count=breakout_run_count,
+            required_breakout_candles=required_breakout_candles,
+            bounds=bounds,
+        )
+        return evaluate_recenter_preview(
+            self.rows,
+            current_price=current_price,
+            close_prices=close_prices,
+            open_buy_order_count=open_buy_order_count,
+            breakout_candle_count=required_breakout_candles,
+            candle_unit_minutes=candle_unit_minutes,
+            inventory_ratio_threshold=max_inventory_ratio,
+            operating_budget_krw=cfg.MAX_OPERATING_BUDGET_KRW,
+        )
+
     def _get_row(self, slot_index: int) -> Optional[GridRow]:
         for row in self.rows:
             if row.index == slot_index:
                 return row
         return None
+
+    def _require_row(self, slot_index: int) -> GridRow:
+        row = self._get_row(slot_index)
+        if row is None:
+            raise ValueError(f"존재하지 않는 슬롯입니다: {slot_index}")
+        return row
 
     def _resolve_band_bounds(
         self,
@@ -261,6 +410,98 @@ class GridState:
         if len(quantities) == 1:
             return next(iter(quantities))
         return None
+
+    def _looks_like_percent_sell_grid(self, *, sell_percent: Decimal | None) -> bool:
+        resolved_sell_percent = cfg.GRID_SELL_PERCENT if sell_percent is None else sell_percent
+        comparable_rows = [
+            row for row in self.rows
+            if row.buy_price > DECIMAL_ZERO and row.sell_price > row.buy_price
+        ]
+        if not comparable_rows:
+            return False
+
+        try:
+            return all(
+                build_sell_price(row.buy_price, resolved_sell_percent) == row.sell_price
+                for row in comparable_rows
+            )
+        except ValueError:
+            return False
+
+    def _matches_current_k_grid(
+        self,
+        *,
+        tp_k_base: Decimal | None,
+        tp_k_floor: Decimal | None,
+    ) -> bool:
+        comparable_rows = [
+            row for row in self.rows
+            if row.buy_price > DECIMAL_ZERO and row.sell_price > row.buy_price
+        ]
+        if not comparable_rows:
+            return False
+        if len(comparable_rows) == 1:
+            return True
+
+        bounds = self._resolve_band_bounds()
+        if bounds is None:
+            return False
+        lower_price, upper_price = bounds
+
+        interval_candidates = {
+            interval for interval in {len(self.rows), len(self.rows) - 1}
+            if interval > 0
+        }
+        for interval_count in interval_candidates:
+            try:
+                if all(
+                    build_sell_price_from_k(
+                        row.buy_price,
+                        lower_price=lower_price,
+                        upper_price=upper_price,
+                        price_interval_count=interval_count,
+                        tp_k=tp_k_base,
+                        tp_k_floor=tp_k_floor,
+                    ) == row.sell_price
+                    for row in comparable_rows
+                ):
+                    return True
+            except ValueError:
+                continue
+        return False
+
+    @staticmethod
+    def _synthetic_breakout_closes(
+        *,
+        current_price: Decimal,
+        breakout_run_count: int,
+        required_breakout_candles: int,
+        bounds: tuple[Decimal, Decimal] | None,
+    ) -> list[Decimal]:
+        if bounds is None or required_breakout_candles <= 0:
+            return []
+        lower_price, upper_price = bounds
+        if current_price > upper_price:
+            outside_price = current_price
+            inside_price = upper_price
+        elif current_price < lower_price:
+            outside_price = current_price
+            inside_price = lower_price
+        else:
+            outside_price = current_price
+            inside_price = current_price
+
+        closes = [outside_price] * breakout_run_count
+        closes.extend([inside_price] * max(required_breakout_candles - breakout_run_count, 0))
+        return closes
+
+    @staticmethod
+    def _normalize_timestamp(value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     def summary(self) -> str:
         holding = [r for r in self.rows if r.is_holding]

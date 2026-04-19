@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import Mock, patch
 
@@ -56,6 +57,44 @@ class InMemoryPendingOrderRepository:
 
 
 class PendingOrderSyncTest(unittest.TestCase):
+
+    def _make_phase6_row(
+        self,
+        *,
+        index: int,
+        buy_price: str,
+        held_qty: str,
+        sell_price: str,
+        planned_qty: str,
+        filled_at: datetime | None = None,
+    ) -> GridRow:
+        try:
+            return GridRow(
+                index=index,
+                buy_price=Decimal(buy_price),
+                held_qty=Decimal(held_qty),
+                sell_price=Decimal(sell_price),
+                planned_qty=Decimal(planned_qty),
+                filled_at=filled_at,
+            )
+        except TypeError as exc:
+            self.fail(f"Phase 6 GridRow should accept filled_at metadata: {exc}")
+
+    def _build_phase6_strategy_with_empty_slot(self):
+        tmpdir = tempfile.TemporaryDirectory()
+        rows = [
+            self._make_phase6_row(
+                index=1,
+                buy_price="100",
+                held_qty="0",
+                sell_price="110",
+                planned_qty="1",
+                filled_at=None,
+            )
+        ]
+        grid = GridState.from_rows("KRW-BTC", rows)
+        strategy = GridStrategy(grid, Mock(), "KRW-BTC")
+        return tmpdir, grid, strategy
 
     def _build_strategy_with_empty_slot(self):
         tmpdir = tempfile.TemporaryDirectory()
@@ -225,6 +264,102 @@ class PendingOrderSyncTest(unittest.TestCase):
         self.assertEqual(grid.rows[0].planned_qty, Decimal("1"))
         self.assertEqual(repository.load().rows[0].held_qty, Decimal("0.90674"))
         self.assertEqual(pending_repository.list_open(), [])
+
+    def test_reconcile_pending_orders_sets_filled_at_on_buy_fill_and_persists_it(self):
+        tmpdir, grid, strategy = self._build_phase6_strategy_with_empty_slot()
+        self.addCleanup(tmpdir.cleanup)
+        repository = InMemoryGridRepository(grid.to_snapshot())
+        pending_repository = InMemoryPendingOrderRepository()
+        runtime = main.GridStateRuntime(metadata=repository.save(grid.to_snapshot()).metadata)
+        exchange = Mock()
+        order = Order(
+            slot_index=1,
+            side=OrderSide.BUY,
+            price=Decimal("100"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+            order_id="uuid-1",
+        )
+        pending_orders = {"uuid-1": order}
+        pending_repository.add(order)
+        exchange.get_order_status.return_value = OrderStatus(
+            uuid="uuid-1",
+            state="done",
+            executed_volume=Decimal("0.95"),
+            remaining_volume=Decimal("0"),
+        )
+
+        completed = main.reconcile_pending_orders(
+            exchange,
+            pending_orders,
+            strategy,
+            on_grid_updated=lambda: main.persist_grid_state(grid, repository, runtime),
+            pending_order_repository=pending_repository,
+        )
+
+        self.assertEqual(completed, 1)
+        self.assertEqual(pending_orders, {})
+        self.assertEqual(grid.rows[0].held_qty, Decimal("0.95"))
+        self.assertIsNotNone(getattr(grid.rows[0], "filled_at", None))
+        self.assertIsNotNone(grid.rows[0].filled_at.tzinfo)
+        self.assertEqual(repository.load().rows[0].filled_at, grid.rows[0].filled_at)
+
+    def test_reconcile_pending_orders_sell_fill_clears_existing_filled_at(self):
+        tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmpdir.cleanup)
+        rows = [
+            self._make_phase6_row(
+                index=1,
+                buy_price="100",
+                held_qty="1",
+                sell_price="110",
+                planned_qty="1",
+                filled_at=datetime(2026, 4, 18, 0, 0, tzinfo=timezone.utc),
+            ),
+            self._make_phase6_row(
+                index=2,
+                buy_price="90",
+                held_qty="0",
+                sell_price="100",
+                planned_qty="1",
+                filled_at=None,
+            ),
+        ]
+        grid = GridState.from_rows("KRW-BTC", rows)
+        strategy = GridStrategy(grid, Mock(), "KRW-BTC")
+        repository = InMemoryGridRepository(grid.to_snapshot())
+        pending_repository = InMemoryPendingOrderRepository()
+        runtime = main.GridStateRuntime(metadata=repository.save(grid.to_snapshot()).metadata)
+        exchange = Mock()
+        order = Order(
+            slot_index=1,
+            side=OrderSide.SELL,
+            price=Decimal("110"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+            order_id="uuid-1",
+        )
+        pending_orders = {"uuid-1": order}
+        pending_repository.add(order)
+        exchange.get_order_status.return_value = OrderStatus(
+            uuid="uuid-1",
+            state="done",
+            executed_volume=Decimal("1"),
+            remaining_volume=Decimal("0"),
+        )
+
+        completed = main.reconcile_pending_orders(
+            exchange,
+            pending_orders,
+            strategy,
+            on_grid_updated=lambda: main.persist_grid_state(grid, repository, runtime),
+            pending_order_repository=pending_repository,
+        )
+
+        self.assertEqual(completed, 1)
+        self.assertEqual(grid.rows[0].held_qty, Decimal("0"))
+        self.assertIsNone(grid.rows[0].filled_at)
+        self.assertIsNone(repository.load().rows[0].filled_at)
 
     def test_reconcile_pending_orders_keeps_wait_order_pending(self):
         tmpdir, grid, strategy = self._build_strategy_with_empty_slot()

@@ -398,6 +398,8 @@ Phase 1 의 기본 정의는 아래처럼 둔다.
 
 ## Phase 6 — age 기반 TP 와 재중심화
 
+상태: 완료 (2026-04-20)
+
 **목표**: 오래 묶인 재고를 더 빨리 돌리고, 밴드 재설정은 엄격한 조건에서만 허용한다.
 
 ### 핵심 개념
@@ -442,9 +444,22 @@ Phase 1 의 기본 정의는 아래처럼 둔다.
 - 재중심화 preview 와 apply 가 구분되어 있다
 - 조건 미충족 상태에서는 재중심화가 절대 실행되지 않는다
 
+### 구현 결과
+
+- `GridRow.filled_at` 와 `grid_slots.filled_at` 를 추가해 보유 슬롯 age 메타데이터를 PostgreSQL에 저장/복구한다
+- BUY 체결 시 `filled_at` 를 기록하고, SELL 체결 시 빈 슬롯으로 돌아오면 `filled_at` 를 지운다
+- 저장된 `sell_price` 는 그대로 두고, 런타임 매도 판정에서만 age 기반 `effective_sell_price` 를 계산한다
+- `k` 기반 holding 슬롯은 48시간 경과 시 `k - 0.5`, 7일 경과 시 `k - 1.0` 압축을 적용하되 `k_floor` 아래로는 내리지 않는다
+- `TP_MODEL=percent` 성격으로 보이는 슬롯은 age 압축 대상에서 제외한다
+- 재중심화는 `strategy/recenter_preview.py` 와 `scripts/preview_recenter_plan.py` 로 preview-only 경로만 추가했다
+- preview 는 최근 완료 15분봉 96개, `inventory_ratio <= 0.20`, open BUY 주문 0건 조건을 모두 만족할 때만 `eligible` 로 나온다
+- `scripts/show_grid_state.py` 와 `scripts/export_postgres_grid.py` 는 `filled_at` 및 preview 메타데이터를 읽기 전용으로 함께 보여준다
+- 검증은 `PGPORT=5433 ./.venv/bin/python -c "import main"` 과 `PGPORT=5433 ./.venv/bin/python -m unittest discover -s tests -v` 로 확인했다
+
 ### 리스크
 
 - 과거 보유 슬롯의 `filled_at` 이 없으면 age 계산 기준이 흔들린다
+- 현재 구현은 `GRID_TP_K_BASE` / `GRID_TP_K_FLOOR` 를 grid snapshot 메타데이터로 저장하지 않으므로, 런타임 설정과 그리드 생성 시 사용한 `k` 파라미터가 달라지면 age 압축 폭이 어긋날 수 있다
 - 재중심화 apply 가 open order 와 충돌하면 상태 저장소와 거래소 상태가 어긋날 수 있다
 
 ---

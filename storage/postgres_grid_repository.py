@@ -30,7 +30,7 @@ class PostgresGridRepository(GridStateRepository, PostgresRepositoryMixin):
                 symbol, version, revision = state_row
                 cur.execute(
                     sql.SQL(
-                        "SELECT slot_index, buy_price, held_qty, sell_price, planned_qty "
+                        "SELECT slot_index, buy_price, held_qty, sell_price, planned_qty, filled_at "
                         "FROM {} WHERE bot_key = %s ORDER BY slot_index"
                     ).format(self._qualified("grid_slots")),
                     (self.bot_key,),
@@ -42,8 +42,9 @@ class PostgresGridRepository(GridStateRepository, PostgresRepositoryMixin):
                         held_qty=held_qty,
                         sell_price=sell_price,
                         planned_qty=planned_qty,
+                        filled_at=filled_at,
                     )
-                    for slot_index, buy_price, held_qty, sell_price, planned_qty in cur.fetchall()
+                    for slot_index, buy_price, held_qty, sell_price, planned_qty, filled_at in cur.fetchall()
                 )
 
         return GridSnapshot(
@@ -103,8 +104,8 @@ class PostgresGridRepository(GridStateRepository, PostgresRepositoryMixin):
                     cur.executemany(
                         sql.SQL(
                             "INSERT INTO {} "
-                            "(bot_key, slot_index, buy_price, held_qty, sell_price, planned_qty) "
-                            "VALUES (%s, %s, %s, %s, %s, %s)"
+                            "(bot_key, slot_index, buy_price, held_qty, sell_price, planned_qty, filled_at) "
+                            "VALUES (%s, %s, %s, %s, %s, %s, %s)"
                         ).format(self._qualified("grid_slots")),
                         [
                             (
@@ -114,6 +115,7 @@ class PostgresGridRepository(GridStateRepository, PostgresRepositoryMixin):
                                 row.held_qty,
                                 row.sell_price,
                                 row.planned_qty,
+                                row.filled_at,
                             )
                             for row in rows
                         ],

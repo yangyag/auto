@@ -2,6 +2,7 @@
 공용 데이터 모델
 """
 from dataclasses import dataclass, field
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Optional
@@ -31,6 +32,7 @@ class GridRow:
     held_qty: Decimal        # 현재 보유 수량 (>0 이면 보유 중)
     sell_price: Decimal      # 매도 트리거 가격
     planned_qty: Decimal     # 슬롯의 기본 목표 수량 (빈 슬롯 대기 / 보유 슬롯 복원 기준)
+    filled_at: Optional[datetime] = None  # 보유 수량이 체결된 시각 (UTC 권장)
 
     @property
     def is_holding(self) -> bool:
@@ -54,6 +56,7 @@ class Order:
     execution_type: OrderExecutionType = OrderExecutionType.LIMIT
     spend_amount: Optional[Decimal] = None  # 시장가 매수 시 사용할 KRW 금액
     order_id: Optional[str] = None   # 거래소 체결 후 채워짐
+    filled_at: Optional[datetime] = None
 
     @property
     def required_krw(self) -> Decimal:

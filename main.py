@@ -102,6 +102,7 @@ def reconcile_pending_orders(
         if status.is_filled:
             if order.side == OrderSide.BUY and status.executed_volume > Decimal("0"):
                 order.quantity = status.executed_volume
+                order.filled_at = datetime.now(timezone.utc)
             strategy.apply_filled_order(order)
             if pending_order_repository is not None:
                 pending_order_repository.mark_filled(order_id)

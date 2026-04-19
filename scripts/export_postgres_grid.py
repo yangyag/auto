@@ -41,6 +41,12 @@ def render_grid_text(snapshot: GridSnapshot) -> str:
     lines.append(f"총 계획매수금액 : {format_decimal(budget_summary.total)}")
     lines.append(f"최상단 슬롯 계획매수금액 : {format_decimal(budget_summary.top_slot)}")
     lines.append(f"최하단 슬롯 계획매수금액 : {format_decimal(budget_summary.bottom_slot)}")
+    age_rows = [row for row in snapshot.rows if getattr(row, "filled_at", None) is not None]
+    if age_rows:
+        lines.append("")
+        lines.append("보유 슬롯 age 메타데이터")
+        for row in age_rows:
+            lines.append(f"{row.index}) filled_at={row.filled_at.isoformat()}")
     return "\n".join(lines)
 
 

@@ -52,11 +52,12 @@ def _connect():
 
 
 def apply_test_schema(schema: str) -> None:
-    sql_path = Path(__file__).resolve().parents[1] / "db" / "migrations" / "001_auto_trading_schema.sql"
-    sql_text = sql_path.read_text(encoding="utf-8").replace("auto_trading", schema)
     with _connect() as conn:
         with conn.cursor() as cur:
-            cur.execute(sql_text)
+            migrations_dir = Path(__file__).resolve().parents[1] / "db" / "migrations"
+            for sql_path in sorted(migrations_dir.glob("*.sql")):
+                sql_text = sql_path.read_text(encoding="utf-8").replace("auto_trading", schema)
+                cur.execute(sql_text)
 
 
 def drop_test_schema(schema: str) -> None:

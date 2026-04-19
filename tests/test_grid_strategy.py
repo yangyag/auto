@@ -1,5 +1,6 @@
 import unittest
 from contextlib import ExitStack
+from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import Mock, patch
 
@@ -375,6 +376,121 @@ class GridStrategyCrossingTest(unittest.TestCase):
         self.assertEqual(len(sell_orders), 1)
         self.assertEqual(sell_orders[0].slot_index, 1)
         self.assertEqual(sell_orders[0].price, Decimal("110"))
+
+    def test_age_compressed_k_tp_allows_sell_before_stored_sell_price(self):
+        rows = [
+            GridRow(
+                index=1,
+                buy_price=Decimal("100"),
+                held_qty=Decimal("1"),
+                sell_price=Decimal("110"),
+                planned_qty=Decimal("1"),
+                filled_at=datetime(2026, 4, 18, 0, 0, tzinfo=timezone.utc),
+            )
+        ]
+        strategy = self._build_strategy(rows)
+        fixed_datetime = type(
+            "FixedDateTime",
+            (),
+            {
+                "now": classmethod(
+                    lambda cls, tz=None: datetime(2026, 4, 20, 1, 0, tzinfo=timezone.utc)
+                    if tz is None
+                    else datetime(2026, 4, 20, 1, 0, tzinfo=timezone.utc).astimezone(tz)
+                )
+            },
+        )
+
+        with self._override_settings(
+            GRID_TP_MODEL="k",
+            GRID_TP_K_BASE=Decimal("11.0"),
+            GRID_TP_K_FLOOR=Decimal("8.0"),
+            GRID_SELL_PERCENT=Decimal("5"),
+        ), patch("core.grid.datetime", fixed_datetime):
+            buy_orders, sell_orders = strategy.evaluate(Decimal("109"))
+
+        self.assertEqual(buy_orders, [])
+        self.assertEqual(len(sell_orders), 1)
+        self.assertEqual(sell_orders[0].slot_index, 1)
+        self.assertLess(sell_orders[0].price, Decimal("110"))
+        self.assertEqual(sell_orders[0].price, Decimal("109"))
+
+    def test_percent_like_sell_target_does_not_apply_age_compression(self):
+        rows = [
+            GridRow(
+                index=1,
+                buy_price=Decimal("100"),
+                held_qty=Decimal("1"),
+                sell_price=Decimal("105"),
+                planned_qty=Decimal("1"),
+                filled_at=datetime(2026, 4, 18, 0, 0, tzinfo=timezone.utc),
+            )
+        ]
+        strategy = self._build_strategy(rows)
+        fixed_datetime = type(
+            "FixedDateTime",
+            (),
+            {
+                "now": classmethod(
+                    lambda cls, tz=None: datetime(2026, 4, 20, 1, 0, tzinfo=timezone.utc)
+                    if tz is None
+                    else datetime(2026, 4, 20, 1, 0, tzinfo=timezone.utc).astimezone(tz)
+                )
+            },
+        )
+
+        with self._override_settings(
+            GRID_TP_MODEL="k",
+            GRID_TP_K_BASE=Decimal("11.0"),
+            GRID_TP_K_FLOOR=Decimal("8.0"),
+            GRID_SELL_PERCENT=Decimal("5"),
+        ), patch("core.grid.datetime", fixed_datetime):
+            buy_orders, sell_orders = strategy.evaluate(Decimal("104"))
+
+        self.assertEqual(buy_orders, [])
+        self.assertEqual(sell_orders, [])
+
+    def test_non_default_percent_grid_is_not_age_compressed_under_k_runtime(self):
+        rows = [
+            GridRow(
+                index=1,
+                buy_price=Decimal("100"),
+                held_qty=Decimal("1"),
+                sell_price=Decimal("107"),
+                planned_qty=Decimal("1"),
+                filled_at=datetime(2026, 4, 18, 0, 0, tzinfo=timezone.utc),
+            ),
+            GridRow(
+                index=2,
+                buy_price=Decimal("90"),
+                held_qty=Decimal("0"),
+                sell_price=Decimal("96.3"),
+                planned_qty=Decimal("1"),
+            ),
+        ]
+        strategy = self._build_strategy(rows)
+        fixed_datetime = type(
+            "FixedDateTime",
+            (),
+            {
+                "now": classmethod(
+                    lambda cls, tz=None: datetime(2026, 4, 20, 1, 0, tzinfo=timezone.utc)
+                    if tz is None
+                    else datetime(2026, 4, 20, 1, 0, tzinfo=timezone.utc).astimezone(tz)
+                )
+            },
+        )
+
+        with self._override_settings(
+            GRID_TP_MODEL="k",
+            GRID_TP_K_BASE=Decimal("11.0"),
+            GRID_TP_K_FLOOR=Decimal("8.0"),
+            GRID_SELL_PERCENT=Decimal("5"),
+        ), patch("core.grid.datetime", fixed_datetime):
+            buy_orders, sell_orders = strategy.evaluate(Decimal("106"))
+
+        self.assertEqual(buy_orders, [])
+        self.assertEqual(sell_orders, [])
 
     def test_sells_when_price_stays_above_sell_line(self):
         rows = [
