@@ -1,6 +1,7 @@
 """grid.properties 기반 그리드 스펙 로딩 및 슬롯 계산."""
 from __future__ import annotations
 
+import config.settings as cfg
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_DOWN
 from math import exp, log
@@ -11,6 +12,9 @@ from utils.decimal_utils import BTC_QUANTITY_STEP, DECIMAL_ZERO, quantize_to_ste
 from utils.upbit_market import MIN_KRW_ORDER_AMOUNT, normalize_krw_price
 
 DEFAULT_SELL_PERCENT = Decimal("5")
+DEFAULT_TP_MODEL = "k"
+DEFAULT_TP_K_BASE = Decimal("11.0")
+DEFAULT_TP_K_FLOOR = Decimal("8.0")
 DEFAULT_TOP_THIRD_WEIGHT = Decimal("0.7")
 DEFAULT_MIDDLE_THIRD_WEIGHT = Decimal("1.0")
 DEFAULT_BOTTOM_THIRD_WEIGHT = Decimal("1.3")
@@ -28,6 +32,9 @@ class GridPropertySpec:
     buy_amount_krw: Decimal
     grid_count: int
     sell_percent: Decimal = DEFAULT_SELL_PERCENT
+    tp_model: str | None = None
+    tp_k_base: Decimal | None = None
+    tp_k_floor: Decimal | None = None
 
 
 def load_grid_property_spec(path: str | Path) -> GridPropertySpec:
@@ -53,7 +60,33 @@ def load_grid_property_spec(path: str | Path) -> GridPropertySpec:
         buy_amount_krw=to_decimal(properties["BUY_AMOUNT_KRW"]),
         grid_count=int(properties["GRID_COUNT"]),
         sell_percent=to_decimal(properties.get("SELL_PERCENT") or DEFAULT_SELL_PERCENT),
+        tp_model=properties.get("TP_MODEL") or None,
+        tp_k_base=to_decimal(properties["TP_K_BASE"]) if properties.get("TP_K_BASE") else None,
+        tp_k_floor=to_decimal(properties["TP_K_FLOOR"]) if properties.get("TP_K_FLOOR") else None,
     )
+
+
+def normalize_tp_model(tp_model: str | None = None) -> str:
+    raw_tp_model = cfg.GRID_TP_MODEL if tp_model is None else tp_model
+    normalized = str(raw_tp_model).strip().lower()
+    if normalized in {"k", "k_step", "k_steps"}:
+        return "k"
+    if normalized in {"percent", "pct"}:
+        return "percent"
+    raise ValueError(f"지원하지 않는 TP 모델입니다: {raw_tp_model}")
+
+
+def resolve_tp_k_values(
+    tp_k: Decimal | None = None,
+    tp_k_floor: Decimal | None = None,
+) -> tuple[Decimal, Decimal]:
+    k_value = cfg.GRID_TP_K_BASE if tp_k is None else to_decimal(tp_k)
+    floor_value = cfg.GRID_TP_K_FLOOR if tp_k_floor is None else to_decimal(tp_k_floor)
+    if floor_value <= DECIMAL_ZERO:
+        raise ValueError("TP_K_FLOOR는 0보다 커야 합니다.")
+    if k_value < floor_value:
+        raise ValueError("TP_K_BASE는 TP_K_FLOOR보다 크거나 같아야 합니다.")
+    return k_value, floor_value
 
 
 def build_sell_price(buy_price: Decimal, sell_percent: Decimal) -> Decimal:
@@ -68,6 +101,66 @@ def build_sell_price(buy_price: Decimal, sell_percent: Decimal) -> Decimal:
             f"sell_price 계산 결과가 buy_price보다 크지 않습니다: buy_price={buy_price}, sell_percent={raw_sell_percent}, sell_price={sell_price}"
         )
     return sell_price
+
+
+def build_sell_price_from_k(
+    buy_price: Decimal,
+    *,
+    lower_price: Decimal,
+    upper_price: Decimal,
+    price_interval_count: int,
+    tp_k: Decimal | None = None,
+    tp_k_floor: Decimal | None = None,
+) -> Decimal:
+    lower = normalize_krw_price(lower_price)
+    upper = normalize_krw_price(upper_price)
+    if lower <= DECIMAL_ZERO:
+        raise ValueError("하단 가격은 0보다 커야 합니다.")
+    if upper <= lower:
+        raise ValueError("상단 가격은 하단 가격보다 커야 합니다.")
+    if price_interval_count <= 0:
+        raise ValueError("price_interval_count는 1 이상이어야 합니다.")
+
+    k_value, floor_value = resolve_tp_k_values(tp_k, tp_k_floor)
+    effective_k = k_value if k_value >= floor_value else floor_value
+    log_step = Decimal(str(log(float(upper / lower)) / price_interval_count))
+    raw_sell_price = buy_price * Decimal(str(exp(float(log_step * effective_k))))
+    sell_price = normalize_krw_price(raw_sell_price)
+    if sell_price <= buy_price:
+        raise ValueError(
+            "k 기반 sell_price 계산 결과가 buy_price보다 크지 않습니다: "
+            f"buy_price={buy_price}, tp_k={effective_k}, sell_price={sell_price}"
+        )
+    return sell_price
+
+
+def build_target_sell_price(
+    buy_price: Decimal,
+    *,
+    tp_model: str | None = None,
+    sell_percent: Decimal | None = None,
+    lower_price: Decimal | None = None,
+    upper_price: Decimal | None = None,
+    price_interval_count: int | None = None,
+    tp_k: Decimal | None = None,
+    tp_k_floor: Decimal | None = None,
+) -> Decimal:
+    model = normalize_tp_model(tp_model)
+    if model == "percent":
+        if sell_percent is None:
+            raise ValueError("percent TP 모델에는 SELL_PERCENT가 필요합니다.")
+        return build_sell_price(buy_price, sell_percent)
+
+    if lower_price is None or upper_price is None or price_interval_count is None:
+        raise ValueError("k TP 모델에는 lower_price, upper_price, price_interval_count가 필요합니다.")
+    return build_sell_price_from_k(
+        buy_price,
+        lower_price=lower_price,
+        upper_price=upper_price,
+        price_interval_count=price_interval_count,
+        tp_k=tp_k,
+        tp_k_floor=tp_k_floor,
+    )
 
 
 def build_weighted_slot_buy_amounts(spec: GridPropertySpec) -> list[Decimal]:
@@ -133,7 +226,16 @@ def build_grid_rows_from_property_spec(spec: GridPropertySpec) -> list[GridRow]:
     slot_buy_amounts = build_weighted_slot_buy_amounts(spec)
     rows: list[GridRow] = []
     for index, (buy_price, slot_buy_amount) in enumerate(zip(buy_prices_desc, slot_buy_amounts), start=1):
-        sell_price = build_sell_price(buy_price, spec.sell_percent)
+        sell_price = build_target_sell_price(
+            buy_price,
+            tp_model=spec.tp_model,
+            sell_percent=spec.sell_percent,
+            lower_price=min_buy_price,
+            upper_price=max_buy_price,
+            price_interval_count=grid_count - 1,
+            tp_k=spec.tp_k_base,
+            tp_k_floor=spec.tp_k_floor,
+        )
         planned_qty = quantize_to_step(
             slot_buy_amount / buy_price,
             BTC_QUANTITY_STEP,

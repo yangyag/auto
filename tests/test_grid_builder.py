@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from core.grid import GridState
 from core.grid_builder import build_cash_only_grid
-from core.grid_properties import build_sell_price
+from core.grid_properties import build_sell_price, build_target_sell_price
 from utils.decimal_utils import BTC_QUANTITY_STEP
 
 
@@ -25,7 +25,18 @@ class GridBuilderTest(unittest.TestCase):
         self.assertTrue(all(row.planned_qty == rows[0].planned_qty for row in rows))
         self.assertTrue(all(rows[index].buy_price > rows[index + 1].buy_price for index in range(len(rows) - 1)))
         self.assertTrue(all(row.buy_price < Decimal("112000000") for row in rows))
-        self.assertEqual(rows[0].sell_price, build_sell_price(rows[0].buy_price, Decimal("5")))
+        self.assertEqual(
+            rows[0].sell_price,
+            build_target_sell_price(
+                rows[0].buy_price,
+                tp_model="k",
+                lower_price=Decimal("92253123"),
+                upper_price=Decimal("111137221"),
+                price_interval_count=10,
+                tp_k=Decimal("11.0"),
+                tp_k_floor=Decimal("8.0"),
+            ),
+        )
         self.assertEqual(rows[-1].buy_price, Decimal("92253000"))
         self.assertTrue(all(row.sell_price > row.buy_price for row in rows))
 
@@ -60,10 +71,34 @@ class GridBuilderTest(unittest.TestCase):
         self.assertEqual(
             [(row.buy_price, row.sell_price) for row in rows],
             [
-                (buy_price, build_sell_price(buy_price, Decimal("5")))
+                (
+                    buy_price,
+                    build_target_sell_price(
+                        buy_price,
+                        tp_model="k",
+                        lower_price=Decimal("93695193"),
+                        upper_price=Decimal("110370483"),
+                        price_interval_count=10,
+                        tp_k=Decimal("11.0"),
+                        tp_k_floor=Decimal("8.0"),
+                    ),
+                )
                 for buy_price in expected_buy_prices
             ],
         )
+
+    def test_build_cash_only_grid_supports_explicit_percent_tp_fallback(self):
+        rows = build_cash_only_grid(
+            lower_price=Decimal("93695193"),
+            upper_price=Decimal("110370483"),
+            current_price=Decimal("115000000"),
+            slot_count=10,
+            first_buy_amount_krw=Decimal("200000"),
+            sell_percent=Decimal("5"),
+            tp_model="percent",
+        )
+
+        self.assertEqual(rows[0].sell_price, build_sell_price(rows[0].buy_price, Decimal("5")))
 
     def test_build_cash_only_grid_allows_current_price_below_top_buy_level(self):
         rows = build_cash_only_grid(

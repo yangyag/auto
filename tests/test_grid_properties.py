@@ -7,6 +7,7 @@ from core.grid_properties import (
     GridPropertySpec,
     build_grid_rows_from_property_spec,
     build_sell_price,
+    build_target_sell_price,
     build_weighted_slot_buy_amounts,
     load_grid_property_spec,
 )
@@ -63,8 +64,30 @@ class GridPropertiesTest(unittest.TestCase):
         self.assertTrue(all(row.held_qty == Decimal("0") for row in rows))
         self.assertTrue(all(row.planned_qty > Decimal("0") for row in rows))
         self.assertGreater(rows[-1].planned_qty, rows[0].planned_qty)
-        self.assertEqual(rows[0].sell_price, build_sell_price(rows[0].buy_price, spec.sell_percent))
-        self.assertEqual(rows[-1].sell_price, build_sell_price(rows[-1].buy_price, spec.sell_percent))
+        self.assertEqual(
+            rows[0].sell_price,
+            build_target_sell_price(
+                rows[0].buy_price,
+                tp_model="k",
+                lower_price=spec.min_buy_price,
+                upper_price=spec.max_buy_price,
+                price_interval_count=spec.grid_count - 1,
+                tp_k=Decimal("11.0"),
+                tp_k_floor=Decimal("8.0"),
+            ),
+        )
+        self.assertEqual(
+            rows[-1].sell_price,
+            build_target_sell_price(
+                rows[-1].buy_price,
+                tp_model="k",
+                lower_price=spec.min_buy_price,
+                upper_price=spec.max_buy_price,
+                price_interval_count=spec.grid_count - 1,
+                tp_k=Decimal("11.0"),
+                tp_k_floor=Decimal("8.0"),
+            ),
+        )
         self.assertGreater(rows[0].sell_price, rows[0].buy_price)
         self.assertTrue(all(rows[i].buy_price > rows[i + 1].buy_price for i in range(len(rows) - 1)))
 
@@ -113,6 +136,55 @@ class GridPropertiesTest(unittest.TestCase):
         self.assertEqual(rows[2].planned_qty, Decimal("0.00260000"))
         self.assertLess(rows[0].buy_price * rows[0].planned_qty, spec.buy_amount_krw)
         self.assertGreater(rows[2].buy_price * rows[2].planned_qty, spec.buy_amount_krw)
+        self.assertEqual(
+            rows[0].sell_price,
+            build_target_sell_price(
+                rows[0].buy_price,
+                tp_model="k",
+                lower_price=spec.min_buy_price,
+                upper_price=spec.max_buy_price,
+                price_interval_count=spec.grid_count - 1,
+                tp_k=Decimal("11.0"),
+                tp_k_floor=Decimal("8.0"),
+            ),
+        )
+        self.assertEqual(
+            rows[1].sell_price,
+            build_target_sell_price(
+                rows[1].buy_price,
+                tp_model="k",
+                lower_price=spec.min_buy_price,
+                upper_price=spec.max_buy_price,
+                price_interval_count=spec.grid_count - 1,
+                tp_k=Decimal("11.0"),
+                tp_k_floor=Decimal("8.0"),
+            ),
+        )
+        self.assertEqual(
+            rows[2].sell_price,
+            build_target_sell_price(
+                rows[2].buy_price,
+                tp_model="k",
+                lower_price=spec.min_buy_price,
+                upper_price=spec.max_buy_price,
+                price_interval_count=spec.grid_count - 1,
+                tp_k=Decimal("11.0"),
+                tp_k_floor=Decimal("8.0"),
+            ),
+        )
+
+    def test_build_grid_rows_from_property_spec_supports_explicit_percent_tp_mode(self):
+        spec = GridPropertySpec(
+            min_buy_price=Decimal("100000000"),
+            max_buy_price=Decimal("120000000"),
+            buy_amount_krw=Decimal("200000"),
+            grid_count=3,
+            sell_percent=Decimal("5"),
+            tp_model="percent",
+        )
+
+        rows = build_grid_rows_from_property_spec(spec)
+
         self.assertEqual(rows[0].sell_price, build_sell_price(rows[0].buy_price, spec.sell_percent))
         self.assertEqual(rows[1].sell_price, build_sell_price(rows[1].buy_price, spec.sell_percent))
         self.assertEqual(rows[2].sell_price, build_sell_price(rows[2].buy_price, spec.sell_percent))

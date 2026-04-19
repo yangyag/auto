@@ -165,6 +165,36 @@ class GridState:
             return maximum
         return target
 
+    def active_window_slot_indexes(
+        self,
+        reference_price: Decimal,
+        *,
+        below_current_slots: int,
+        above_current_slots: int,
+    ) -> set[int]:
+        """기준 가격 주변에서 활성화할 빈 슬롯 인덱스를 계산한다."""
+        if reference_price <= DECIMAL_ZERO:
+            return set()
+
+        empty_rows = [row for row in self.rows if row.is_empty]
+        if not empty_rows:
+            return set()
+
+        lower_count = max(int(below_current_slots), 0)
+        upper_count = max(int(above_current_slots), 0)
+
+        below_rows = sorted(
+            (row for row in empty_rows if row.buy_price <= reference_price),
+            key=lambda row: (-row.buy_price, row.index),
+        )
+        above_rows = sorted(
+            (row for row in empty_rows if row.buy_price > reference_price),
+            key=lambda row: (row.buy_price, row.index),
+        )
+
+        active_rows = below_rows[:lower_count] + above_rows[:upper_count]
+        return {row.index for row in active_rows}
+
     def _get_row(self, slot_index: int) -> Optional[GridRow]:
         for row in self.rows:
             if row.index == slot_index:

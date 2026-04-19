@@ -120,6 +120,9 @@ class BalanceCommandTest(unittest.TestCase):
              patch.object(main.cfg, "GRID_UPPER_PRICE", Decimal("111137221")), \
              patch.object(main.cfg, "GRID_SLOT_COUNT", 10), \
              patch.object(main.cfg, "GRID_FIRST_BUY_AMOUNT_KRW", Decimal("200000")), \
+             patch.object(main.cfg, "GRID_TP_MODEL", "k"), \
+             patch.object(main.cfg, "GRID_TP_K_BASE", Decimal("11.0")), \
+             patch.object(main.cfg, "GRID_TP_K_FLOOR", Decimal("8.0")), \
              patch.object(main.cfg, "GRID_SELL_PERCENT", Decimal("5")), \
              patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", Decimal("2000000")), \
              patch("main.build_exchange", return_value=exchange), \
@@ -140,7 +143,9 @@ class BalanceCommandTest(unittest.TestCase):
         saved_snapshot = repository.save.call_args.args[0]
         self.assertEqual(saved_snapshot.symbol, "KRW-BTC")
         self.assertIn("저장 대상: postgres:auto_trading/krw-btc-live", stdout.getvalue())
-        self.assertIn("매도 퍼센트: 5%", stdout.getvalue())
+        self.assertIn("TP 모델: k", stdout.getvalue())
+        self.assertIn("TP k_base: 11", stdout.getvalue())
+        self.assertIn("TP k_floor: 8", stdout.getvalue())
         self.assertIn("고정 수량: 0.00183341 BTC", stdout.getvalue())
         self.assertIn("버전: 1", stdout.getvalue())
         self.assertIn("상태: 성공", stdout.getvalue())
@@ -163,6 +168,9 @@ class BalanceCommandTest(unittest.TestCase):
              patch.object(main.cfg, "GRID_UPPER_PRICE", Decimal("111137221")), \
              patch.object(main.cfg, "GRID_SLOT_COUNT", 10), \
              patch.object(main.cfg, "GRID_FIRST_BUY_AMOUNT_KRW", Decimal("200000")), \
+             patch.object(main.cfg, "GRID_TP_MODEL", "k"), \
+             patch.object(main.cfg, "GRID_TP_K_BASE", Decimal("11.0")), \
+             patch.object(main.cfg, "GRID_TP_K_FLOOR", Decimal("8.0")), \
              patch.object(main.cfg, "GRID_SELL_PERCENT", Decimal("5")), \
              patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", Decimal("2000000")), \
              patch("main.build_exchange", return_value=exchange), \

@@ -41,10 +41,12 @@ class GridStrategy:
             self.previous_price = current_price
             return [], self._make_sell_orders(current_price)
 
+        active_slot_indexes = self._resolve_active_buy_window_slot_indexes(self.previous_price)
         buy_orders = self._make_buy_orders(
             self.previous_price,
             current_price,
             effective_pending_slots,
+            active_slot_indexes,
         )
         sell_orders = self._make_sell_orders(current_price)
         self.previous_price = current_price
@@ -55,11 +57,14 @@ class GridStrategy:
         previous_price: Decimal,
         current_price: Decimal,
         pending_slot_indexes: set[int],
+        active_slot_indexes: set[int] | None,
     ) -> List[Order]:
         orders_by_slot: dict[int, Order] = {}
         projected_inventory_krw = self.grid.current_inventory_cost
         for row in self.grid.rows:
             if not row.is_empty or row.index in pending_slot_indexes:
+                continue
+            if active_slot_indexes is not None and row.index not in active_slot_indexes:
                 continue
 
             crossed_down = previous_price > row.buy_price and current_price <= row.buy_price
@@ -97,6 +102,7 @@ class GridStrategy:
             current_price,
             pending_slot_indexes,
             projected_inventory_krw,
+            active_slot_indexes,
         )
         if upward_buy_order is not None:
             orders_by_slot[upward_buy_order.slot_index] = upward_buy_order
@@ -109,6 +115,7 @@ class GridStrategy:
         current_price: Decimal,
         pending_slot_indexes: set[int],
         projected_inventory_krw: Decimal,
+        active_slot_indexes: set[int] | None,
     ) -> tuple[Order | None, Decimal]:
         if not self._is_upward_buy_enabled():
             return None, projected_inventory_krw
@@ -120,6 +127,7 @@ class GridStrategy:
             row for row in self.grid.rows
             if row.is_empty
             and row.index not in pending_slot_indexes
+            and (active_slot_indexes is None or row.index in active_slot_indexes)
             and previous_price < row.buy_price <= current_price
         ]
         if not crossed_up_rows:
@@ -221,3 +229,40 @@ class GridStrategy:
             or getattr(cfg, "UP_BUY_ENABLED", False)
             or getattr(cfg, "ENABLE_UPWARD_BUY", False)
         )
+
+    def _resolve_active_buy_window_slot_indexes(
+        self,
+        reference_price: Decimal | None,
+    ) -> set[int] | None:
+        if reference_price is None or not self._is_active_window_enabled():
+            return None
+
+        below_slots = self._active_window_below_current_slots()
+        above_slots = self._active_window_above_current_slots()
+        return self.grid.active_window_slot_indexes(
+            reference_price,
+            below_current_slots=below_slots,
+            above_current_slots=above_slots,
+        )
+
+    def _is_active_window_enabled(self) -> bool:
+        return bool(
+            getattr(cfg, "ACTIVE_WINDOW_ENABLED", False)
+            or getattr(cfg, "ACTIVE_BUY_WINDOW_ENABLED", False)
+        )
+
+    def _active_window_below_current_slots(self) -> int:
+        raw_value = getattr(
+            cfg,
+            "ACTIVE_WINDOW_BELOW_CURRENT_SLOTS",
+            getattr(cfg, "ACTIVE_BUY_WINDOW_BELOW_CURRENT_SLOTS", 48),
+        )
+        return max(int(raw_value), 0)
+
+    def _active_window_above_current_slots(self) -> int:
+        raw_value = getattr(
+            cfg,
+            "ACTIVE_WINDOW_ABOVE_CURRENT_REENTRY_SLOTS",
+            getattr(cfg, "ACTIVE_WINDOW_ABOVE_CURRENT_SLOTS", 4),
+        )
+        return max(int(raw_value), 0)

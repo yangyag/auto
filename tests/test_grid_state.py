@@ -56,6 +56,26 @@ class GridStateInventoryMathTest(unittest.TestCase):
         self.assertGreater(lower_target, upper_target)
         self.assertEqual(upper_target, Decimal("0.10"))
 
+    def test_active_window_slot_indexes_selects_nearest_lower_and_upper_empty_slots(self):
+        state = GridState.from_rows(
+            "KRW-BTC",
+            [
+                GridRow(index=1, buy_price=Decimal("130"), held_qty=Decimal("0"), sell_price=Decimal("136.5"), planned_qty=Decimal("1")),
+                GridRow(index=2, buy_price=Decimal("120"), held_qty=Decimal("0"), sell_price=Decimal("126"), planned_qty=Decimal("1")),
+                GridRow(index=3, buy_price=Decimal("110"), held_qty=Decimal("0"), sell_price=Decimal("115.5"), planned_qty=Decimal("1")),
+                GridRow(index=4, buy_price=Decimal("100"), held_qty=Decimal("0"), sell_price=Decimal("105"), planned_qty=Decimal("1")),
+                GridRow(index=5, buy_price=Decimal("90"), held_qty=Decimal("0"), sell_price=Decimal("94.5"), planned_qty=Decimal("1")),
+            ],
+        )
+
+        active_indexes = state.active_window_slot_indexes(
+            Decimal("108"),
+            below_current_slots=2,
+            above_current_slots=1,
+        )
+
+        self.assertEqual(active_indexes, {3, 4, 5})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -10,8 +10,9 @@ from decimal import Decimal
 from typing import Callable
 
 import config.settings as cfg
-from core.grid_builder import build_cash_only_grid
 from core.grid import GridState
+from core.grid_builder import build_cash_only_grid
+from core.grid_properties import normalize_tp_model
 from core.models import Order, OrderSide
 from exchange.base import BaseExchange
 from exchange.crypto import UpbitAPIError
@@ -614,6 +615,9 @@ def run_grid_init(
     slot_count: int,
     first_buy_amount: Decimal,
     sell_percent: Decimal,
+    tp_model: str | None = None,
+    tp_k_base: Decimal | None = None,
+    tp_k_floor: Decimal | None = None,
     current_price: Decimal | None,
     force: bool = False,
 ) -> int:
@@ -629,6 +633,7 @@ def run_grid_init(
 
     exchange = build_exchange()
     repository = build_grid_repository(cfg)
+    resolved_tp_model = normalize_tp_model(tp_model)
 
     try:
         existing_snapshot = repository.load()
@@ -645,6 +650,9 @@ def run_grid_init(
             slot_count=slot_count,
             first_buy_amount_krw=first_buy_amount,
             sell_percent=sell_percent,
+            tp_model=resolved_tp_model,
+            tp_k_base=tp_k_base,
+            tp_k_floor=tp_k_floor,
         )
         state = GridState.from_rows(cfg.SYMBOL, rows)
         validate_grid_state(state)
@@ -665,7 +673,13 @@ def run_grid_init(
     print(f"하단 경계: {format_decimal(lower_price)} KRW")
     print(f"슬롯 수: {slot_count}")
     print(f"첫 칸 기준 매수금액: {format_decimal(first_buy_amount)} KRW")
-    print(f"매도 퍼센트: {format_decimal(sell_percent)}%")
+    print(f"TP 모델: {resolved_tp_model}")
+    if resolved_tp_model == "percent":
+        print(f"매도 퍼센트: {format_decimal(sell_percent)}%")
+    else:
+        print(f"TP k_base: {format_decimal(tp_k_base or cfg.GRID_TP_K_BASE)}")
+        print(f"TP k_floor: {format_decimal(tp_k_floor or cfg.GRID_TP_K_FLOOR)}")
+        print(f"레거시 SELL_PERCENT(호환용): {format_decimal(sell_percent)}%")
     print(f"고정 수량: {format_decimal(rows[0].planned_qty)} BTC")
     print(f"총 배정 금액: {format_decimal(state.total_allocated_budget)} KRW")
     print(f"버전: {saved_snapshot.metadata.version}")
@@ -684,6 +698,9 @@ def build_cli_parser() -> argparse.ArgumentParser:
     grid_parser.add_argument("--upper-price", type=decimal_arg, default=cfg.GRID_UPPER_PRICE)
     grid_parser.add_argument("--slot-count", type=int, default=cfg.GRID_SLOT_COUNT)
     grid_parser.add_argument("--first-buy-amount", type=decimal_arg, default=cfg.GRID_FIRST_BUY_AMOUNT_KRW)
+    grid_parser.add_argument("--tp-model", choices=("k", "percent"), default=cfg.GRID_TP_MODEL)
+    grid_parser.add_argument("--tp-k-base", type=decimal_arg, default=cfg.GRID_TP_K_BASE)
+    grid_parser.add_argument("--tp-k-floor", type=decimal_arg, default=cfg.GRID_TP_K_FLOOR)
     grid_parser.add_argument("--sell-percent", type=decimal_arg, default=cfg.GRID_SELL_PERCENT)
     grid_parser.add_argument("--current-price", type=decimal_arg, default=None)
     grid_parser.add_argument("--force", action="store_true", help="기존 PostgreSQL 그리드 스냅샷을 덮어쓴다")
@@ -711,6 +728,9 @@ def main(argv: list[str] | None = None) -> int:
             slot_count=args.slot_count,
             first_buy_amount=args.first_buy_amount,
             sell_percent=args.sell_percent,
+            tp_model=args.tp_model,
+            tp_k_base=args.tp_k_base,
+            tp_k_floor=args.tp_k_floor,
             current_price=args.current_price,
             force=args.force,
         )

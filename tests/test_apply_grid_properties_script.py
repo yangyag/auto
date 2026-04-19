@@ -6,7 +6,7 @@ import unittest
 from decimal import Decimal
 from pathlib import Path
 
-from core.grid_properties import build_sell_price
+from core.grid_properties import build_target_sell_price
 from storage.postgres_grid_repository import PostgresGridRepository
 from tests.postgres_test_utils import (
     PostgresIntegrationTestCase,
@@ -77,8 +77,30 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
         self.assertEqual(len(snapshot.rows), 20)
         self.assertEqual(snapshot.rows[0].buy_price, Decimal("127886000"))
         self.assertEqual(snapshot.rows[-1].buy_price, Decimal("91623000"))
-        self.assertEqual(snapshot.rows[0].sell_price, build_sell_price(snapshot.rows[0].buy_price, Decimal("5")))
-        self.assertEqual(snapshot.rows[1].sell_price, build_sell_price(snapshot.rows[1].buy_price, Decimal("5")))
+        self.assertEqual(
+            snapshot.rows[0].sell_price,
+            build_target_sell_price(
+                snapshot.rows[0].buy_price,
+                tp_model="k",
+                lower_price=Decimal("91623000"),
+                upper_price=Decimal("127886000"),
+                price_interval_count=19,
+                tp_k=Decimal("11.0"),
+                tp_k_floor=Decimal("8.0"),
+            ),
+        )
+        self.assertEqual(
+            snapshot.rows[1].sell_price,
+            build_target_sell_price(
+                snapshot.rows[1].buy_price,
+                tp_model="k",
+                lower_price=Decimal("91623000"),
+                upper_price=Decimal("127886000"),
+                price_interval_count=19,
+                tp_k=Decimal("11.0"),
+                tp_k_floor=Decimal("8.0"),
+            ),
+        )
         self.assertGreater(snapshot.rows[-1].planned_qty, snapshot.rows[0].planned_qty)
         self.assertLess(snapshot.rows[0].buy_price * snapshot.rows[0].planned_qty, Decimal("200000"))
         self.assertGreater(snapshot.rows[-1].buy_price * snapshot.rows[-1].planned_qty, Decimal("200000"))

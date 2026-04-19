@@ -287,6 +287,8 @@ Phase 1 의 기본 정의는 아래처럼 둔다.
 
 ## Phase 4 — 활성 윈도우
 
+상태: 완료 (2026-04-20)
+
 **목표**: 전체 그리드는 유지하되 실제 매수 후보는 현재가 근처에만 집중한다.
 
 ### 핵심 개념
@@ -298,7 +300,7 @@ Phase 1 의 기본 정의는 아래처럼 둔다.
 
 ### 작업 항목
 
-- 현재 가격 기준 활성 슬롯 범위를 계산한다
+- poll 시작 가격(`previous_price`) 기준 활성 슬롯 범위를 계산한다
 - 비활성 empty 슬롯은 교차가 나와도 주문 후보로 만들지 않는다
 - pending 슬롯과 보유 슬롯은 기존 규칙과 충돌하지 않게 정리한다
 
@@ -315,6 +317,15 @@ Phase 1 의 기본 정의는 아래처럼 둔다.
 - 급락 시 현재가 아래 근접 구간에만 신규 매수 후보가 생긴다
 - 보유 슬롯 매도 로직은 기존과 동일하다
 
+### 구현 결과
+
+- 활성 윈도우는 `current_price` 가 아니라 poll 시작점인 `previous_price` 기준으로 계산한다
+- 기본 설정은 `ACTIVE_WINDOW_BELOW_CURRENT_SLOTS=48`, `ACTIVE_WINDOW_ABOVE_CURRENT_REENTRY_SLOTS=4` 이다
+- 빈 슬롯만 윈도우 후보에 포함하고, 보유 슬롯 매도는 기존 로직 그대로 유지한다
+- pending BUY 슬롯은 윈도우 안에 있어도 신규 매수 후보에서는 제외되고, 더 먼 empty 슬롯으로 backfill 하지 않는다
+- 활성 윈도우는 하락 교차 지정가 매수와 옵션 상향 재진입 매수 둘 다에 동일하게 적용한다
+- 검증은 `.venv/bin/python -m unittest tests.test_grid_state tests.test_grid_strategy -v` 와 전체 테스트 스위트로 확인한다
+
 ### 리스크
 
 - 슬롯 범위 계산이 잘못되면 중요한 하단 슬롯이 비활성화될 수 있다
@@ -323,6 +334,8 @@ Phase 1 의 기본 정의는 아래처럼 둔다.
 ---
 
 ## Phase 5 — `k` 기반 TP 전환
+
+상태: 완료 (2026-04-20)
 
 **목표**: `SELL_PERCENT` 고정 모델 대신 “몇 칸 반등하면 팔지”로 TP 를 관리한다.
 
@@ -364,6 +377,17 @@ Phase 1 의 기본 정의는 아래처럼 둔다.
 - 신규 생성 그리드의 `sell_price` 가 `k` 기준으로 계산된다
 - 기존 보유 슬롯의 `sell_price` 는 뜻하지 않게 변하지 않는다
 - `SELL_PERCENT` 를 쓰는 경로가 남아 있다면 문서에 명확히 드러난다
+
+### 구현 결과
+
+- `core/grid_properties.py`에 공용 TP helper를 추가하고, `init-grid` 경로와 `grid.properties` 경로가 둘 다 이 helper만 사용하도록 고정했다
+- `k` 기반 TP는 생성 경로별 실제 로그 간격을 그대로 따른다
+  - `init-grid`: `ln(U / L) / slot_count`
+  - `grid.properties`: `ln(U / L) / (grid_count - 1)`
+- 기본 설정은 `GRID_TP_MODEL=\"k\"`, `GRID_TP_K_BASE=11.0`, `GRID_TP_K_FLOOR=8.0` 이다
+- `SELL_PERCENT` 는 삭제하지 않고, `TP_MODEL=percent` 또는 `--tp-model percent` 를 명시했을 때만 쓰는 레거시 fallback으로 남겼다
+- `main.py init-grid` 출력과 `apply_grid_properties_to_postgres.py` 출력에 실제 TP 모델을 노출한다
+- 런타임 매도/체결 반영 경로는 건드리지 않았고, 기존 holding 슬롯의 `sell_price` 자동 재계산은 하지 않는다
 
 ### 리스크
 

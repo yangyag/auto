@@ -70,17 +70,21 @@ Grid3 SYMBOL
 ```
 
 - `held_qty > 0`: 보유 중 슬롯이다. 현재가가 `sell_price` 이상이면 매도 후보가 된다.
-- `held_qty = 0` and `planned_qty > 0`: 빈 슬롯이다. `previous_price > buy_price >= current_price` 이면 지정가 매수 후보가 된다. 이 하락 구간에서 여러 슬롯을 한 poll 안에 함께 통과하면 그 슬롯들은 모두 매수 후보가 된다. 다만 모든 신규 매수는 `q_current < q_target(z) - epsilon` 을 만족해야만 생성된다. `q_current` 는 현재 보유 슬롯의 `buy_price * held_qty` 합을 `MAX_OPERATING_BUDGET_KRW` 로 나눈 값이고, `q_target(z)` 는 현재 가격 위치 `z` 에서의 목표 재고 비율이다. 여기에 더해 최근 완료된 15분 종가 4개가 같은 방향으로 밴드 밖에 연속 존재하면 브레이크아웃 가드가 켜져 신규 매수 후보는 최종 제출 전에 모두 제거된다. `previous_price < buy_price <= current_price` 인 empty 슬롯 단일 상향 돌파 시장가 예산매수는 옵션 기능이며 기본값은 꺼져 있고 `UPWARD_BUY_ENABLED=True` 일 때만 활성화된다.
+- `held_qty = 0` and `planned_qty > 0`: 빈 슬롯이다. `previous_price > buy_price >= current_price` 이면 지정가 매수 후보가 된다. 이 하락 구간에서 여러 슬롯을 한 poll 안에 함께 통과하면 그 슬롯들은 모두 매수 후보가 된다. 다만 Phase 4부터는 `previous_price` 기준 활성 윈도우 안의 empty 슬롯만 실제 매수 후보가 된다. 기본값은 현재가 아래 최근접 `48` 슬롯과 위쪽 재진입 후보 `4` 슬롯이다. 모든 신규 매수는 여기에 더해 `q_current < q_target(z) - epsilon` 을 만족해야만 생성된다. `q_current` 는 현재 보유 슬롯의 `buy_price * held_qty` 합을 `MAX_OPERATING_BUDGET_KRW` 로 나눈 값이고, `q_target(z)` 는 현재 가격 위치 `z` 에서의 목표 재고 비율이다. 최근 완료된 15분 종가 4개가 같은 방향으로 밴드 밖에 연속 존재하면 브레이크아웃 가드가 켜져 신규 매수 후보는 최종 제출 전에 모두 제거된다. `previous_price < buy_price <= current_price` 인 empty 슬롯 단일 상향 돌파 시장가 예산매수는 옵션 기능이며 기본값은 꺼져 있고 `UPWARD_BUY_ENABLED=True` 일 때만 활성화된다.
 - 매수 주문은 접수만으로 holding 이 되지 않고, 거래소 재조회 결과가 `done`일 때만 해당 슬롯의 `held_qty`가 채워진다.
 - 보유 슬롯에서도 `planned_qty`는 다음 빈 슬롯 복원용 목표 수량으로 유지될 수 있다.
-- `grid.properties` 기반 DB 그리드 생성은 `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `BUY_AMOUNT_KRW`, `GRID_COUNT`, `SELL_PERCENT`를 읽는다.
-- 각 슬롯 `sell_price`는 `buy_price * (1 + SELL_PERCENT / 100)` 기준으로 계산한다. `SELL_PERCENT=5`는 5%를 뜻한다.
+- `grid.properties` 기반 DB 그리드 생성은 기본적으로 `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `BUY_AMOUNT_KRW`, `GRID_COUNT`를 읽고, TP는 기본 `k` 모델로 계산한다. 필요하면 `TP_MODEL`, `TP_K_BASE`, `TP_K_FLOOR`를 추가로 줄 수 있다.
+- 기본 TP 모델은 `k`다. 각 슬롯 `sell_price`는 현재 생성 경로의 로그 간격 `delta`에 대해 `exp(k * delta)` 배수로 계산한다. `SELL_PERCENT`는 `TP_MODEL=percent` fallback을 명시적으로 쓸 때만 의미가 있다.
 
 ## 설정 메모
 
 - `MAX_TOTAL_BUDGET_KRW`: 전체 그리드 총배정금액 한도 검사에만 사용한다.
 - `MAX_OPERATING_BUDGET_KRW`: 재고 비율 `q_current` 계산 분모다. 비어 있으면 inventory-target gate 는 형식만 남고 실질 의미가 없다.
 - `UPWARD_BUY_ENABLED`: 상승 1칸 돌파 시장가 예산매수 기능 토글이다. 기본값은 `False` 다.
+- `GRID_TP_MODEL="k"`: 신규 생성 그리드의 기본 TP 모델이다.
+- `GRID_TP_K_BASE=11.0`, `GRID_TP_K_FLOOR=8.0`: 기본 `k` 기반 TP 파라미터다. Phase 5에서는 신규 생성 경로에만 적용되고, 기존 holding `sell_price`는 자동 재계산하지 않는다.
+- `ACTIVE_WINDOW_ENABLED=True`: 빈 슬롯 매수 후보를 poll 시작 가격 기준 근접 구간으로 제한한다.
+- `ACTIVE_WINDOW_BELOW_CURRENT_SLOTS=48`, `ACTIVE_WINDOW_ABOVE_CURRENT_REENTRY_SLOTS=4`: 하락 매수는 아래 최근접 슬롯 위주로, 옵션 상향 재진입은 위쪽 소수 슬롯만 사용한다.
 - `BREAKOUT_GUARD_ENABLED`: 15분 캔들 기반 브레이크아웃 가드 토글이다. 기본값은 `True` 다.
 - `BREAKOUT_GUARD_CANDLE_UNIT=15`, `BREAKOUT_GUARD_CONSECUTIVE_CANDLES=4`: 최근 15분 종가 4개를 본다.
 - `BREAKOUT_GUARD_FAIL_OPEN=True`: 캔들 조회 실패 시 런타임을 멈추지 않고 기존 매수/매도 흐름을 유지한다.
@@ -88,6 +92,7 @@ Grid3 SYMBOL
 - `python3 main.py init-grid` 와 `scripts/apply_grid_properties_to_postgres.py` 는 같은 초기화 경로가 아니다.
   - `init-grid`: 첫 슬롯 기준 고정 수량
   - `grid.properties`: 총예산 `BUY_AMOUNT_KRW * GRID_COUNT` 를 가중 배분한 슬롯별 `slot_budget / buy_price`
+- `python3 main.py init-grid` 는 기본적으로 `--tp-model k` 를 쓴다. `--sell-percent` 는 레거시 percent fallback용이고, 실제 모델은 실행 출력의 `TP 모델` 줄로 확인한다.
 
 ## 실행 및 검증
 

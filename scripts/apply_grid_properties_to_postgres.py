@@ -10,7 +10,11 @@ DEFAULT_PROPERTIES_FILE = PROJECT_ROOT / "grid.properties"
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import config.settings as cfg
-from core.grid_properties import build_grid_rows_from_property_spec, load_grid_property_spec
+from core.grid_properties import (
+    build_grid_rows_from_property_spec,
+    load_grid_property_spec,
+    normalize_tp_model,
+)
 from storage.interfaces import GridSnapshot, RepositoryMetadata
 from storage.postgres_grid_repository import PostgresGridRepository
 from utils.decimal_utils import format_decimal
@@ -37,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     spec = load_grid_property_spec(args.properties_file)
     rows = build_grid_rows_from_property_spec(spec)
     budget_summary = summarize_planned_buy_budget(rows)
+    resolved_tp_model = normalize_tp_model(spec.tp_model)
 
     repository = PostgresGridRepository(
         host=args.host,
@@ -63,6 +68,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"bot_key: {args.bot_key}")
     print(f"symbol: {args.symbol}")
     print(f"rows: {len(rows)}")
+    print(f"tp_model: {resolved_tp_model}")
+    if resolved_tp_model == "k":
+        print(f"tp_k_base: {spec.tp_k_base or cfg.GRID_TP_K_BASE}")
+        print(f"tp_k_floor: {spec.tp_k_floor or cfg.GRID_TP_K_FLOOR}")
+        print(f"legacy_sell_percent: {spec.sell_percent}")
+    else:
+        print(f"sell_percent: {spec.sell_percent}")
     print(f"top_buy_price: {rows[0].buy_price}")
     print(f"bottom_buy_price: {rows[-1].buy_price}")
     print(f"planned_buy_budget_total: {format_decimal(budget_summary.total)}")
