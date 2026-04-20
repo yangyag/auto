@@ -3,6 +3,7 @@ import unittest
 from decimal import Decimal
 from pathlib import Path
 
+import config.settings as cfg
 from core.grid_properties import (
     GridPropertySpec,
     build_grid_rows_from_property_spec,
@@ -200,6 +201,14 @@ class GridPropertiesTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "슬롯 1 매수 금액이 업비트 최소 주문 금액보다 작습니다."):
             build_grid_rows_from_property_spec(spec)
+
+    def test_checked_in_grid_properties_align_with_runtime_k_defaults(self):
+        project_root = Path(__file__).resolve().parents[1]
+        spec = load_grid_property_spec(project_root / "grid.properties")
+
+        self.assertEqual(spec.tp_model, "k")
+        self.assertEqual(spec.tp_k_base, cfg.GRID_TP_K_BASE)
+        self.assertEqual(spec.tp_k_floor, cfg.GRID_TP_K_FLOOR)
 
 
 if __name__ == "__main__":

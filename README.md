@@ -15,6 +15,98 @@ Python 기반 그리드 자동매매 시스템이다. 현재 운영 기준은 �
 - `scripts/show_grid_state.py`와 `scripts/export_postgres_grid.py`는 현재 DB 상태를 확인하는 보조 도구다. holding 슬롯에 `filled_at`가 있으면 age TP 메타데이터도 함께 보여준다.
 - `scripts/preview_recenter_plan.py`는 재중심화 가능 여부를 preview-only 로 계산한다. DB write, 주문 제출, 주문 취소는 하지 않는다.
 
+## 빠른 시작
+
+### 1. 가상환경 생성
+
+이 저장소는 시스템 `python3 -m venv .venv`가 `ensurepip` 부재로 실패할 수 있다. 그 경우 `uv`를 먼저 쓴다.
+
+```bash
+# 일반 경로
+python3 -m venv .venv
+
+# 위 명령이 ensurepip 오류로 실패하면 대신 실행
+~/.local/bin/uv venv --clear .venv
+~/.local/bin/uv pip install --python .venv/bin/python pip
+```
+
+### 2. 의존성 설치
+
+```bash
+.venv/bin/python -m pip install -r requirements.txt
+```
+
+### 3. `.env` 작성
+
+샘플 파일은 [`.env_sample`](.env_sample) 기준이다.
+
+```bash
+cp .env_sample .env
+```
+
+`UPBIT_ACCESS_KEY`, `UPBIT_SECRET_KEY`, `STATE_BOT_KEY`, PostgreSQL 접속정보를 실제 운영값으로 채운다.
+
+EC2 운영 서버에서도 이 프로젝트는 **프로젝트 루트 `.env`** 를 읽는다. 현재 운영 확인 기준 경로는 `/home/ubuntu/auto/.env` 다. `/home/ubuntu/llm.env` 는 다른 서비스용 파일이므로 이 저장소 설정 파일로 착각하면 안 된다.
+
+### 4. PostgreSQL 스키마 적용
+
+기본 운영 스키마는 `auto_trading` 이다. 다른 `PGSCHEMA` 를 쓸 때도 아래 스니펫은 SQL 내부의 기본 스키마명을 환경변수 값으로 치환해 적용한다.
+
+```bash
+.venv/bin/python - <<'PY'
+import os
+from pathlib import Path
+
+import psycopg
+
+schema = os.getenv("PGSCHEMA", "auto_trading")
+migrations_dir = Path("db/migrations")
+
+with psycopg.connect(
+    host=os.getenv("PGHOST", "127.0.0.1"),
+    port=int(os.getenv("PGPORT", "5432")),
+    dbname=os.getenv("PGDATABASE", "yangyag"),
+    user=os.getenv("PGUSER", "yangyag"),
+    password=os.getenv("PGPASSWORD", ""),
+    autocommit=True,
+) as conn:
+    with conn.cursor() as cur:
+        for sql_path in sorted(migrations_dir.glob("*.sql")):
+            sql_text = sql_path.read_text(encoding="utf-8").replace("auto_trading", schema)
+            cur.execute(sql_text)
+            print(f"applied: {sql_path.name} -> {schema}")
+PY
+```
+
+### 5. 비파괴 검증
+
+```bash
+.venv/bin/python -c "import main"
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+### 6. 상태 반영과 조회
+
+```bash
+# grid.properties 기반 그리드 반영
+.venv/bin/python scripts/apply_grid_properties_to_postgres.py --force
+
+# 현재 DB 상태 확인
+.venv/bin/python scripts/show_grid_state.py
+```
+
+### 7. 백그라운드 실행
+
+`run.sh`는 기본적으로 `python3`를 사용한다. 가상환경 인터프리터를 쓰려면 `PYTHON_BIN`을 명시한다.
+
+```bash
+PYTHON_BIN=.venv/bin/python ./run.sh
+./stop.sh
+./tail-latest-log.sh
+```
+
+`.venv/bin/python main.py`는 실제 주문을 발생시킬 수 있으므로, 준비되지 않은 상태에서는 직접 실행하지 않는다.
+
 ## 디렉터리 구조
 
 ```text
@@ -38,9 +130,11 @@ auto/
 │   └── postgres_common.py                # PostgreSQL 공통 연결/락 유틸
 ├── strategy/
 │   ├── grid_strategy.py                  # 가격 교차 기반 주문 후보 생성
+│   ├── breakout_guard.py                 # 15분 캔들 기반 브레이크아웃 가드
 │   └── recenter_preview.py               # Phase 6 preview-only 재중심화 계산
 ├── utils/
 │   ├── decimal_utils.py                  # Decimal 연산 유틸
+│   ├── grid_reporting.py                 # planned budget 요약 등 리포팅 유틸
 │   ├── upbit_market.py                   # KRW 마켓 호가 단위 / 최소 주문 금액
 │   └── logger.py                         # 날짜별 로그 파일 설정
 ├── scripts/
@@ -54,6 +148,8 @@ auto/
 │   └── 003_add_orders_identifier.sql
 ├── docs/
 │   ├── UPBIT_API_REFERENCE.md
+│   ├── strategy-change-guide.md
+│   ├── phase.md
 │   ├── quick-commands.md
 │   ├── postgres-cutover-checklist.md
 │   └── macos-deployment-guide.md
@@ -100,54 +196,57 @@ Grid3 SYMBOL
 - `BREAKOUT_GUARD_CANDLE_UNIT=15`, `BREAKOUT_GUARD_CONSECUTIVE_CANDLES=4`: 최근 15분 종가 4개를 본다.
 - `BREAKOUT_GUARD_FAIL_OPEN=True`: 캔들 조회 실패 시 런타임을 멈추지 않고 기존 매수/매도 흐름을 유지한다.
 - Phase 1 기본 inventory-target 파라미터는 `q_min=0.10`, `q_max=0.85`, `gamma=1.5`, `epsilon=0.03` 이다.
-- `python3 main.py init-grid` 와 `scripts/apply_grid_properties_to_postgres.py` 는 같은 초기화 경로가 아니다.
+- `.venv/bin/python main.py init-grid` 와 `.venv/bin/python scripts/apply_grid_properties_to_postgres.py` 는 같은 초기화 경로가 아니다.
   - `init-grid`: 첫 슬롯 기준 고정 수량
   - `grid.properties`: 총예산 `BUY_AMOUNT_KRW * GRID_COUNT` 를 가중 배분한 슬롯별 `slot_budget / buy_price`
-- `python3 main.py init-grid` 는 기본적으로 `--tp-model k` 를 쓴다. `--sell-percent` 는 레거시 percent fallback용이고, 실제 모델은 실행 출력의 `TP 모델` 줄로 확인한다.
+- `.venv/bin/python main.py init-grid` 는 기본적으로 `--tp-model k` 를 쓴다. `--sell-percent` 는 레거시 percent fallback용이고, 실제 모델은 실행 출력의 `TP 모델` 줄로 확인한다.
 
 ## 실행 및 검증
 
 ```bash
 # 의존성 설치
-pip install -r requirements.txt
+.venv/bin/python -m pip install -r requirements.txt
 
 # 비파괴 검증
-python3 -c "import main"
+.venv/bin/python -c "import main"
 
 # 전체 테스트
-python3 -m unittest discover -s tests -v
+.venv/bin/python -m unittest discover -s tests -v
 
 # 업비트 KRW 주문 가능 잔고 1회 조회
-python3 main.py balance
+.venv/bin/python main.py balance
 
 # 초기 그리드 생성 (코드 기반)
-python3 main.py init-grid --first-buy-amount 200000 --sell-percent 5 --force
+.venv/bin/python main.py init-grid --first-buy-amount 200000 --tp-model k --force
 
 # grid.properties -> PostgreSQL 반영
-python3 scripts/apply_grid_properties_to_postgres.py --force
+.venv/bin/python scripts/apply_grid_properties_to_postgres.py --force
 
 # PostgreSQL 상태 export
-python3 scripts/export_postgres_grid.py
+.venv/bin/python scripts/export_postgres_grid.py
 
 # 현재 DB 상태 보기
-python3 scripts/show_grid_state.py
+.venv/bin/python scripts/show_grid_state.py
 
 # 재중심화 preview-only 평가
-python3 scripts/preview_recenter_plan.py
+.venv/bin/python scripts/preview_recenter_plan.py
 
 # 백그라운드 실행 / 종료
-./run.sh
+PYTHON_BIN=.venv/bin/python ./run.sh
 ./stop.sh
 
 # 최신 날짜 로그 실시간 추적
 ./tail-latest-log.sh
 ```
 
-실거래 루프 `python3 main.py`는 실제 주문을 발생시킬 수 있으므로 명시적으로 필요할 때만 실행한다.
+`main.py balance`는 업비트 API를 호출하지만 주문을 만들지는 않는다. 실거래 루프 `.venv/bin/python main.py`는 실제 주문을 발생시킬 수 있으므로 명시적으로 필요할 때만 실행한다.
 
 ## 환경변수
 
-- 샘플 파일은 [.env_sample](/home/yangyag/auto/.env_sample:1) 이다. 보통 이 파일 내용을 기준으로 프로젝트 루트 `.env`를 채운다.
+- 샘플 파일은 [`.env_sample`](.env_sample) 이다. 보통 이 파일 내용을 기준으로 프로젝트 루트 `.env`를 채운다.
+- 로컬 작업 기준 기본 위치는 `<repo-root>/.env` 다.
+- EC2 운영 서버 기준 실제 확인 경로는 `/home/ubuntu/auto/.env` 다.
+- `/home/ubuntu/llm.env` 는 같은 서버에 있어도 이 자동매매 저장소가 읽는 파일이 아니다.
 
 ```dotenv
 UPBIT_ACCESS_KEY=
