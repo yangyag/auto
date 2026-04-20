@@ -55,7 +55,7 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             properties_path = Path(tmpdir) / "grid.properties"
             properties_path.write_text(
-                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\n",
+                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nTOTAL_BUDGET_KRW=4000000\nGRID_COUNT=20\n",
                 encoding="utf-8",
             )
             result = subprocess.run(
@@ -102,8 +102,9 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
             ),
         )
         self.assertGreater(snapshot.rows[-1].planned_qty, snapshot.rows[0].planned_qty)
-        self.assertLess(snapshot.rows[0].buy_price * snapshot.rows[0].planned_qty, Decimal("200000"))
-        self.assertGreater(snapshot.rows[-1].buy_price * snapshot.rows[-1].planned_qty, Decimal("200000"))
+        average_budget = Decimal("4000000") / Decimal("20")
+        self.assertLess(snapshot.rows[0].buy_price * snapshot.rows[0].planned_qty, average_budget)
+        self.assertGreater(snapshot.rows[-1].buy_price * snapshot.rows[-1].planned_qty, average_budget)
         self.assertGreater(snapshot.rows[0].sell_price, snapshot.rows[0].buy_price)
         top_budget = snapshot.rows[0].buy_price * snapshot.rows[0].planned_qty
         bottom_budget = snapshot.rows[-1].buy_price * snapshot.rows[-1].planned_qty
@@ -120,7 +121,7 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
         original = project_properties.read_text(encoding="utf-8") if project_properties.exists() else None
         try:
             project_properties.write_text(
-                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\n",
+                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nTOTAL_BUDGET_KRW=4000000\nGRID_COUNT=20\n",
                 encoding="utf-8",
             )
             result = subprocess.run(

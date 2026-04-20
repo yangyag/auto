@@ -53,7 +53,7 @@ STATE_BOT_KEY = os.getenv("STATE_BOT_KEY", "krw-btc-live")
 GRID_SLOT_COUNT = 10
 GRID_LOWER_PRICE = Decimal("92253123")
 GRID_UPPER_PRICE = Decimal("111137221")
-GRID_FIRST_BUY_AMOUNT_KRW = Decimal("200000")
+GRID_TOTAL_BUDGET_KRW = Decimal("2400000")
 GRID_TP_MODEL = "k"
 GRID_TP_K_BASE = Decimal("9.0")
 GRID_TP_K_FLOOR = Decimal("7.0")
@@ -71,8 +71,8 @@ API_KEY = os.getenv("UPBIT_ACCESS_KEY", "")
 API_SECRET = os.getenv("UPBIT_SECRET_KEY", "")
 
 # ── 리스크 파라미터 ──────────────────────────────────────
-MAX_TOTAL_BUDGET_KRW = Decimal("2500000")  # BTC 그리드 총 배정 금액 한도
-MAX_OPERATING_BUDGET_KRW = Decimal("2400000")  # q_current 분모로 쓰는 운영 자본 상한
+MAX_TOTAL_BUDGET_KRW = None  # 기본은 현재 로드된 그리드 총배정금액을 truth로 본다.
+MAX_OPERATING_BUDGET_KRW = None  # q_current 분모는 기본적으로 현재 그리드 총배정금액을 따른다.
 MAX_DAILY_ORDERS = 50        # 일일 최대 주문 횟수
 MIN_BALANCE_RESERVE = Decimal("10000")  # 최소 유보 잔고 KRW (이 금액 이하이면 매수 block)
 UPBIT_FEE_RATE = Decimal("0.0005")  # 매수 필요 KRW 추정에 반영할 업비트 수수료율

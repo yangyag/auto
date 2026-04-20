@@ -53,6 +53,8 @@ python3 main.py balance
 python3 scripts/apply_grid_properties_to_postgres.py --force
 ```
 
+이 경로와 `main.py init-grid`는 같은 `TOTAL_BUDGET_KRW` + `GRID_COUNT` 총예산 계약을 쓴다.
+
 이 명령은 기본적으로 아래를 사용한다:
 - `grid.properties`
 - 현재 `.env`의 `STATE_BOT_KEY`
@@ -139,7 +141,7 @@ PY
 ```properties
 MIN_BUY_PRICE=91623000
 MAX_BUY_PRICE=127886000
-BUY_AMOUNT_KRW=200000
+TOTAL_BUDGET_KRW=4000000
 GRID_COUNT=20
 TP_MODEL=k
 TP_K_BASE=9.0
@@ -149,7 +151,7 @@ TP_K_FLOOR=7.0
 의미:
 - `MIN_BUY_PRICE`: 최하단 슬롯 buy_price
 - `MAX_BUY_PRICE`: 최상단 슬롯 buy_price
-- `BUY_AMOUNT_KRW`: 슬롯 평균 목표 매수금액
+- `TOTAL_BUDGET_KRW`: 그리드 전체에 배정할 총예산
 - `GRID_COUNT`: 슬롯 개수
 - `TP_MODEL`: TP 계산 모드, 현재 운영 기준은 `k`
 - `TP_K_BASE`: 기본 TP `k`

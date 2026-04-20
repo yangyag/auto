@@ -8,7 +8,7 @@ from core.grid_properties import (
     GridPropertySpec,
     build_grid_rows_from_property_spec,
     build_target_sell_price,
-    build_weighted_slot_buy_amounts,
+    build_weighted_slot_budgets,
     load_grid_property_spec,
 )
 
@@ -18,7 +18,7 @@ class GridPropertiesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "grid.properties"
             path.write_text(
-                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\n",
+                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nTOTAL_BUDGET_KRW=4000000\nGRID_COUNT=20\n",
                 encoding="utf-8",
             )
 
@@ -29,7 +29,7 @@ class GridPropertiesTest(unittest.TestCase):
             GridPropertySpec(
                 min_buy_price=Decimal("91623000"),
                 max_buy_price=Decimal("127886000"),
-                buy_amount_krw=Decimal("200000"),
+                total_budget_krw=Decimal("4000000"),
                 grid_count=20,
                 tp_model="k",
             ),
@@ -39,7 +39,7 @@ class GridPropertiesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "grid.properties"
             path.write_text(
-                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\n",
+                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nTOTAL_BUDGET_KRW=4000000\nGRID_COUNT=20\n",
                 encoding="utf-8",
             )
 
@@ -51,7 +51,7 @@ class GridPropertiesTest(unittest.TestCase):
         spec = GridPropertySpec(
             min_buy_price=Decimal("91623000"),
             max_buy_price=Decimal("127886000"),
-            buy_amount_krw=Decimal("200000"),
+            total_budget_krw=Decimal("4000000"),
             grid_count=20,
         )
 
@@ -94,44 +94,44 @@ class GridPropertiesTest(unittest.TestCase):
         spec = GridPropertySpec(
             min_buy_price=Decimal("91623999"),
             max_buy_price=Decimal("127886999"),
-            buy_amount_krw=Decimal("200000"),
+            total_budget_krw=Decimal("4000000"),
             grid_count=20,
         )
 
         with self.assertRaises(ValueError):
             build_grid_rows_from_property_spec(spec)
 
-    def test_build_weighted_slot_buy_amounts_preserve_total_budget_for_uneven_grid_count(self):
+    def test_build_weighted_slot_budgets_preserve_total_budget_for_uneven_grid_count(self):
         spec = GridPropertySpec(
             min_buy_price=Decimal("100000000"),
             max_buy_price=Decimal("130000000"),
-            buy_amount_krw=Decimal("200000"),
+            total_budget_krw=Decimal("800000"),
             grid_count=4,
         )
 
-        slot_buy_amounts = build_weighted_slot_buy_amounts(spec)
+        slot_budgets = build_weighted_slot_budgets(spec)
 
-        self.assertEqual(len(slot_buy_amounts), 4)
-        self.assertLess(slot_buy_amounts[0], spec.buy_amount_krw)
-        self.assertGreater(slot_buy_amounts[-1], spec.buy_amount_krw)
-        self.assertLess(abs(sum(slot_buy_amounts, Decimal("0")) - (spec.buy_amount_krw * spec.grid_count)), Decimal("0.0001"))
+        self.assertEqual(len(slot_budgets), 4)
+        self.assertLess(slot_budgets[0], spec.total_budget_krw / spec.grid_count)
+        self.assertGreater(slot_budgets[-1], spec.total_budget_krw / spec.grid_count)
+        self.assertLess(abs(sum(slot_budgets, Decimal("0")) - spec.total_budget_krw), Decimal("0.0001"))
 
     def test_build_grid_rows_from_property_spec_computes_slot_qty_from_weighted_buy_amount(self):
         spec = GridPropertySpec(
             min_buy_price=Decimal("100000000"),
             max_buy_price=Decimal("120000000"),
-            buy_amount_krw=Decimal("200000"),
+            total_budget_krw=Decimal("600000"),
             grid_count=3,
         )
 
         rows = build_grid_rows_from_property_spec(spec)
 
-        self.assertEqual(build_weighted_slot_buy_amounts(spec), [Decimal("140000.0"), Decimal("200000.0"), Decimal("260000.0")])
+        self.assertEqual(build_weighted_slot_budgets(spec), [Decimal("140000.0"), Decimal("200000.0"), Decimal("260000.0")])
         self.assertEqual(rows[0].planned_qty, Decimal("0.00116666"))
         self.assertEqual(rows[1].planned_qty, Decimal("0.00182575"))
         self.assertEqual(rows[2].planned_qty, Decimal("0.00260000"))
-        self.assertLess(rows[0].buy_price * rows[0].planned_qty, spec.buy_amount_krw)
-        self.assertGreater(rows[2].buy_price * rows[2].planned_qty, spec.buy_amount_krw)
+        self.assertLess(rows[0].buy_price * rows[0].planned_qty, spec.total_budget_krw / spec.grid_count)
+        self.assertGreater(rows[2].buy_price * rows[2].planned_qty, spec.total_budget_krw / spec.grid_count)
         self.assertEqual(
             rows[0].sell_price,
             build_target_sell_price(
@@ -173,7 +173,7 @@ class GridPropertiesTest(unittest.TestCase):
         spec = GridPropertySpec(
             min_buy_price=Decimal("100000000"),
             max_buy_price=Decimal("120000000"),
-            buy_amount_krw=Decimal("5000"),
+            total_budget_krw=Decimal("15000"),
             grid_count=3,
         )
 
@@ -184,7 +184,7 @@ class GridPropertiesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "grid.properties"
             path.write_text(
-                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\nLEGACY_TP=5\n",
+                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nTOTAL_BUDGET_KRW=4000000\nGRID_COUNT=20\nLEGACY_TP=5\n",
                 encoding="utf-8",
             )
 
@@ -195,7 +195,7 @@ class GridPropertiesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "grid.properties"
             path.write_text(
-                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\nEXTRA_FLAG=1\n",
+                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nTOTAL_BUDGET_KRW=4000000\nGRID_COUNT=20\nEXTRA_FLAG=1\n",
                 encoding="utf-8",
             )
 

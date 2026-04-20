@@ -22,6 +22,7 @@ from storage.interfaces import GridStateRepository, PendingOrderRepository, Repo
 from strategy.breakout_guard import BreakoutGuardStatus, evaluate_breakout_guard
 from strategy.grid_strategy import GridStrategy
 from utils.decimal_utils import DECIMAL_ZERO, format_decimal, to_decimal
+from utils.grid_reporting import summarize_planned_buy_budget
 from utils.upbit_market import MIN_KRW_ORDER_AMOUNT
 from utils.logger import get_logger
 
@@ -740,7 +741,7 @@ def run_grid_init(
     lower_price: Decimal,
     upper_price: Decimal,
     slot_count: int,
-    first_buy_amount: Decimal,
+    total_budget: Decimal,
     tp_model: str | None = None,
     tp_k_base: Decimal | None = None,
     tp_k_floor: Decimal | None = None,
@@ -772,15 +773,15 @@ def run_grid_init(
         rows = build_cash_only_grid(
             lower_price=lower_price,
             upper_price=upper_price,
-            current_price=live_price,
             slot_count=slot_count,
-            first_buy_amount_krw=first_buy_amount,
+            total_budget_krw=total_budget,
             tp_model=resolved_tp_model,
             tp_k_base=tp_k_base,
             tp_k_floor=tp_k_floor,
         )
         state = GridState.from_rows(cfg.SYMBOL, rows)
         validate_grid_state(state)
+        budget_summary = summarize_planned_buy_budget(rows)
 
         metadata = existing_snapshot.metadata if existing_snapshot.metadata.version is not None else None
         saved_snapshot = repository.save(state.to_snapshot(metadata))
@@ -797,12 +798,13 @@ def run_grid_init(
     print(f"상단 경계: {format_decimal(upper_price)} KRW")
     print(f"하단 경계: {format_decimal(lower_price)} KRW")
     print(f"슬롯 수: {slot_count}")
-    print(f"첫 칸 기준 매수금액: {format_decimal(first_buy_amount)} KRW")
+    print(f"총예산: {format_decimal(total_budget)} KRW")
     print(f"TP 모델: {resolved_tp_model}")
     print(f"TP k_base: {format_decimal(tp_k_base or cfg.GRID_TP_K_BASE)}")
     print(f"TP k_floor: {format_decimal(tp_k_floor or cfg.GRID_TP_K_FLOOR)}")
-    print(f"고정 수량: {format_decimal(rows[0].planned_qty)} BTC")
     print(f"총 배정 금액: {format_decimal(state.total_allocated_budget)} KRW")
+    print(f"상단 슬롯 배정 금액: {format_decimal(budget_summary.top_slot)} KRW")
+    print(f"하단 슬롯 배정 금액: {format_decimal(budget_summary.bottom_slot)} KRW")
     print(f"버전: {saved_snapshot.metadata.version}")
     print("상태: 성공")
     return 0
@@ -818,7 +820,7 @@ def build_cli_parser() -> argparse.ArgumentParser:
     grid_parser.add_argument("--lower-price", type=decimal_arg, default=cfg.GRID_LOWER_PRICE)
     grid_parser.add_argument("--upper-price", type=decimal_arg, default=cfg.GRID_UPPER_PRICE)
     grid_parser.add_argument("--slot-count", type=int, default=cfg.GRID_SLOT_COUNT)
-    grid_parser.add_argument("--first-buy-amount", type=decimal_arg, default=cfg.GRID_FIRST_BUY_AMOUNT_KRW)
+    grid_parser.add_argument("--total-budget", type=decimal_arg, default=cfg.GRID_TOTAL_BUDGET_KRW)
     grid_parser.add_argument("--tp-model", choices=("k",), default=cfg.GRID_TP_MODEL)
     grid_parser.add_argument("--tp-k-base", type=decimal_arg, default=cfg.GRID_TP_K_BASE)
     grid_parser.add_argument("--tp-k-floor", type=decimal_arg, default=cfg.GRID_TP_K_FLOOR)
@@ -846,7 +848,7 @@ def main(argv: list[str] | None = None) -> int:
             lower_price=args.lower_price,
             upper_price=args.upper_price,
             slot_count=args.slot_count,
-            first_buy_amount=args.first_buy_amount,
+            total_budget=args.total_budget,
             tp_model=args.tp_model,
             tp_k_base=args.tp_k_base,
             tp_k_floor=args.tp_k_floor,

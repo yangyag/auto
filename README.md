@@ -64,7 +64,7 @@ Phase 6 age TP 압축 규칙:
 ## 브레이크아웃 가드
 전략은 최근 완료된 `BREAKOUT_GUARD_CANDLE_UNIT` 분 캔들 종가가 `BREAKOUT_GUARD_CONSECUTIVE_CANDLES` 개 연속으로 밴드 밖에 있으면 신규 매수를 모두 제거한다. 이미 보유한 슬롯의 매도는 계속 허용한다.
 
-판정 밴드는 설정 상수보다 현재 PostgreSQL 그리드의 실제 `buy_price` 최상단과 최하단을 기준으로 본다. `grid.properties` 경로와 `init-grid` 경로가 섞여 있어도 저장된 런타임 그리드 기준으로 판정한다.
+판정 밴드는 설정 상수보다 현재 PostgreSQL 그리드의 실제 `buy_price` 최상단과 최하단을 기준으로 본다. 초기화 경로와 무관하게 저장된 런타임 그리드 기준으로 판정한다.
 
 캔들 조회 실패 시 기본값은 `BREAKOUT_GUARD_FAIL_OPEN=False` 이다. 즉 데이터가 불안정하면 신규 매수를 막는 fail-close 쪽으로 동작한다.
 
@@ -85,18 +85,13 @@ Phase 7 기준 주문 제출 경로는 아래 순서다.
 rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단에 대한 bounded backoff 로만 다룬다. `POST /v1/orders` timeout 또는 network 오류처럼 체결 여부가 모호한 경우는 자동 재시도하지 않는다.
 
 ## 그리드 생성 경로
-이 저장소에는 서로 다른 두 개의 초기화 계약이 있다.
+`main.py init-grid`와 `grid.properties`는 같은 총예산 기반 초기화 계약을 사용한다.
 
-코드 기반 `init-grid`:
-- 첫 슬롯 `buy_price` 기준 `GRID_FIRST_BUY_AMOUNT_KRW` 만큼 살 수 있는 BTC 수량을 모든 슬롯의 고정 수량으로 사용한다.
-- 총예산 배분이 아니라 첫 슬롯 기준 고정 수량 모델이다.
-
-`grid.properties` 기반 경로:
-- `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `BUY_AMOUNT_KRW`, `GRID_COUNT`를 읽는다.
-- 총예산 `BUY_AMOUNT_KRW * GRID_COUNT`를 상단/중단/하단 `0.7x / 1.0x / 1.3x` 가중치로 정규화 배분한다.
+- 입력 기준은 `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `TOTAL_BUDGET_KRW`, `GRID_COUNT`다.
+- `TOTAL_BUDGET_KRW`를 상단/중단/하단 `0.7x / 1.0x / 1.3x` 가중치로 정규화 배분한다.
 - 각 슬롯 `planned_qty`는 `slot_budget / buy_price` 기준 소수 BTC 단위 내림으로 계산한다.
 
-두 경로는 같은 초기화 계약이 아니므로 숫자를 단순 동기화하면 안 된다.
+즉 `GRID_COUNT`는 유지하고, 슬롯별 수량은 총예산과 가격대에 따라 달라진다.
 
 ## 기존 전략 vs 현재 전략
 운영자가 "예전 판과 지금 판이 무엇이 달라졌는가"를 빠르게 이해하기 위한 요약이다.
@@ -116,6 +111,7 @@ rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단
 현재 판의 성격은 공격적 수익 극대화보다 자본 점유와 추세 리스크를 더 강하게 제어하는 쪽에 가깝다.
 
 ## 핵심 설정 의미
+- `GRID_TOTAL_BUDGET_KRW` / `--total-budget` / `TOTAL_BUDGET_KRW`: `init-grid`와 `grid.properties`가 공유하는 총예산 입력값이다.
 - `MAX_TOTAL_BUDGET_KRW`: 전체 그리드 총배정금액 한도 검사에 사용한다.
 - `MAX_OPERATING_BUDGET_KRW`: 재고 비율 `q_current` 계산 분모다.
 - `UPBIT_FEE_RATE`, `FEE_BUFFER_KRW`: 매수 필요 KRW 추정에 반영하는 수수료/안전 버퍼다.

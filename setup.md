@@ -143,7 +143,7 @@ PY
 ```properties
 MIN_BUY_PRICE=98000000
 MAX_BUY_PRICE=121000000
-BUY_AMOUNT_KRW=25000
+TOTAL_BUDGET_KRW=2400000
 GRID_COUNT=96
 TP_MODEL=k
 TP_K_BASE=9.0
@@ -152,7 +152,7 @@ TP_K_FLOOR=7.0
 
 주의:
 - `MIN_BUY_PRICE`, `MAX_BUY_PRICE`는 업비트 KRW 호가 단위에 맞아야 한다.
-- `grid.properties` 경로는 총예산 `BUY_AMOUNT_KRW * GRID_COUNT` 를 가중 배분한다.
+- `grid.properties` 경로는 `TOTAL_BUDGET_KRW`를 상단/중단/하단 가중치로 배분한다.
 - `config/settings.py`의 `GRID_TP_K_BASE` 와 `grid.properties`의 `TP_K_BASE` 는 맞춰 두는 것이 안전하다.
 
 ## 9. 비파괴 검증
