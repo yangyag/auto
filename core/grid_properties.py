@@ -11,10 +11,9 @@ from core.models import GridRow
 from utils.decimal_utils import BTC_QUANTITY_STEP, DECIMAL_ZERO, quantize_to_step, to_decimal
 from utils.upbit_market import MIN_KRW_ORDER_AMOUNT, normalize_krw_price
 
-DEFAULT_SELL_PERCENT = Decimal("5")
 DEFAULT_TP_MODEL = "k"
-DEFAULT_TP_K_BASE = Decimal("11.0")
-DEFAULT_TP_K_FLOOR = Decimal("8.0")
+DEFAULT_TP_K_BASE = Decimal("9.0")
+DEFAULT_TP_K_FLOOR = Decimal("7.0")
 DEFAULT_TOP_THIRD_WEIGHT = Decimal("0.7")
 DEFAULT_MIDDLE_THIRD_WEIGHT = Decimal("1.0")
 DEFAULT_BOTTOM_THIRD_WEIGHT = Decimal("1.3")
@@ -31,8 +30,7 @@ class GridPropertySpec:
     max_buy_price: Decimal
     buy_amount_krw: Decimal
     grid_count: int
-    sell_percent: Decimal = DEFAULT_SELL_PERCENT
-    tp_model: str | None = None
+    tp_model: str | None = DEFAULT_TP_MODEL
     tp_k_base: Decimal | None = None
     tp_k_floor: Decimal | None = None
 
@@ -53,14 +51,15 @@ def load_grid_property_spec(path: str | Path) -> GridPropertySpec:
     ]
     if missing:
         raise ValueError(f"grid.properties 필수 항목 누락: {', '.join(missing)}")
+    if "SELL_PERCENT" in properties:
+        raise ValueError("SELL_PERCENT는 더 이상 지원되지 않습니다. k 기반 TP만 사용하세요.")
 
     return GridPropertySpec(
         min_buy_price=to_decimal(properties["MIN_BUY_PRICE"]),
         max_buy_price=to_decimal(properties["MAX_BUY_PRICE"]),
         buy_amount_krw=to_decimal(properties["BUY_AMOUNT_KRW"]),
         grid_count=int(properties["GRID_COUNT"]),
-        sell_percent=to_decimal(properties.get("SELL_PERCENT") or DEFAULT_SELL_PERCENT),
-        tp_model=properties.get("TP_MODEL") or None,
+        tp_model=properties.get("TP_MODEL") or DEFAULT_TP_MODEL,
         tp_k_base=to_decimal(properties["TP_K_BASE"]) if properties.get("TP_K_BASE") else None,
         tp_k_floor=to_decimal(properties["TP_K_FLOOR"]) if properties.get("TP_K_FLOOR") else None,
     )
@@ -71,8 +70,6 @@ def normalize_tp_model(tp_model: str | None = None) -> str:
     normalized = str(raw_tp_model).strip().lower()
     if normalized in {"k", "k_step", "k_steps"}:
         return "k"
-    if normalized in {"percent", "pct"}:
-        return "percent"
     raise ValueError(f"지원하지 않는 TP 모델입니다: {raw_tp_model}")
 
 
@@ -87,20 +84,6 @@ def resolve_tp_k_values(
     if k_value < floor_value:
         raise ValueError("TP_K_BASE는 TP_K_FLOOR보다 크거나 같아야 합니다.")
     return k_value, floor_value
-
-
-def build_sell_price(buy_price: Decimal, sell_percent: Decimal) -> Decimal:
-    raw_sell_percent = to_decimal(sell_percent)
-    if raw_sell_percent <= DECIMAL_ZERO:
-        raise ValueError("SELL_PERCENT는 0보다 커야 합니다.")
-
-    raw_sell_price = buy_price * (Decimal("1") + (raw_sell_percent / Decimal("100")))
-    sell_price = normalize_krw_price(raw_sell_price)
-    if sell_price <= buy_price:
-        raise ValueError(
-            f"sell_price 계산 결과가 buy_price보다 크지 않습니다: buy_price={buy_price}, sell_percent={raw_sell_percent}, sell_price={sell_price}"
-        )
-    return sell_price
 
 
 def build_sell_price_from_k(
@@ -138,19 +121,13 @@ def build_target_sell_price(
     buy_price: Decimal,
     *,
     tp_model: str | None = None,
-    sell_percent: Decimal | None = None,
     lower_price: Decimal | None = None,
     upper_price: Decimal | None = None,
     price_interval_count: int | None = None,
     tp_k: Decimal | None = None,
     tp_k_floor: Decimal | None = None,
 ) -> Decimal:
-    model = normalize_tp_model(tp_model)
-    if model == "percent":
-        if sell_percent is None:
-            raise ValueError("percent TP 모델에는 SELL_PERCENT가 필요합니다.")
-        return build_sell_price(buy_price, sell_percent)
-
+    normalize_tp_model(tp_model)
     if lower_price is None or upper_price is None or price_interval_count is None:
         raise ValueError("k TP 모델에는 lower_price, upper_price, price_interval_count가 필요합니다.")
     return build_sell_price_from_k(
@@ -229,7 +206,6 @@ def build_grid_rows_from_property_spec(spec: GridPropertySpec) -> list[GridRow]:
         sell_price = build_target_sell_price(
             buy_price,
             tp_model=spec.tp_model,
-            sell_percent=spec.sell_percent,
             lower_price=min_buy_price,
             upper_price=max_buy_price,
             price_interval_count=grid_count - 1,

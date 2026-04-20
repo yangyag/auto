@@ -11,6 +11,7 @@ from core.models import Order, OrderExecutionType, OrderSide
 from exchange.base import BaseExchange
 from utils.decimal_utils import quantize_to_step
 from utils.logger import get_logger
+from utils.upbit_market import MIN_KRW_ORDER_AMOUNT
 
 logger = get_logger(__name__)
 KRW_ORDER_AMOUNT_STEP = Decimal("1")
@@ -209,6 +210,44 @@ class GridStrategy:
         else:
             self.grid.apply_sell(order.slot_index)
             logger.info(f"매도 체결 반영 → 슬롯 {order.slot_index}")
+
+    def apply_partial_sell(self, slot_index: int, filled_qty: Decimal) -> None:
+        """부분 매도 체결 후 잔여 보유 수량을 유지한다."""
+        self.grid.apply_sell(slot_index, filled_qty=filled_qty)
+        logger.info(
+            f"부분 매도 체결 반영 → 슬롯 {slot_index}: executed={filled_qty}"
+        )
+
+    def build_tp_sell_order_for_slot(self, slot_index: int) -> Order | None:
+        row = next((candidate for candidate in self.grid.rows if candidate.index == slot_index), None)
+        if row is None or not row.is_holding:
+            return None
+
+        effective_sell_price = self.grid.effective_sell_price(slot_index)
+        if effective_sell_price * row.held_qty < MIN_KRW_ORDER_AMOUNT:
+            logger.warning(
+                f"TP 지정가 매도 스킵 → 슬롯 {slot_index}: "
+                f"order_total={effective_sell_price * row.held_qty} < {MIN_KRW_ORDER_AMOUNT}"
+            )
+            return None
+
+        return Order(
+            slot_index=slot_index,
+            side=OrderSide.SELL,
+            price=effective_sell_price,
+            quantity=row.held_qty,
+            symbol=self.symbol,
+        )
+
+    def build_missing_tp_sell_orders(self, pending_sell_slot_indexes: set[int]) -> List[Order]:
+        orders = []
+        for row in self.grid.rows:
+            if not row.is_holding or row.index in pending_sell_slot_indexes:
+                continue
+            order = self.build_tp_sell_order_for_slot(row.index)
+            if order is not None:
+                orders.append(order)
+        return orders
 
     def _passes_inventory_target_gate(
         self,

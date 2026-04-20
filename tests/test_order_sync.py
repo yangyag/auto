@@ -85,9 +85,9 @@ class PendingOrderSyncTest(unittest.TestCase):
         rows = [
             self._make_phase6_row(
                 index=1,
-                buy_price="100",
+                buy_price="10000",
                 held_qty="0",
-                sell_price="110",
+                sell_price="11000",
                 planned_qty="1",
                 filled_at=None,
             )
@@ -101,9 +101,9 @@ class PendingOrderSyncTest(unittest.TestCase):
         rows = [
             GridRow(
                 index=1,
-                buy_price=Decimal("100"),
+                buy_price=Decimal("10000"),
                 held_qty=Decimal("0"),
-                sell_price=Decimal("110"),
+                sell_price=Decimal("11000"),
                 planned_qty=Decimal("1"),
             )
         ]
@@ -260,6 +260,7 @@ class PendingOrderSyncTest(unittest.TestCase):
             executed_volume=Decimal("0.95"),
             remaining_volume=Decimal("0"),
         )
+        exchange.place_order.return_value = "sell-uuid-1"
 
         completed = main.reconcile_pending_orders(
             exchange,
@@ -270,11 +271,13 @@ class PendingOrderSyncTest(unittest.TestCase):
         )
 
         self.assertEqual(completed, 1)
-        self.assertEqual(pending_orders, {})
+        self.assertIn("sell-uuid-1", pending_orders)
         self.assertEqual(grid.rows[0].held_qty, Decimal("0.95"))
         self.assertEqual(grid.rows[0].planned_qty, Decimal("1"))
         self.assertEqual(repository.load().rows[0].held_qty, Decimal("0.95"))
-        self.assertEqual(pending_repository.list_open(), [])
+        self.assertEqual(len(pending_repository.list_open()), 1)
+        self.assertEqual(pending_repository.list_open()[0].side, OrderSide.SELL)
+        self.assertEqual(pending_repository.list_open()[0].quantity, Decimal("0.95"))
 
     def test_reconcile_pending_orders_treats_cancel_with_executed_volume_as_filled(self):
         tmpdir, grid, strategy = self._build_strategy_with_empty_slot()
@@ -299,8 +302,9 @@ class PendingOrderSyncTest(unittest.TestCase):
             uuid="uuid-1",
             state="cancel",
             executed_volume=Decimal("0.90674"),
-            remaining_volume=Decimal("0"),
+            remaining_volume=Decimal("0.09326"),
         )
+        exchange.place_order.return_value = "sell-uuid-1"
 
         completed = main.reconcile_pending_orders(
             exchange,
@@ -311,11 +315,13 @@ class PendingOrderSyncTest(unittest.TestCase):
         )
 
         self.assertEqual(completed, 1)
-        self.assertEqual(pending_orders, {})
+        self.assertIn("sell-uuid-1", pending_orders)
         self.assertEqual(grid.rows[0].held_qty, Decimal("0.90674"))
         self.assertEqual(grid.rows[0].planned_qty, Decimal("1"))
         self.assertEqual(repository.load().rows[0].held_qty, Decimal("0.90674"))
-        self.assertEqual(pending_repository.list_open(), [])
+        self.assertEqual(len(pending_repository.list_open()), 1)
+        self.assertEqual(pending_repository.list_open()[0].side, OrderSide.SELL)
+        self.assertEqual(pending_repository.list_open()[0].quantity, Decimal("0.90674"))
 
     def test_reconcile_pending_orders_sets_filled_at_on_buy_fill_and_persists_it(self):
         tmpdir, grid, strategy = self._build_phase6_strategy_with_empty_slot()
@@ -340,6 +346,7 @@ class PendingOrderSyncTest(unittest.TestCase):
             executed_volume=Decimal("0.95"),
             remaining_volume=Decimal("0"),
         )
+        exchange.place_order.return_value = "sell-uuid-1"
 
         completed = main.reconcile_pending_orders(
             exchange,
@@ -350,7 +357,7 @@ class PendingOrderSyncTest(unittest.TestCase):
         )
 
         self.assertEqual(completed, 1)
-        self.assertEqual(pending_orders, {})
+        self.assertIn("sell-uuid-1", pending_orders)
         self.assertEqual(grid.rows[0].held_qty, Decimal("0.95"))
         self.assertIsNotNone(getattr(grid.rows[0], "filled_at", None))
         self.assertIsNotNone(grid.rows[0].filled_at.tzinfo)
@@ -413,6 +420,92 @@ class PendingOrderSyncTest(unittest.TestCase):
         self.assertIsNone(grid.rows[0].filled_at)
         self.assertIsNone(repository.load().rows[0].filled_at)
 
+    def test_reconcile_pending_orders_sell_partial_cancel_reopens_tp_sell_for_remaining_qty(self):
+        tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmpdir.cleanup)
+        filled_at = datetime(2026, 4, 18, 0, 0, tzinfo=timezone.utc)
+        rows = [
+            self._make_phase6_row(
+                index=1,
+                buy_price="10000",
+                held_qty="1",
+                sell_price="11000",
+                planned_qty="1",
+                filled_at=filled_at,
+            )
+        ]
+        grid = GridState.from_rows("KRW-BTC", rows)
+        strategy = GridStrategy(grid, Mock(), "KRW-BTC")
+        repository = InMemoryGridRepository(grid.to_snapshot())
+        pending_repository = InMemoryPendingOrderRepository()
+        runtime = main.GridStateRuntime(metadata=repository.save(grid.to_snapshot()).metadata)
+        exchange = Mock()
+        order = Order(
+            slot_index=1,
+            side=OrderSide.SELL,
+            price=Decimal("110"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+            order_id="uuid-1",
+        )
+        pending_orders = {"uuid-1": order}
+        pending_repository.add(order)
+        exchange.get_order_status.return_value = OrderStatus(
+            uuid="uuid-1",
+            state="cancel",
+            executed_volume=Decimal("0.4"),
+            remaining_volume=Decimal("0.6"),
+        )
+        exchange.place_order.return_value = "sell-uuid-2"
+
+        completed = main.reconcile_pending_orders(
+            exchange,
+            pending_orders,
+            strategy,
+            on_grid_updated=lambda: main.persist_grid_state(grid, repository, runtime),
+            pending_order_repository=pending_repository,
+        )
+
+        self.assertEqual(completed, 1)
+        self.assertEqual(grid.rows[0].held_qty, Decimal("0.6"))
+        self.assertEqual(grid.rows[0].filled_at, filled_at)
+        self.assertIn("sell-uuid-2", pending_orders)
+        self.assertEqual(pending_orders["sell-uuid-2"].side, OrderSide.SELL)
+        self.assertEqual(pending_orders["sell-uuid-2"].quantity, Decimal("0.6"))
+        self.assertEqual(repository.load().rows[0].held_qty, Decimal("0.6"))
+        self.assertEqual(len(pending_repository.list_open()), 1)
+
+    def test_ensure_tp_sell_orders_submits_missing_sell_for_existing_holding(self):
+        tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmpdir.cleanup)
+        rows = [
+            GridRow(
+                index=1,
+                buy_price=Decimal("10000"),
+                held_qty=Decimal("1"),
+                sell_price=Decimal("11000"),
+                planned_qty=Decimal("1"),
+            )
+        ]
+        grid = GridState.from_rows("KRW-BTC", rows)
+        strategy = GridStrategy(grid, Mock(), "KRW-BTC")
+        exchange = Mock()
+        exchange.place_order.return_value = "sell-uuid-1"
+        pending_orders = {}
+        pending_repository = InMemoryPendingOrderRepository()
+
+        submitted = main.ensure_tp_sell_orders(
+            exchange=exchange,
+            strategy=strategy,
+            pending_orders=pending_orders,
+            pending_order_repository=pending_repository,
+        )
+
+        self.assertEqual(submitted, 1)
+        self.assertIn("sell-uuid-1", pending_orders)
+        self.assertEqual(pending_orders["sell-uuid-1"].side, OrderSide.SELL)
+        self.assertEqual(len(pending_repository.list_open()), 1)
+
     def test_reconcile_pending_orders_keeps_wait_order_pending(self):
         tmpdir, grid, strategy = self._build_strategy_with_empty_slot()
         self.addCleanup(tmpdir.cleanup)
@@ -446,16 +539,16 @@ class PendingOrderSyncTest(unittest.TestCase):
         rows = [
             GridRow(
                 index=1,
-                buy_price=Decimal("105"),
+                buy_price=Decimal("10500"),
                 held_qty=Decimal("0"),
-                sell_price=Decimal("115"),
+                sell_price=Decimal("11550"),
                 planned_qty=Decimal("1"),
             ),
             GridRow(
                 index=2,
-                buy_price=Decimal("100"),
+                buy_price=Decimal("10000"),
                 held_qty=Decimal("0"),
-                sell_price=Decimal("110"),
+                sell_price=Decimal("11000"),
                 planned_qty=Decimal("1"),
             ),
         ]
@@ -496,11 +589,12 @@ class PendingOrderSyncTest(unittest.TestCase):
             )
 
         exchange.get_order_status.side_effect = get_order_status
+        exchange.place_order.side_effect = ["sell-uuid-1", "sell-uuid-2"]
 
         completed = main.reconcile_pending_orders(exchange, pending_orders, strategy)
 
         self.assertEqual(completed, 2)
-        self.assertEqual(pending_orders, {})
+        self.assertEqual(set(pending_orders), {"sell-uuid-1", "sell-uuid-2"})
         self.assertEqual(grid.rows[0].held_qty, Decimal("1"))
         self.assertEqual(grid.rows[1].held_qty, Decimal("1"))
         self.assertEqual(grid.rows[0].planned_qty, Decimal("1"))
@@ -607,7 +701,9 @@ class PendingOrderSyncTest(unittest.TestCase):
         )
 
         with patch.object(main.cfg, "MAX_DAILY_ORDERS", 10), \
-             patch.object(main.cfg, "MIN_BALANCE_RESERVE", Decimal("0")):
+             patch.object(main.cfg, "MIN_BALANCE_RESERVE", Decimal("0")), \
+             patch.object(main.cfg, "UPBIT_FEE_RATE", Decimal("0")), \
+             patch.object(main.cfg, "FEE_BUFFER_KRW", Decimal("0")):
             submitted = main.process_cycle_orders(
                 sell_orders=[sell_order],
                 buy_orders=[buy_order],
@@ -680,7 +776,9 @@ class PendingOrderSyncTest(unittest.TestCase):
         )
 
         with patch.object(main.cfg, "MAX_DAILY_ORDERS", 10), \
-             patch.object(main.cfg, "MIN_BALANCE_RESERVE", Decimal("0")):
+             patch.object(main.cfg, "MIN_BALANCE_RESERVE", Decimal("0")), \
+             patch.object(main.cfg, "UPBIT_FEE_RATE", Decimal("0")), \
+             patch.object(main.cfg, "FEE_BUFFER_KRW", Decimal("0")):
             submitted = main.process_cycle_orders(
                 sell_orders=[sell_order],
                 buy_orders=[buy_order],

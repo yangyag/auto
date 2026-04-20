@@ -17,7 +17,6 @@ def build_cash_only_grid(
     current_price,
     slot_count: int,
     first_buy_amount_krw,
-    sell_percent,
     tp_model: str | None = None,
     tp_k_base: Decimal | None = None,
     tp_k_floor: Decimal | None = None,
@@ -27,7 +26,6 @@ def build_cash_only_grid(
     upper = normalize_krw_price(upper_price)
     current = normalize_krw_price(current_price)
     first_buy_amount = to_decimal(first_buy_amount_krw)
-    raw_sell_percent = None if sell_percent is None else to_decimal(sell_percent)
 
     if slot_count <= 0:
         raise ValueError("slot_count는 1 이상이어야 합니다.")
@@ -39,8 +37,6 @@ def build_cash_only_grid(
         raise ValueError("current_price는 0보다 커야 합니다.")
     if first_buy_amount <= DECIMAL_ZERO:
         raise ValueError("first_buy_amount_krw는 0보다 커야 합니다.")
-    if raw_sell_percent is not None and raw_sell_percent <= DECIMAL_ZERO:
-        raise ValueError("sell_percent는 0보다 커야 합니다.")
 
     growth_ratio = Decimal(str(exp(log(float(upper / lower)) / slot_count)))
 
@@ -68,7 +64,6 @@ def build_cash_only_grid(
         sell_price = build_target_sell_price(
             buy_price,
             tp_model=tp_model,
-            sell_percent=raw_sell_percent,
             lower_price=lower,
             upper_price=upper,
             price_interval_count=slot_count,

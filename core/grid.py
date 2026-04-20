@@ -9,7 +9,6 @@ from typing import List, Optional
 
 import config.settings as cfg
 from core.grid_properties import (
-    build_sell_price,
     build_sell_price_from_k,
     normalize_tp_model,
     resolve_tp_k_values,
@@ -106,10 +105,13 @@ class GridState:
             row.held_qty = filled_qty if filled_qty is not None else row.planned_qty
             row.filled_at = self._normalize_timestamp(filled_at) or datetime.now(timezone.utc)
 
-    def apply_sell(self, slot_index: int):
-        """매도 체결: 보유 중 → 빈 슬롯으로 전환"""
+    def apply_sell(self, slot_index: int, filled_qty: Decimal | None = None):
+        """매도 체결: 전량 또는 부분 체결을 보유 슬롯에 반영"""
         row = self._get_row(slot_index)
         if row and row.is_holding:
+            if filled_qty is not None and filled_qty > DECIMAL_ZERO and filled_qty < row.held_qty:
+                row.held_qty -= filled_qty
+                return
             if row.planned_qty <= DECIMAL_ZERO:
                 reference_qty = self._get_uniform_planned_qty()
                 row.planned_qty = reference_qty if reference_qty is not None else row.held_qty
@@ -242,7 +244,6 @@ class GridState:
         *,
         now: datetime | None = None,
         tp_model: str | None = None,
-        sell_percent: Decimal | None = None,
         tp_k_base: Decimal | None = None,
         tp_k_floor: Decimal | None = None,
     ) -> Decimal:
@@ -250,7 +251,6 @@ class GridState:
         if not self.is_age_compressed_tp_active(
             slot_index,
             tp_model=tp_model,
-            sell_percent=sell_percent,
             tp_k_base=tp_k_base,
             tp_k_floor=tp_k_floor,
         ):
@@ -281,7 +281,6 @@ class GridState:
         slot_index: int,
         *,
         tp_model: str | None = None,
-        sell_percent: Decimal | None = None,
         tp_k_base: Decimal | None = None,
         tp_k_floor: Decimal | None = None,
     ) -> bool:
@@ -294,8 +293,6 @@ class GridState:
         except ValueError:
             return False
         if model != "k":
-            return False
-        if self._looks_like_percent_sell_grid(sell_percent=sell_percent):
             return False
         return self._matches_current_k_grid(
             tp_k_base=tp_k_base,
@@ -410,23 +407,6 @@ class GridState:
         if len(quantities) == 1:
             return next(iter(quantities))
         return None
-
-    def _looks_like_percent_sell_grid(self, *, sell_percent: Decimal | None) -> bool:
-        resolved_sell_percent = cfg.GRID_SELL_PERCENT if sell_percent is None else sell_percent
-        comparable_rows = [
-            row for row in self.rows
-            if row.buy_price > DECIMAL_ZERO and row.sell_price > row.buy_price
-        ]
-        if not comparable_rows:
-            return False
-
-        try:
-            return all(
-                build_sell_price(row.buy_price, resolved_sell_percent) == row.sell_price
-                for row in comparable_rows
-            )
-        except ValueError:
-            return False
 
     def _matches_current_k_grid(
         self,

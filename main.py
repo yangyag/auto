@@ -123,17 +123,52 @@ def reconcile_pending_orders(
             completed += 1
             logger.info(f"[체결] {format_order_log(order)} (id={order_id})")
             del pending_orders[order_id]
+            if order.side == OrderSide.BUY:
+                _submit_tp_sell_orders_for_slots(
+                    {order.slot_index},
+                    exchange=exchange,
+                    strategy=strategy,
+                    pending_orders=pending_orders,
+                    pending_order_repository=pending_order_repository,
+                )
             continue
 
         if status.is_cancelled:
+            executed_volume = status.executed_volume
+            had_partial_fill = executed_volume > DECIMAL_ZERO
+            if had_partial_fill:
+                if order.side == OrderSide.BUY:
+                    order.quantity = executed_volume
+                    order.filled_at = datetime.now(timezone.utc)
+                    strategy.apply_filled_order(order)
+                else:
+                    strategy.apply_partial_sell(order.slot_index, executed_volume)
             if pending_order_repository is not None:
                 pending_order_repository.mark_cancelled(order_id)
-            logger.warning(
-                f"[취소] {format_order_log(order)} 주문 취소 "
-                f"(id={order_id}, executed={format_decimal(status.executed_volume)}, "
-                f"remaining={format_decimal(status.remaining_volume)})"
-            )
+            if had_partial_fill and on_grid_updated is not None:
+                on_grid_updated()
+            if had_partial_fill:
+                completed += 1
+                logger.warning(
+                    f"[부분체결 후 취소] {format_order_log(order)} "
+                    f"(id={order_id}, executed={format_decimal(executed_volume)}, "
+                    f"remaining={format_decimal(status.remaining_volume)})"
+                )
+            else:
+                logger.warning(
+                    f"[취소] {format_order_log(order)} 주문 취소 "
+                    f"(id={order_id}, executed={format_decimal(status.executed_volume)}, "
+                    f"remaining={format_decimal(status.remaining_volume)})"
+                )
             del pending_orders[order_id]
+            if had_partial_fill:
+                _submit_tp_sell_orders_for_slots(
+                    {order.slot_index},
+                    exchange=exchange,
+                    strategy=strategy,
+                    pending_orders=pending_orders,
+                    pending_order_repository=pending_order_repository,
+                )
             continue
 
         logger.warning(
@@ -178,6 +213,72 @@ def submit_orders(
             logger.error(f"[실패] {format_order_log(order)} 주문 실패")
 
     return submitted
+
+
+def estimate_buy_required_krw(order: Order) -> Decimal:
+    required = order.required_krw
+    fee_rate = getattr(cfg, "UPBIT_FEE_RATE", DECIMAL_ZERO)
+    fee_buffer = getattr(cfg, "FEE_BUFFER_KRW", DECIMAL_ZERO)
+    return (required * (Decimal("1") + fee_rate)) + fee_buffer
+
+
+def _pending_sell_slot_indexes(pending_orders: dict[str, Order]) -> set[int]:
+    return {
+        order.slot_index
+        for order in pending_orders.values()
+        if order.side == OrderSide.SELL
+    }
+
+
+def _submit_tp_sell_orders_for_slots(
+    slot_indexes: set[int],
+    *,
+    exchange: BaseExchange,
+    strategy: GridStrategy,
+    pending_orders: dict[str, Order],
+    pending_order_repository: PendingOrderRepository | None = None,
+) -> int:
+    pending_sell_slots = _pending_sell_slot_indexes(pending_orders)
+    tp_sell_orders = []
+    for slot_index in sorted(slot_indexes):
+        if slot_index in pending_sell_slots:
+            continue
+        tp_sell_order = strategy.build_tp_sell_order_for_slot(slot_index)
+        if tp_sell_order is not None:
+            tp_sell_orders.append(tp_sell_order)
+
+    if not tp_sell_orders:
+        return 0
+
+    logger.info(f"TP 지정가 매도 주문 생성: {len(tp_sell_orders)}건")
+    return submit_orders(
+        tp_sell_orders,
+        exchange,
+        pending_orders,
+        pending_order_repository=pending_order_repository,
+    )
+
+
+def ensure_tp_sell_orders(
+    *,
+    exchange: BaseExchange,
+    strategy: GridStrategy,
+    pending_orders: dict[str, Order],
+    pending_order_repository: PendingOrderRepository | None = None,
+) -> int:
+    missing_tp_sell_orders = strategy.build_missing_tp_sell_orders(
+        pending_sell_slot_indexes=_pending_sell_slot_indexes(pending_orders),
+    )
+    if not missing_tp_sell_orders:
+        return 0
+
+    logger.info(f"누락된 TP 지정가 매도 주문 보강: {len(missing_tp_sell_orders)}건")
+    return submit_orders(
+        missing_tp_sell_orders,
+        exchange,
+        pending_orders,
+        pending_order_repository=pending_order_repository,
+    )
 
 
 def build_exchange() -> BaseExchange:
@@ -404,16 +505,19 @@ def check_risk(orders, exchange: BaseExchange, grid_state: GridState) -> list:
     for order in orders:
         if order.side == OrderSide.BUY:
             required = order.required_krw
+            estimated_required = estimate_buy_required_krw(order)
             if required < MIN_KRW_ORDER_AMOUNT:
                 logger.warning(f"[BLOCK] 슬롯 {order.slot_index} 최소 주문 금액 미달")
                 continue
-            if balance < required + cfg.MIN_BALANCE_RESERVE:
+            if balance < estimated_required + cfg.MIN_BALANCE_RESERVE:
                 logger.warning(
                     f"[BLOCK] 슬롯 {order.slot_index} 잔고 부족 "
-                    f"(필요: {format_decimal(required)}, 가용: {format_decimal(balance)})"
+                    f"(주문금액: {format_decimal(required)}, "
+                    f"수수료포함필요: {format_decimal(estimated_required)}, "
+                    f"가용: {format_decimal(balance)})"
                 )
                 continue
-            balance -= required  # 동일 루프 내 다음 주문 잔고 선반영
+            balance -= estimated_required  # 동일 루프 내 다음 주문 잔고 선반영
 
         approved.append(order)
 
@@ -539,6 +643,15 @@ def run():
                 if completed:
                     logger.info(grid_state.summary())
 
+                tp_sell_submitted = ensure_tp_sell_orders(
+                    exchange=exchange,
+                    strategy=strategy,
+                    pending_orders=pending_orders,
+                    pending_order_repository=pending_order_repository,
+                )
+                if tp_sell_submitted:
+                    daily_order_count += tp_sell_submitted
+
                 current_price = exchange.get_current_price(cfg.SYMBOL)
                 logger.info(f"현재가: {current_price}")
 
@@ -628,7 +741,6 @@ def run_grid_init(
     upper_price: Decimal,
     slot_count: int,
     first_buy_amount: Decimal,
-    sell_percent: Decimal,
     tp_model: str | None = None,
     tp_k_base: Decimal | None = None,
     tp_k_floor: Decimal | None = None,
@@ -663,7 +775,6 @@ def run_grid_init(
             current_price=live_price,
             slot_count=slot_count,
             first_buy_amount_krw=first_buy_amount,
-            sell_percent=sell_percent,
             tp_model=resolved_tp_model,
             tp_k_base=tp_k_base,
             tp_k_floor=tp_k_floor,
@@ -688,12 +799,8 @@ def run_grid_init(
     print(f"슬롯 수: {slot_count}")
     print(f"첫 칸 기준 매수금액: {format_decimal(first_buy_amount)} KRW")
     print(f"TP 모델: {resolved_tp_model}")
-    if resolved_tp_model == "percent":
-        print(f"매도 퍼센트: {format_decimal(sell_percent)}%")
-    else:
-        print(f"TP k_base: {format_decimal(tp_k_base or cfg.GRID_TP_K_BASE)}")
-        print(f"TP k_floor: {format_decimal(tp_k_floor or cfg.GRID_TP_K_FLOOR)}")
-        print(f"레거시 SELL_PERCENT(호환용): {format_decimal(sell_percent)}%")
+    print(f"TP k_base: {format_decimal(tp_k_base or cfg.GRID_TP_K_BASE)}")
+    print(f"TP k_floor: {format_decimal(tp_k_floor or cfg.GRID_TP_K_FLOOR)}")
     print(f"고정 수량: {format_decimal(rows[0].planned_qty)} BTC")
     print(f"총 배정 금액: {format_decimal(state.total_allocated_budget)} KRW")
     print(f"버전: {saved_snapshot.metadata.version}")
@@ -712,10 +819,9 @@ def build_cli_parser() -> argparse.ArgumentParser:
     grid_parser.add_argument("--upper-price", type=decimal_arg, default=cfg.GRID_UPPER_PRICE)
     grid_parser.add_argument("--slot-count", type=int, default=cfg.GRID_SLOT_COUNT)
     grid_parser.add_argument("--first-buy-amount", type=decimal_arg, default=cfg.GRID_FIRST_BUY_AMOUNT_KRW)
-    grid_parser.add_argument("--tp-model", choices=("k", "percent"), default=cfg.GRID_TP_MODEL)
+    grid_parser.add_argument("--tp-model", choices=("k",), default=cfg.GRID_TP_MODEL)
     grid_parser.add_argument("--tp-k-base", type=decimal_arg, default=cfg.GRID_TP_K_BASE)
     grid_parser.add_argument("--tp-k-floor", type=decimal_arg, default=cfg.GRID_TP_K_FLOOR)
-    grid_parser.add_argument("--sell-percent", type=decimal_arg, default=cfg.GRID_SELL_PERCENT)
     grid_parser.add_argument("--current-price", type=decimal_arg, default=None)
     grid_parser.add_argument("--force", action="store_true", help="기존 PostgreSQL 그리드 스냅샷을 덮어쓴다")
 
@@ -741,7 +847,6 @@ def main(argv: list[str] | None = None) -> int:
             upper_price=args.upper_price,
             slot_count=args.slot_count,
             first_buy_amount=args.first_buy_amount,
-            sell_percent=args.sell_percent,
             tp_model=args.tp_model,
             tp_k_base=args.tp_k_base,
             tp_k_floor=args.tp_k_floor,

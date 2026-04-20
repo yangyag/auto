@@ -1,6 +1,7 @@
 import unittest
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from unittest.mock import patch
 
 from core.grid import GridState
 from core.models import GridRow
@@ -155,6 +156,27 @@ class GridStatePhase6MetadataTest(unittest.TestCase):
         self.assertEqual(state.rows[0].held_qty, Decimal("0"))
         self.assertIsNone(state.rows[0].filled_at)
 
+    def test_apply_sell_with_partial_fill_keeps_remaining_qty_and_filled_at(self):
+        filled_at = datetime(2026, 4, 18, 0, 0, tzinfo=timezone.utc)
+        state = GridState.from_rows(
+            "KRW-BTC",
+            [
+                self._make_row(
+                    index=1,
+                    buy_price="100",
+                    held_qty="1",
+                    sell_price="110",
+                    planned_qty="1",
+                    filled_at=filled_at,
+                )
+            ],
+        )
+
+        state.apply_sell(1, filled_qty=Decimal("0.4"))
+
+        self.assertEqual(state.rows[0].held_qty, Decimal("0.6"))
+        self.assertEqual(state.rows[0].filled_at, filled_at)
+
     def test_effective_tp_k_steps_down_by_age_and_respects_floor(self):
         filled_at = datetime(2026, 4, 12, 0, 0, tzinfo=timezone.utc)
         state = GridState.from_rows(
@@ -229,11 +251,12 @@ class GridStatePhase6MetadataTest(unittest.TestCase):
         original_buy_prices = [row.buy_price for row in state.rows]
 
         try:
-            preview = state.build_recenter_preview(
-                current_price=Decimal("115"),
-                breakout_duration=timedelta(hours=12),
-                open_buy_order_count=1,
-            )
+            with patch("core.grid.cfg.MAX_OPERATING_BUDGET_KRW", Decimal("2")):
+                preview = state.build_recenter_preview(
+                    current_price=Decimal("115"),
+                    breakout_duration=timedelta(hours=12),
+                    open_buy_order_count=1,
+                )
         except AttributeError as exc:
             self.fail(f"GridState.build_recenter_preview is required for Phase 6: {exc}")
 

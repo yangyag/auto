@@ -47,6 +47,29 @@ class BalanceCommandTest(unittest.TestCase):
 
         self.assertEqual(approved, [sell_order])
 
+    def test_check_risk_includes_fee_buffer_in_required_buy_balance(self):
+        exchange = Mock()
+        exchange.get_balance.return_value = Decimal("10050")
+        grid_state = Mock()
+        grid_state.total_allocated_budget = Decimal("0")
+        buy_order = Order(
+            slot_index=1,
+            side=OrderSide.BUY,
+            price=Decimal("11000"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+            execution_type=OrderExecutionType.MARKET_BUY_BY_PRICE,
+            spend_amount=Decimal("10000"),
+        )
+
+        with patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", None), \
+             patch.object(main.cfg, "MIN_BALANCE_RESERVE", Decimal("0")), \
+             patch.object(main.cfg, "UPBIT_FEE_RATE", Decimal("0.0005")), \
+             patch.object(main.cfg, "FEE_BUFFER_KRW", Decimal("100")):
+            approved = main.check_risk([buy_order], exchange, grid_state)
+
+        self.assertEqual(approved, [])
+
     def test_run_balance_check_success(self):
         exchange = Mock()
         exchange.get_balance.return_value = Decimal("1000000")
@@ -121,9 +144,8 @@ class BalanceCommandTest(unittest.TestCase):
              patch.object(main.cfg, "GRID_SLOT_COUNT", 10), \
              patch.object(main.cfg, "GRID_FIRST_BUY_AMOUNT_KRW", Decimal("200000")), \
              patch.object(main.cfg, "GRID_TP_MODEL", "k"), \
-             patch.object(main.cfg, "GRID_TP_K_BASE", Decimal("11.0")), \
-             patch.object(main.cfg, "GRID_TP_K_FLOOR", Decimal("8.0")), \
-             patch.object(main.cfg, "GRID_SELL_PERCENT", Decimal("5")), \
+             patch.object(main.cfg, "GRID_TP_K_BASE", Decimal("9.0")), \
+             patch.object(main.cfg, "GRID_TP_K_FLOOR", Decimal("7.0")), \
              patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", Decimal("2000000")), \
              patch("main.build_exchange", return_value=exchange), \
              patch("main.build_grid_repository", return_value=repository):
@@ -134,7 +156,6 @@ class BalanceCommandTest(unittest.TestCase):
                     upper_price=Decimal("111137221"),
                     slot_count=10,
                     first_buy_amount=Decimal("200000"),
-                    sell_percent=Decimal("5"),
                     current_price=None,
                 )
 
@@ -144,8 +165,8 @@ class BalanceCommandTest(unittest.TestCase):
         self.assertEqual(saved_snapshot.symbol, "KRW-BTC")
         self.assertIn("저장 대상: postgres:auto_trading/krw-btc-live", stdout.getvalue())
         self.assertIn("TP 모델: k", stdout.getvalue())
-        self.assertIn("TP k_base: 11", stdout.getvalue())
-        self.assertIn("TP k_floor: 8", stdout.getvalue())
+        self.assertIn("TP k_base: 9", stdout.getvalue())
+        self.assertIn("TP k_floor: 7", stdout.getvalue())
         self.assertIn("고정 수량: 0.00183341 BTC", stdout.getvalue())
         self.assertIn("버전: 1", stdout.getvalue())
         self.assertIn("상태: 성공", stdout.getvalue())
@@ -169,9 +190,8 @@ class BalanceCommandTest(unittest.TestCase):
              patch.object(main.cfg, "GRID_SLOT_COUNT", 10), \
              patch.object(main.cfg, "GRID_FIRST_BUY_AMOUNT_KRW", Decimal("200000")), \
              patch.object(main.cfg, "GRID_TP_MODEL", "k"), \
-             patch.object(main.cfg, "GRID_TP_K_BASE", Decimal("11.0")), \
-             patch.object(main.cfg, "GRID_TP_K_FLOOR", Decimal("8.0")), \
-             patch.object(main.cfg, "GRID_SELL_PERCENT", Decimal("5")), \
+             patch.object(main.cfg, "GRID_TP_K_BASE", Decimal("9.0")), \
+             patch.object(main.cfg, "GRID_TP_K_FLOOR", Decimal("7.0")), \
              patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", Decimal("2000000")), \
              patch("main.build_exchange", return_value=exchange), \
              patch("main.build_grid_repository", return_value=repository):
@@ -182,7 +202,6 @@ class BalanceCommandTest(unittest.TestCase):
                     upper_price=Decimal("111137221"),
                     slot_count=10,
                     first_buy_amount=Decimal("200000"),
-                    sell_percent=Decimal("5"),
                     current_price=None,
                 )
 

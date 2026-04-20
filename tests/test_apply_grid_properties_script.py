@@ -55,7 +55,7 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             properties_path = Path(tmpdir) / "grid.properties"
             properties_path.write_text(
-                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\nSELL_PERCENT=5\n",
+                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\n",
                 encoding="utf-8",
             )
             result = subprocess.run(
@@ -85,8 +85,8 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
                 lower_price=Decimal("91623000"),
                 upper_price=Decimal("127886000"),
                 price_interval_count=19,
-                tp_k=Decimal("11.0"),
-                tp_k_floor=Decimal("8.0"),
+                tp_k=Decimal("9.0"),
+                tp_k_floor=Decimal("7.0"),
             ),
         )
         self.assertEqual(
@@ -97,8 +97,8 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
                 lower_price=Decimal("91623000"),
                 upper_price=Decimal("127886000"),
                 price_interval_count=19,
-                tp_k=Decimal("11.0"),
-                tp_k_floor=Decimal("8.0"),
+                tp_k=Decimal("9.0"),
+                tp_k_floor=Decimal("7.0"),
             ),
         )
         self.assertGreater(snapshot.rows[-1].planned_qty, snapshot.rows[0].planned_qty)
@@ -120,7 +120,7 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
         original = project_properties.read_text(encoding="utf-8") if project_properties.exists() else None
         try:
             project_properties.write_text(
-                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\nSELL_PERCENT=5\n",
+                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\n",
                 encoding="utf-8",
             )
             result = subprocess.run(

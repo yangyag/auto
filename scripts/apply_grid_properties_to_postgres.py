@@ -69,12 +69,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"symbol: {args.symbol}")
     print(f"rows: {len(rows)}")
     print(f"tp_model: {resolved_tp_model}")
-    if resolved_tp_model == "k":
-        print(f"tp_k_base: {spec.tp_k_base or cfg.GRID_TP_K_BASE}")
-        print(f"tp_k_floor: {spec.tp_k_floor or cfg.GRID_TP_K_FLOOR}")
-        print(f"legacy_sell_percent: {spec.sell_percent}")
-    else:
-        print(f"sell_percent: {spec.sell_percent}")
+    print(f"tp_k_base: {spec.tp_k_base or cfg.GRID_TP_K_BASE}")
+    print(f"tp_k_floor: {spec.tp_k_floor or cfg.GRID_TP_K_FLOOR}")
     print(f"top_buy_price: {rows[0].buy_price}")
     print(f"bottom_buy_price: {rows[-1].buy_price}")
     print(f"planned_buy_budget_total: {format_decimal(budget_summary.total)}")
