@@ -180,15 +180,26 @@ class GridPropertiesTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "슬롯 1 매수 금액이 업비트 최소 주문 금액보다 작습니다."):
             build_grid_rows_from_property_spec(spec)
 
-    def test_load_grid_property_spec_rejects_legacy_sell_percent(self):
+    def test_load_grid_property_spec_rejects_unknown_property(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "grid.properties"
             path.write_text(
-                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\nSELL_PERCENT=5\n",
+                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\nLEGACY_TP=5\n",
                 encoding="utf-8",
             )
 
-            with self.assertRaisesRegex(ValueError, "SELL_PERCENT는 더 이상 지원되지 않습니다"):
+            with self.assertRaisesRegex(ValueError, "grid.properties 지원하지 않는 항목: LEGACY_TP"):
+                load_grid_property_spec(path)
+
+    def test_load_grid_property_spec_rejects_other_unknown_property(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "grid.properties"
+            path.write_text(
+                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nBUY_AMOUNT_KRW=200000\nGRID_COUNT=20\nEXTRA_FLAG=1\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "grid.properties 지원하지 않는 항목: EXTRA_FLAG"):
                 load_grid_property_spec(path)
 
     def test_checked_in_grid_properties_align_with_runtime_k_defaults(self):

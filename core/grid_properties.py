@@ -22,6 +22,15 @@ DEFAULT_GRID_ALLOCATION_WEIGHTS = (
     DEFAULT_MIDDLE_THIRD_WEIGHT,
     DEFAULT_BOTTOM_THIRD_WEIGHT,
 )
+ALLOWED_GRID_PROPERTY_KEYS = {
+    "MIN_BUY_PRICE",
+    "MAX_BUY_PRICE",
+    "BUY_AMOUNT_KRW",
+    "GRID_COUNT",
+    "TP_MODEL",
+    "TP_K_BASE",
+    "TP_K_FLOOR",
+}
 
 
 @dataclass(frozen=True)
@@ -51,8 +60,9 @@ def load_grid_property_spec(path: str | Path) -> GridPropertySpec:
     ]
     if missing:
         raise ValueError(f"grid.properties 필수 항목 누락: {', '.join(missing)}")
-    if "SELL_PERCENT" in properties:
-        raise ValueError("SELL_PERCENT는 더 이상 지원되지 않습니다. k 기반 TP만 사용하세요.")
+    unknown = sorted(set(properties) - ALLOWED_GRID_PROPERTY_KEYS)
+    if unknown:
+        raise ValueError(f"grid.properties 지원하지 않는 항목: {', '.join(unknown)}")
 
     return GridPropertySpec(
         min_buy_price=to_decimal(properties["MIN_BUY_PRICE"]),

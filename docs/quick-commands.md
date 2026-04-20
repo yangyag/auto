@@ -141,7 +141,9 @@ MIN_BUY_PRICE=91623000
 MAX_BUY_PRICE=127886000
 BUY_AMOUNT_KRW=200000
 GRID_COUNT=20
-SELL_PERCENT=5
+TP_MODEL=k
+TP_K_BASE=9.0
+TP_K_FLOOR=7.0
 ```
 
 의미:
@@ -149,7 +151,9 @@ SELL_PERCENT=5
 - `MAX_BUY_PRICE`: 최상단 슬롯 buy_price
 - `BUY_AMOUNT_KRW`: 슬롯 평균 목표 매수금액
 - `GRID_COUNT`: 슬롯 개수
-- `SELL_PERCENT`: 매도 퍼센트, `5`는 `5%`를 뜻함
+- `TP_MODEL`: TP 계산 모드, 현재 운영 기준은 `k`
+- `TP_K_BASE`: 기본 TP `k`
+- `TP_K_FLOOR`: Age TP 최저 `k`
 
 주의:
 - `MIN_BUY_PRICE`, `MAX_BUY_PRICE`는 업비트 호가 단위에 맞는 값으로 넣어야 한다.
