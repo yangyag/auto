@@ -41,9 +41,9 @@ inventory-target gate 도 함께 적용된다.
 - 조건은 `previous_price < buy_price <= current_price`
 - 정확히 `1`개 empty 슬롯 상향 돌파일 때만 후보가 된다
 - 업비트 `ord_type=price` 시장가 예산매수를 쓴다
-- `UPWARD_BUY_ENABLED=True` 일 때만 켜지고 기본값은 `OFF` 다
+- `UPWARD_BUY_ENABLED=True` 일 때 켜지고, 현재 운영 기본값은 `ON` 이다
 
-기본 운영 전략은 이 기능을 꺼 둔 보수적 경로다.
+현재 운영 기본 경로는 이 기능을 켜 둔 상승 재진입 경로다.
 
 ## 매도 로직과 Age TP
 BUY 체결이 확인되면 해당 슬롯의 `effective_sell_price` 기준 지정가 SELL 주문을 즉시 제출한다. 따라서 현재 운영의 기본 매도 경로는 “현재가를 보고 그때 SELL을 새로 만든다”보다 “체결 직후 TP SELL을 미리 걸어둔다”에 가깝다. 보유 슬롯에 열린 SELL pending 주문이 없을 때만 누락된 TP 주문을 보강한다.

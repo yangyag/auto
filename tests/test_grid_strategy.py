@@ -212,7 +212,7 @@ class GridStrategyCrossingTest(unittest.TestCase):
         self.assertNotIn(3, [order.slot_index for order in buy_orders])
         self.assertEqual(sell_orders, [])
 
-    def test_does_not_buy_when_single_price_line_crosses_up_through_buy_line_by_default(self):
+    def test_buys_when_single_price_line_crosses_up_through_buy_line_by_default(self):
         rows = [
             GridRow(
                 index=1,
@@ -234,7 +234,7 @@ class GridStrategyCrossingTest(unittest.TestCase):
         strategy.evaluate(Decimal("95"))
         buy_orders, sell_orders = strategy.evaluate(Decimal("100"))
 
-        self.assertEqual(buy_orders, [])
+        self.assertEqual([order.slot_index for order in buy_orders], [2])
         self.assertEqual(sell_orders, [])
 
     def test_buys_when_single_price_line_crosses_up_through_buy_line_if_explicitly_enabled(self):

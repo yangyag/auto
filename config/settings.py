@@ -79,7 +79,7 @@ UPBIT_FEE_RATE = Decimal("0.0005")  # 매수 필요 KRW 추정에 반영할 업�
 FEE_BUFFER_KRW = Decimal("100")  # 수수료 외 추가 안전 버퍼
 
 # ── 전략 안전장치 / 재고 목표 ─────────────────────────────
-UPWARD_BUY_ENABLED = False   # 상승 1칸 돌파 시장가 매수. 기본값 OFF
+UPWARD_BUY_ENABLED = True    # 상승 1칸 돌파 시장가 매수. 기본값 ON
 UPWARD_SINGLE_SLOT_BUY_ENABLED = UPWARD_BUY_ENABLED
 INVENTORY_TARGET_Q_MIN = Decimal("0.10")
 INVENTORY_TARGET_Q_MAX = Decimal("0.85")
