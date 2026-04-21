@@ -36,6 +36,17 @@ class StockExchange(BaseExchange):
         # TODO: KIS API 등 실거래소 연동
         raise NotImplementedError("주식 거래소 get_holdings 미구현")
 
+    def get_open_order_ids(
+        self,
+        symbol: str,
+        *,
+        states: tuple[str, ...] | None = None,
+        limit: int = 100,
+    ) -> list[str]:
+        del symbol, states, limit
+        # TODO: KIS API 등 실거래소 연동
+        raise NotImplementedError("주식 거래소 get_open_order_ids 미구현")
+
     def get_minute_candle_closes(
         self,
         symbol: str,

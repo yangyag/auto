@@ -74,13 +74,20 @@ def persist_grid_state(
 
 
 def format_order_log(order: Order) -> str:
+    slot_prefix = f"슬롯{order.slot_index} " if order.slot_index > 0 else ""
+
     if order.is_market_buy_by_price:
         return (
-            f"{order.side.value} 슬롯{order.slot_index} 시장가 {format_decimal(order.required_krw)} KRW "
+            f"{order.side.value} {slot_prefix}시장가 {format_decimal(order.required_krw)} KRW "
             f"(trigger={format_decimal(order.price)}, qty={format_decimal(order.quantity)})"
         )
+    if order.is_market_sell_by_volume:
+        return (
+            f"{order.side.value} {slot_prefix}시장가 qty={format_decimal(order.quantity)} "
+            f"(trigger={format_decimal(order.price)})"
+        )
     return (
-        f"{order.side.value} 슬롯{order.slot_index} "
+        f"{order.side.value} {slot_prefix}"
         f"{format_decimal(order.price)} x {format_decimal(order.quantity)}"
     )
 

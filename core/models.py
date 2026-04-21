@@ -16,6 +16,7 @@ class OrderSide(Enum):
 class OrderExecutionType(Enum):
     LIMIT = "limit"
     MARKET_BUY_BY_PRICE = "market_buy_by_price"
+    MARKET_SELL_BY_VOLUME = "market_sell_by_volume"
 
 
 class EvalResult(Enum):
@@ -72,6 +73,10 @@ class Order:
     @property
     def is_market_buy_by_price(self) -> bool:
         return self.execution_type == OrderExecutionType.MARKET_BUY_BY_PRICE
+
+    @property
+    def is_market_sell_by_volume(self) -> bool:
+        return self.execution_type == OrderExecutionType.MARKET_SELL_BY_VOLUME
 
 
 @dataclass

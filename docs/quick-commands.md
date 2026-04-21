@@ -182,3 +182,17 @@ tail -f logs/trading-$(date +%F).log
 ```bash
 ./stop.sh && ./run.sh
 ```
+
+## 11) KRW-BTC 라이브 리셋 후 새 그리드 반영
+
+```bash
+.venv/bin/python scripts/reset_krw_btc_live.py
+```
+
+이 명령은 아래를 순서대로 수행한다:
+- `./stop.sh`
+- 업비트 `KRW-BTC` 미체결 주문 취소
+- BTC 전량 시장가 매도
+- `grid.properties` 기준 DB 그리드 재반영
+- 상태 출력
+- `./run.sh`

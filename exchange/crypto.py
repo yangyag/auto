@@ -412,6 +412,36 @@ class CryptoExchange(BaseExchange):
                 return qty
         return DECIMAL_ZERO
 
+    def get_open_order_ids(
+        self,
+        symbol: str,
+        *,
+        states: tuple[str, ...] | None = None,
+        limit: int = 100,
+    ) -> list[str]:
+        params: dict[str, Any] = {
+            "market": symbol,
+            "limit": max(int(limit), 1),
+            "order_by": "desc",
+        }
+        normalized_states = tuple(state for state in (states or ("wait", "watch")) if state)
+        if len(normalized_states) == 1:
+            params["state"] = normalized_states[0]
+        elif normalized_states:
+            params["states[]"] = list(normalized_states)
+
+        result = self._get("/v1/orders/open", params=params, auth=True)
+        if not isinstance(result, list):
+            raise UpbitAPIError("업비트 미체결 주문 조회 응답 형식이 올바르지 않습니다.")
+
+        order_ids = [
+            order["uuid"]
+            for order in result
+            if isinstance(order, dict) and order.get("uuid")
+        ]
+        logger.debug(f"{symbol} 미체결 주문 조회: count={len(order_ids)}")
+        return order_ids
+
     def get_minute_candle_closes(
         self,
         symbol: str,
@@ -469,6 +499,15 @@ class CryptoExchange(BaseExchange):
                 "price": format_decimal(order.required_krw),
                 "ord_type": "price",
             }
+        elif order.execution_type == OrderExecutionType.MARKET_SELL_BY_VOLUME:
+            if order.side != OrderSide.SELL:
+                raise ValueError("시장가 매도 수량 주문은 SELL 에서만 사용할 수 있습니다.")
+            body = {
+                "market": order.symbol,
+                "side": "ask",
+                "volume": format_decimal(order.quantity),
+                "ord_type": "market",
+            }
         else:
             body = {
                 "market": order.symbol,
@@ -509,9 +548,12 @@ class CryptoExchange(BaseExchange):
         return to_decimal(min_total)
 
     def _validate_order_with_chance(self, order: Order, chance: dict) -> None:
-        required_order_type = (
-            "price" if order.execution_type == OrderExecutionType.MARKET_BUY_BY_PRICE else "limit"
-        )
+        if order.execution_type == OrderExecutionType.MARKET_BUY_BY_PRICE:
+            required_order_type = "price"
+        elif order.execution_type == OrderExecutionType.MARKET_SELL_BY_VOLUME:
+            required_order_type = "market"
+        else:
+            required_order_type = "limit"
         supported_order_types = self._supported_order_types(chance, order.side)
         if supported_order_types and required_order_type not in supported_order_types:
             raise UpbitAPIError(
@@ -579,6 +621,11 @@ class CryptoExchange(BaseExchange):
                 f"주문 접수 [{side}] {order.symbol} 시장가 {format_decimal(order.required_krw)} KRW "
                 f"(trigger={format_decimal(order.price)}, qty={format_decimal(order.quantity)}, "
                 f"identifier={order.identifier})"
+            )
+        elif order.execution_type == OrderExecutionType.MARKET_SELL_BY_VOLUME:
+            log_message = (
+                f"주문 접수 [{side}] {order.symbol} 시장가 qty={format_decimal(order.quantity)} "
+                f"(trigger={format_decimal(order.price)}, identifier={order.identifier})"
             )
         else:
             log_message = (

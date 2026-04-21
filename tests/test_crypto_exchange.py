@@ -53,6 +53,16 @@ class CryptoExchangeBalanceTest(unittest.TestCase):
             "bid_account": {"balance": balance},
         }
 
+    @staticmethod
+    def _valid_sell_chance(balance: str = "1") -> dict:
+        return {
+            "market": {
+                "ask_types": ["limit", "market"],
+                "ask": {"min_total": "5000"},
+            },
+            "ask_account": {"balance": balance},
+        }
+
     def test_get_balance_returns_krw_balance(self):
         accounts = [
             {"currency": "BTC", "balance": "0.01234567"},
@@ -67,6 +77,27 @@ class CryptoExchangeBalanceTest(unittest.TestCase):
 
         with patch.object(self.exchange, "_get", return_value=accounts):
             self.assertEqual(self.exchange.get_balance(), Decimal("0"))
+
+    def test_get_open_order_ids_uses_states_array_and_parses_uuid(self):
+        payload = [
+            {"uuid": "uuid-1", "state": "wait"},
+            {"uuid": "uuid-2", "state": "watch"},
+        ]
+
+        with patch.object(self.exchange, "_get", return_value=payload) as get:
+            order_ids = self.exchange.get_open_order_ids("KRW-BTC")
+
+        self.assertEqual(order_ids, ["uuid-1", "uuid-2"])
+        get.assert_called_once_with(
+            "/v1/orders/open",
+            params={
+                "market": "KRW-BTC",
+                "limit": 100,
+                "order_by": "desc",
+                "states[]": ["wait", "watch"],
+            },
+            auth=True,
+        )
 
     def test_get_recent_minute_closes_calls_minute_candle_api_and_parses_trade_price(self):
         now_utc = datetime.now(timezone.utc)
@@ -224,6 +255,37 @@ class CryptoExchangeBalanceTest(unittest.TestCase):
         self.assertEqual(real_order_calls[0]["side"], "bid")
         self.assertEqual(real_order_calls[0]["price"], "10000")
         self.assertEqual(real_order_calls[0]["ord_type"], "price")
+
+    def test_place_order_uses_market_body_for_market_sell_by_volume(self):
+        order = Order(
+            slot_index=0,
+            side=OrderSide.SELL,
+            price=Decimal("110000000"),
+            quantity=Decimal("0.01"),
+            symbol="KRW-BTC",
+            execution_type=OrderExecutionType.MARKET_SELL_BY_VOLUME,
+        )
+        calls: list[tuple[str, dict]] = []
+
+        def fake_post(path, body):
+            calls.append((path, body))
+            if path == "/v1/orders/test":
+                return {"result": "ok"}
+            if path == "/v1/orders":
+                return {"uuid": "uuid-sell-1"}
+            self.fail(f"unexpected path: {path}")
+
+        with patch.object(self.exchange, "get_order_chance", return_value=self._valid_sell_chance()), \
+             patch.object(self.exchange, "_post", side_effect=fake_post):
+            order_id = self.exchange.place_order(order)
+
+        self.assertEqual(order_id, "uuid-sell-1")
+        real_order_calls = [body for path, body in calls if path == "/v1/orders"]
+        self.assertEqual(len(real_order_calls), 1)
+        self.assertEqual(real_order_calls[0]["market"], "KRW-BTC")
+        self.assertEqual(real_order_calls[0]["side"], "ask")
+        self.assertEqual(real_order_calls[0]["volume"], "0.01")
+        self.assertEqual(real_order_calls[0]["ord_type"], "market")
 
     def test_place_order_does_not_submit_real_order_when_order_test_fails(self):
         order = Order(

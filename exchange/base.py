@@ -29,6 +29,16 @@ class BaseExchange(ABC):
         """보유 수량 조회"""
 
     @abstractmethod
+    def get_open_order_ids(
+        self,
+        symbol: str,
+        *,
+        states: tuple[str, ...] | None = None,
+        limit: int = 100,
+    ) -> list[str]:
+        """체결 대기 주문 ID 목록 조회"""
+
+    @abstractmethod
     def get_minute_candle_closes(
         self,
         symbol: str,
