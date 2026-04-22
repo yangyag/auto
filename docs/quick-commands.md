@@ -72,24 +72,7 @@ Phase 2 하단 가중 배분을 확인할 때는 출력의 아래 항목을 같�
 python3 scripts/apply_grid_properties_to_postgres.py --properties-file my-grid.properties --force
 ```
 
-## 5) 현재 DB 상태를 export
-
-### 기본 export 파일 생성
-```bash
-python3 scripts/export_postgres_grid.py
-```
-
-기본 출력 파일:
-```text
-grid.postgres-export.txt
-```
-
-### 파일명을 직접 지정
-```bash
-python3 scripts/export_postgres_grid.py --output my-grid-export.txt
-```
-
-## 6) 현재 그리드 슬롯 상태 바로 보기
+## 5) 현재 그리드 슬롯 상태 바로 보기
 
 ### 현재 DB 상태 출력
 ```bash
@@ -103,7 +86,7 @@ python3 scripts/show_grid_state.py
 
 출력에는 조회 source, 슬롯별 `buy/held/sell/planned/planned_krw/status`, 총재고, 상단/하단/총 계획매수금액 요약이 포함된다.
 
-## 7) 테스트
+## 6) 테스트
 
 ### 전체 테스트
 ```bash
@@ -125,7 +108,7 @@ python3 -m unittest tests.test_postgres_grid_repository tests.test_postgres_orde
 python3 -m unittest tests.test_show_grid_state_script -v
 ```
 
-## 8) 설정 확인
+## 7) 설정 확인
 
 ### 현재 상태 저장 backend 확인
 ```bash
@@ -136,7 +119,7 @@ print(cfg.PGHOST, cfg.PGPORT, cfg.PGDATABASE, cfg.PGUSER, cfg.PGSCHEMA)
 PY
 ```
 
-## 9) grid.properties 예시
+## 8) grid.properties 예시
 
 ```properties
 MIN_BUY_PRICE=91623000
@@ -163,7 +146,7 @@ TP_K_FLOOR=7.0
 - `MIN_BUY_PRICE`, `MAX_BUY_PRICE`는 업비트 호가 단위에 맞는 값으로 넣어야 한다.
 - 안 맞으면 스크립트가 에러를 낸다.
 
-## 10) 제일 자주 쓸 명령 3개
+## 9) 제일 자주 쓸 명령 3개
 
 ### 그리드 반영
 ```bash
@@ -185,7 +168,7 @@ tail -f logs/trading-$(date +%F).log
 ./stop.sh && ./run.sh
 ```
 
-## 11) KRW-BTC 라이브 리셋 후 새 그리드 반영
+## 10) KRW-BTC 라이브 리셋 후 새 그리드 반영
 
 ```bash
 .venv/bin/python scripts/reset_krw_btc_live.py
