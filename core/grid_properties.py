@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import config.settings as cfg
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal, ROUND_CEILING, ROUND_DOWN, ROUND_FLOOR, localcontext
 from math import exp, log
 from pathlib import Path
 
@@ -27,6 +27,7 @@ ALLOWED_GRID_PROPERTY_KEYS = {
     "MAX_BUY_PRICE",
     "TOTAL_BUDGET_KRW",
     "GRID_COUNT",
+    "GRID_STEP_PCT",
     "TP_MODEL",
     "TP_K_BASE",
     "TP_K_FLOOR",
@@ -44,6 +45,43 @@ class GridPropertySpec:
     tp_k_floor: Decimal | None = None
 
 
+def _resolve_grid_count_from_step_pct(
+    min_buy_price: Decimal,
+    max_buy_price: Decimal,
+    step_pct: Decimal,
+) -> int:
+    if step_pct <= DECIMAL_ZERO:
+        raise ValueError("GRID_STEP_PCT는 0보다 커야 합니다.")
+    if min_buy_price <= DECIMAL_ZERO:
+        raise ValueError("MIN_BUY_PRICE는 0보다 커야 합니다.")
+    if max_buy_price <= min_buy_price:
+        raise ValueError("MAX_BUY_PRICE는 MIN_BUY_PRICE보다 커야 합니다.")
+
+    with localcontext() as ctx:
+        ctx.prec = max(ctx.prec, 80)
+
+        price_log_span = (max_buy_price / min_buy_price).ln()
+        target_log_step = (Decimal("1") + (step_pct / Decimal("100"))).ln()
+        raw_intervals = price_log_span / target_log_step
+
+        lower_candidate = max(1, int(raw_intervals.to_integral_value(rounding=ROUND_FLOOR)))
+        upper_candidate = max(1, int(raw_intervals.to_integral_value(rounding=ROUND_CEILING)))
+        candidates = sorted({lower_candidate, upper_candidate})
+
+        best_interval_count = candidates[0]
+        best_error = abs((price_log_span / Decimal(best_interval_count)) - target_log_step)
+
+        for candidate in candidates[1:]:
+            candidate_error = abs((price_log_span / Decimal(candidate)) - target_log_step)
+            if candidate_error < best_error or (
+                candidate_error == best_error and candidate > best_interval_count
+            ):
+                best_interval_count = candidate
+                best_error = candidate_error
+
+    return best_interval_count + 1
+
+
 def load_grid_property_spec(path: str | Path) -> GridPropertySpec:
     properties: dict[str, str] = {}
     file_path = Path(path)
@@ -55,7 +93,7 @@ def load_grid_property_spec(path: str | Path) -> GridPropertySpec:
         properties[key.strip()] = value.strip()
 
     missing = [
-        key for key in ("MIN_BUY_PRICE", "MAX_BUY_PRICE", "TOTAL_BUDGET_KRW", "GRID_COUNT")
+        key for key in ("MIN_BUY_PRICE", "MAX_BUY_PRICE", "TOTAL_BUDGET_KRW")
         if key not in properties or not properties[key]
     ]
     if missing:
@@ -64,11 +102,29 @@ def load_grid_property_spec(path: str | Path) -> GridPropertySpec:
     if unknown:
         raise ValueError(f"grid.properties 지원하지 않는 항목: {', '.join(unknown)}")
 
+    grid_count_value = properties.get("GRID_COUNT") or None
+    grid_step_pct_value = properties.get("GRID_STEP_PCT") or None
+    if grid_count_value and grid_step_pct_value:
+        raise ValueError("GRID_STEP_PCT와 GRID_COUNT는 동시에 지정할 수 없습니다.")
+    if not grid_count_value and not grid_step_pct_value:
+        raise ValueError("grid.properties 필수 항목 누락: GRID_COUNT 또는 GRID_STEP_PCT")
+
+    min_buy_price = to_decimal(properties["MIN_BUY_PRICE"])
+    max_buy_price = to_decimal(properties["MAX_BUY_PRICE"])
+    if grid_step_pct_value:
+        grid_count = _resolve_grid_count_from_step_pct(
+            min_buy_price=min_buy_price,
+            max_buy_price=max_buy_price,
+            step_pct=to_decimal(grid_step_pct_value),
+        )
+    else:
+        grid_count = int(grid_count_value)
+
     return GridPropertySpec(
-        min_buy_price=to_decimal(properties["MIN_BUY_PRICE"]),
-        max_buy_price=to_decimal(properties["MAX_BUY_PRICE"]),
+        min_buy_price=min_buy_price,
+        max_buy_price=max_buy_price,
         total_budget_krw=to_decimal(properties["TOTAL_BUDGET_KRW"]),
-        grid_count=int(properties["GRID_COUNT"]),
+        grid_count=grid_count,
         tp_model=properties.get("TP_MODEL") or DEFAULT_TP_MODEL,
         tp_k_base=to_decimal(properties["TP_K_BASE"]) if properties.get("TP_K_BASE") else None,
         tp_k_floor=to_decimal(properties["TP_K_FLOOR"]) if properties.get("TP_K_FLOOR") else None,

@@ -18,6 +18,8 @@ from utils.decimal_utils import format_decimal
 
 
 class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
+    STEP_PCT_FOR_20_SLOTS = "1.770527625862"
+
     def _script_args(self, *extra_args):
         return [
             sys.executable,
@@ -40,30 +42,16 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
             "--force",
         ]
 
-    def setUp(self):
-        self.config = postgres_test_config()
-        apply_test_schema(self.config.PGSCHEMA)
-        self.project_root = Path(__file__).resolve().parents[1]
-        self.env = os.environ.copy()
-        self.env["PYTHONPATH"] = str(self.project_root)
-        self.env["PGPASSWORD"] = self.config.PGPASSWORD
-
-    def tearDown(self):
-        drop_test_schema(self.config.PGSCHEMA)
-
-    def test_script_reads_properties_and_writes_grid_to_postgres(self):
+    def _run_script_with_properties(self, properties_text, *, cwd=None):
         with tempfile.TemporaryDirectory() as tmpdir:
             properties_path = Path(tmpdir) / "grid.properties"
-            properties_path.write_text(
-                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nTOTAL_BUDGET_KRW=4000000\nGRID_COUNT=20\n",
-                encoding="utf-8",
-            )
+            properties_path.write_text(properties_text, encoding="utf-8")
             result = subprocess.run(
                 self._script_args(
                     "--properties-file",
                     str(properties_path),
                 ),
-                cwd=self.project_root,
+                cwd=self.project_root if cwd is None else cwd,
                 env=self.env,
                 capture_output=True,
                 text=True,
@@ -72,7 +60,15 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
 
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         repository = PostgresGridRepository.from_config(self.config)
-        snapshot = repository.load()
+        return result, repository.load()
+
+    def _grid_signature(self, snapshot):
+        return [
+            (row.index, row.buy_price, row.sell_price, row.planned_qty)
+            for row in snapshot.rows
+        ]
+
+    def _assert_20_slot_grid(self, snapshot):
         self.assertEqual(snapshot.symbol, "KRW-BTC")
         self.assertEqual(len(snapshot.rows), 20)
         self.assertEqual(snapshot.rows[0].buy_price, Decimal("127886000"))
@@ -109,12 +105,45 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
         top_budget = snapshot.rows[0].buy_price * snapshot.rows[0].planned_qty
         bottom_budget = snapshot.rows[-1].buy_price * snapshot.rows[-1].planned_qty
         total_budget = sum((row.buy_price * row.planned_qty for row in snapshot.rows), Decimal("0"))
-        self.assertIn("rows: 20", result.stdout)
-        self.assertIn("top_buy_price: 127886000", result.stdout)
-        self.assertIn("bottom_buy_price: 91623000", result.stdout)
-        self.assertIn(f"planned_buy_budget_total: {format_decimal(total_budget)}", result.stdout)
-        self.assertIn(f"top_slot_planned_buy_budget: {format_decimal(top_budget)}", result.stdout)
-        self.assertIn(f"bottom_slot_planned_buy_budget: {format_decimal(bottom_budget)}", result.stdout)
+        return top_budget, bottom_budget, total_budget
+
+    def setUp(self):
+        self.config = postgres_test_config()
+        apply_test_schema(self.config.PGSCHEMA)
+        self.project_root = Path(__file__).resolve().parents[1]
+        self.env = os.environ.copy()
+        self.env["PYTHONPATH"] = str(self.project_root)
+        self.env["PGPASSWORD"] = self.config.PGPASSWORD
+
+    def tearDown(self):
+        drop_test_schema(self.config.PGSCHEMA)
+
+    def test_script_reads_properties_and_writes_grid_to_postgres(self):
+        step_pct_properties = (
+            "MIN_BUY_PRICE=91623000\n"
+            "MAX_BUY_PRICE=127886000\n"
+            "TOTAL_BUDGET_KRW=4000000\n"
+            f"GRID_STEP_PCT={self.STEP_PCT_FOR_20_SLOTS}\n"
+        )
+        count_properties = (
+            "MIN_BUY_PRICE=91623000\n"
+            "MAX_BUY_PRICE=127886000\n"
+            "TOTAL_BUDGET_KRW=4000000\n"
+            "GRID_COUNT=20\n"
+        )
+
+        step_result, step_snapshot = self._run_script_with_properties(step_pct_properties)
+        count_result, count_snapshot = self._run_script_with_properties(count_properties)
+
+        self.assertEqual(self._grid_signature(step_snapshot), self._grid_signature(count_snapshot))
+        top_budget, bottom_budget, total_budget = self._assert_20_slot_grid(step_snapshot)
+        self.assertIn("rows: 20", step_result.stdout)
+        self.assertIn("top_buy_price: 127886000", step_result.stdout)
+        self.assertIn("bottom_buy_price: 91623000", step_result.stdout)
+        self.assertIn(f"planned_buy_budget_total: {format_decimal(total_budget)}", step_result.stdout)
+        self.assertIn(f"top_slot_planned_buy_budget: {format_decimal(top_budget)}", step_result.stdout)
+        self.assertIn(f"bottom_slot_planned_buy_budget: {format_decimal(bottom_budget)}", step_result.stdout)
+        self.assertIn("rows: 20", count_result.stdout)
 
     def test_script_uses_project_root_grid_properties_when_run_from_scripts_dir(self):
         project_properties = self.project_root / "grid.properties"

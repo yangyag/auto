@@ -85,13 +85,12 @@ Phase 7 기준 주문 제출 경로는 아래 순서다.
 rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단에 대한 bounded backoff 로만 다룬다. `POST /v1/orders` timeout 또는 network 오류처럼 체결 여부가 모호한 경우는 자동 재시도하지 않는다.
 
 ## 그리드 생성 경로
-`main.py init-grid`와 `grid.properties`는 같은 총예산 기반 초기화 계약을 사용한다.
-
-- 입력 기준은 `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `TOTAL_BUDGET_KRW`, `GRID_COUNT`다.
+- `main.py init-grid`는 슬롯 개수 기반이다.
+- `grid.properties`는 `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `TOTAL_BUDGET_KRW`와 `GRID_COUNT` 또는 `GRID_STEP_PCT` 중 정확히 하나를 받는다.
 - `TOTAL_BUDGET_KRW`를 상단/중단/하단 `0.7x / 1.0x / 1.3x` 가중치로 정규화 배분한다.
 - 각 슬롯 `planned_qty`는 `slot_budget / buy_price` 기준 소수 BTC 단위 내림으로 계산한다.
 
-즉 `GRID_COUNT`는 유지하고, 슬롯별 수량은 총예산과 가격대에 따라 달라진다.
+`GRID_COUNT`는 슬롯 수를 직접 고정할 때 쓰고, `GRID_STEP_PCT`는 기존 슬롯 간격을 비율로 그대로 복원할 때 쓴다.
 
 운영 중 예산이나 그리드를 다시 세팅할 때는 단순히 DB 그리드만 덮어쓰지 말고, 가능하면 `scripts/reset_krw_btc_live.py` 경로를 사용한다.
 
@@ -120,7 +119,7 @@ rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단
 현재 판의 성격은 공격적 수익 극대화보다 자본 점유와 추세 리스크를 더 강하게 제어하는 쪽에 가깝다.
 
 ## 핵심 설정 의미
-- `GRID_TOTAL_BUDGET_KRW` / `--total-budget` / `TOTAL_BUDGET_KRW`: `init-grid`와 `grid.properties`가 공유하는 총예산 입력값이다.
+- `GRID_TOTAL_BUDGET_KRW` / `--total-budget` / `TOTAL_BUDGET_KRW`: `init-grid`와 `grid.properties`가 공유하는 총예산 입력값이다. `init-grid`는 슬롯 수 기반이다.
 - `MAX_TOTAL_BUDGET_KRW`: 전체 그리드 총배정금액 한도 검사에 사용한다.
 - `MAX_OPERATING_BUDGET_KRW`: 재고 비율 `q_current` 계산 분모다.
 - `UPBIT_FEE_RATE`, `FEE_BUFFER_KRW`: 매수 필요 KRW 추정에 반영하는 수수료/안전 버퍼다.
