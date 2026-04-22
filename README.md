@@ -2,6 +2,37 @@
 
 Python 기반 그리드 자동매매 시스템이다. 현재 기준 구현은 업비트 `KRW-BTC`와 PostgreSQL 상태 저장소를 전제로 하며, 가격의 절대값이 아니라 poll 구간에서 `buy_price`와 `sell_price`를 어떻게 교차했는지로 매수와 매도를 판단한다. 주문이 접수됐다고 바로 상태를 바꾸지 않고, 업비트 재조회 결과가 `done`으로 확인될 때만 그리드 상태를 갱신한다. BUY 체결이 확인되면 해당 슬롯의 TP 지정가 SELL 주문을 즉시 생성해 pending 으로 관리한다.
 
+## 파일 구성 및 역할
+
+이 시스템은 기능별로 모듈화되어 있으며, 각 폴더의 주요 `.py` 파일 역할은 다음과 같다.
+
+| 분류 | 파일 | 역할 설명 |
+| :--- | :--- | :--- |
+| **Root** | `main.py` | 프로그램 진입점. CLI 커맨드(run, init-grid 등) 처리 및 루프 실행 |
+| **core/** | `grid.py` | 그리드 슬롯의 상태(`GridState`) 관리 및 업데이트 로직 |
+| | `grid_builder.py` | 설정된 속성값에 따라 신규 그리드 슬롯(`GridRow`)을 생성 및 분배 |
+| | `grid_properties.py` | 그리드 범위, 예산 가중치 등 그리드 명세(`GridPropertySpec`) 정의 |
+| | `models.py` | 그리드 행, 주문 정보, 주문 상태 등 공용 데이터 모델 및 Enum 정의 |
+| **strategy/** | `grid_strategy.py` | 매수/매도 진입 판정, 재고 게이트 적용 등 핵심 트레이딩 전략 로직 |
+| | `breakout_guard.py` | 캔들 데이터를 분석하여 급등락 시 신규 매수를 차단하는 가드 로직 |
+| | `recenter_preview.py` | 현재가를 기준으로 그리드 재배치(Recenter) 시뮬레이션 및 결과 계산 |
+| **storage/** | `postgres_grid_repository.py` | PostgreSQL을 이용한 그리드 상태(슬롯별 수량, 가격 등)의 영속성 관리 |
+| | `postgres_order_repository.py` | 체결 대기 중인 주문(Pending Orders)의 DB CRUD 처리 |
+| | `factory.py` | 설정에 따라 적절한 저장소(Repository) 인스턴스를 생성하는 팩토리 |
+| | `interfaces.py` | 저장소 계층의 일관성을 위한 추상 인터페이스 정의 |
+| | `postgres_common.py` | DB 연결 설정 및 트랜잭션 관리를 위한 공통 유틸리티 |
+| **exchange/** | `crypto.py` | 업비트(Upbit) API를 연동하여 실제 주문 제출 및 상태 조회 구현 |
+| | `base.py` | 거래소 연동을 위한 공통 추상 클래스(`BaseExchange`) 정의 |
+| **scripts/** | `reset_krw_btc_live.py` | 운영 중인 그리드를 초기화하고 자산을 정리하여 재시작하는 운영 스크립트 |
+| | `show_grid_state.py` | 현재 DB에 저장된 그리드와 주문의 상태를 요약해서 터미널에 출력 |
+| | `apply_grid_properties_to_postgres.py` | `grid.properties` 파일의 설정을 DB의 그리드 테이블에 강제 반영 |
+| | `preview_recenter_plan.py` | 실제 재배치 전 예상되는 변경 사항을 미리 검토하기 위한 스크립트 |
+| **utils/** | `upbit_market.py` | 업비트 마켓의 최소 주문 단위, 호가 단위 등 시장 정보 관리 |
+| | `grid_reporting.py` | 수익률, 재고 현황 등 그리드 운영 성과 리포팅 유틸리티 |
+| | `decimal_utils.py` | 정밀한 수치 계산을 위한 Decimal 변환 및 절사(Truncate) 도구 |
+| | `logger.py` | KST 기준 로그 포맷팅 및 파일/콘솔 로깅 설정 |
+| **config/** | `settings.py` | `.env` 환경 변수 로드 및 시스템 전역 설정 값 관리 |
+
 ## 전략 개요
 - 그리드는 빈 슬롯과 보유 슬롯의 집합으로 운영된다.
 - 빈 슬롯은 하락 교차에서 매수 후보가 되고, 보유 슬롯은 목표 매도 가격 이상에서 매도 후보가 된다.
