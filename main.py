@@ -6,7 +6,7 @@ import sys
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Callable
 
@@ -613,6 +613,19 @@ def process_cycle_orders(
     return submitted_total
 
 
+def reset_daily_order_count_if_new_day(
+    current_order_day: date,
+    daily_order_count: int,
+    *,
+    now: datetime | None = None,
+) -> tuple[date, int]:
+    today = (now or datetime.now(tz=KST)).astimezone(KST).date()
+    if today != current_order_day:
+        logger.info("[ORDER_LIMIT] 일일 주문 카운터 리셋")
+        return today, 0
+    return current_order_day, daily_order_count
+
+
 def run():
     logger.info("=== 그리드 자동매매 시작 ===")
 
@@ -627,6 +640,7 @@ def run():
         strategy = GridStrategy(grid_state, exchange, cfg.SYMBOL)
         persist_current_grid = lambda: persist_grid_state(grid_state, grid_repository, runtime)
 
+        current_order_day = datetime.now(tz=KST).date()
         daily_order_count = 0
         pending_order_repository = build_pending_order_repository(cfg)
         pending_orders = {
@@ -639,6 +653,11 @@ def run():
 
         while True:
             try:
+                current_order_day, daily_order_count = reset_daily_order_count_if_new_day(
+                    current_order_day,
+                    daily_order_count,
+                )
+
                 refresh_grid_state_if_changed(grid_state, grid_repository, runtime)
 
                 completed = reconcile_pending_orders(

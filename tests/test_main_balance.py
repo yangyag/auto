@@ -1,6 +1,7 @@
 import io
 import unittest
 from contextlib import redirect_stdout
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from unittest.mock import Mock, patch
 
@@ -11,6 +12,28 @@ from storage.interfaces import GridSnapshot, RepositoryMetadata
 
 
 class BalanceCommandTest(unittest.TestCase):
+
+    def test_reset_daily_order_count_keeps_same_day_count(self):
+        current_day, daily_order_count = main.reset_daily_order_count_if_new_day(
+            date(2026, 4, 22),
+            17,
+            now=datetime(2026, 4, 22, 9, 0, tzinfo=main.KST),
+        )
+
+        self.assertEqual(current_day, date(2026, 4, 22))
+        self.assertEqual(daily_order_count, 17)
+
+    def test_reset_daily_order_count_resets_when_kst_day_changes(self):
+        with patch.object(main.logger, "info") as logger_info:
+            current_day, daily_order_count = main.reset_daily_order_count_if_new_day(
+                date(2026, 4, 22),
+                17,
+                now=datetime(2026, 4, 22, 15, 1, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(current_day, date(2026, 4, 23))
+        self.assertEqual(daily_order_count, 0)
+        logger_info.assert_called_once_with("[ORDER_LIMIT] 일일 주문 카운터 리셋")
 
     def test_validate_grid_state_skips_budget_check_when_limit_disabled(self):
         state = Mock()
