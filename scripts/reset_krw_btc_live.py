@@ -19,6 +19,9 @@ from main import build_exchange
 from storage.factory import build_pending_order_repository
 from utils.decimal_utils import DECIMAL_ZERO, format_decimal
 from utils.upbit_market import MIN_KRW_ORDER_AMOUNT
+from utils.logger import get_logger
+
+logger = get_logger("reset_krw_btc_live")
 
 DEFAULT_ORDER_WAIT_SECONDS = 30
 DEFAULT_ORDER_POLL_SECONDS = 1.0
@@ -42,9 +45,9 @@ def run_project_command(args: list[str], *, env: dict[str, str] | None = None) -
         text=True,
     )
     if completed.stdout:
-        print(completed.stdout.rstrip())
+        logger.info(completed.stdout.rstrip())
     if completed.stderr:
-        print(completed.stderr.rstrip(), file=sys.stderr)
+        logger.error(completed.stderr.rstrip())
 
 
 def print_runtime_snapshot(exchange) -> None:
@@ -53,12 +56,12 @@ def print_runtime_snapshot(exchange) -> None:
     current_price = exchange.get_current_price(cfg.SYMBOL)
     open_order_ids = exchange.get_open_order_ids(cfg.SYMBOL)
 
-    print("=== 런타임 스냅샷 ===")
-    print(f"symbol: {cfg.SYMBOL}")
-    print(f"current_price: {format_decimal(current_price)}")
-    print(f"krw_balance: {format_decimal(krw_balance)}")
-    print(f"holdings: {format_decimal(holdings)}")
-    print(f"live_open_orders: {len(open_order_ids)}")
+    logger.info("=== 런타임 스냅샷 ===")
+    logger.info(f"symbol: {cfg.SYMBOL}")
+    logger.info(f"current_price: {format_decimal(current_price)}")
+    logger.info(f"krw_balance: {format_decimal(krw_balance)}")
+    logger.info(f"holdings: {format_decimal(holdings)}")
+    logger.info(f"live_open_orders: {len(open_order_ids)}")
 
 
 def cancel_open_orders(
@@ -69,7 +72,7 @@ def cancel_open_orders(
     poll_interval: float = DEFAULT_ORDER_POLL_SECONDS,
 ) -> None:
     open_order_ids = exchange.get_open_order_ids(cfg.SYMBOL)
-    print(f"취소 대상 live open orders: {len(open_order_ids)}")
+    logger.info(f"취소 대상 live open orders: {len(open_order_ids)}")
 
     for order_id in open_order_ids:
         if not exchange.cancel_order(order_id):
@@ -93,7 +96,7 @@ def cancel_open_orders(
     for order in repository_open_orders:
         if order.order_id is not None:
             pending_order_repository.mark_cancelled(order.order_id)
-    print(f"pending repository open orders 정리: {len(repository_open_orders)}")
+    logger.info(f"pending repository open orders 정리: {len(repository_open_orders)}")
 
 
 def wait_for_terminal_order_status(
@@ -121,13 +124,13 @@ def liquidate_btc_position(
 ) -> str | None:
     quantity = exchange.get_holdings(cfg.SYMBOL)
     if quantity <= DECIMAL_ZERO:
-        print("BTC 보유 수량이 없어 전량 매도를 건너뜁니다.")
+        logger.info("BTC 보유 수량이 없어 전량 매도를 건너뜁니다.")
         return None
 
     current_price = exchange.get_current_price(cfg.SYMBOL)
     notional = current_price * quantity
     if notional < MIN_KRW_ORDER_AMOUNT:
-        print(
+        logger.info(
             "BTC 보유 금액이 업비트 최소 주문 금액보다 작아 전량 매도를 건너뜁니다: "
             f"{format_decimal(notional)}"
         )
@@ -158,7 +161,7 @@ def liquidate_btc_position(
         )
 
     remaining_holdings = exchange.get_holdings(cfg.SYMBOL)
-    print(
+    logger.info(
         "BTC 전량 시장가 매도 완료: "
         f"order_id={order_id}, remaining_holdings={format_decimal(remaining_holdings)}"
     )
@@ -226,5 +229,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except (RuntimeError, UpbitAPIError, subprocess.CalledProcessError) as exc:
-        print(f"상태: 실패\n사유: {exc}", file=sys.stderr)
+        logger.error(f"상태: 실패\n사유: {exc}")
         raise SystemExit(1)
