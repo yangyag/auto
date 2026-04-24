@@ -110,6 +110,80 @@ class MainEventLoopTest(unittest.TestCase):
         self.assertEqual(price_event_state.last_event_at, 11.0)
         self.assertEqual(run_cycle.call_args.kwargs["current_price"], Decimal("102"))
 
+    def test_price_event_loop_waits_for_newer_event_when_throttle_sleep_leaves_stale_price(self):
+        """throttle sleep 후에도 더 최신 WS 이벤트가 없으면 낡은 가격으로 평가하지
+        않도록 min_interval 만큼 추가 대기한 뒤 새 이벤트로 평가해야 한다."""
+        first_event = UpbitTickerPriceEvent(
+            symbol="KRW-BTC", price=Decimal("101"), updated_at=10.0
+        )
+        newer_event = UpbitTickerPriceEvent(
+            symbol="KRW-BTC", price=Decimal("103"), updated_at=11.5
+        )
+
+        exchange = Mock()
+        # 첫 wait → first_event (since=None), 추가 대기 → newer_event (since=10.0)
+        exchange.wait_for_ticker_price_event.side_effect = [first_event, newer_event]
+        # throttle sleep 후 latest 캐시는 아직 first_event
+        exchange.get_ticker_price_event.return_value = first_event
+        price_event_state = main.PriceEventLoopState(last_cycle_at=100.0)
+        sleep_calls = []
+
+        with patch.object(
+            main,
+            "run_trading_cycle",
+            return_value=main.TradingCycleResult(date(2026, 4, 24), 0),
+        ) as run_cycle:
+            main.run_price_event_loop_iteration(
+                exchange=exchange,
+                price_event_state=price_event_state,
+                wait_timeout_seconds=5,
+                min_interval_seconds=3,
+                time_provider=lambda: 101.0,  # elapsed_since_cycle=1 → throttle_sleep=2
+                sleep_fn=sleep_calls.append,
+                **self._cycle_kwargs(),
+            )
+
+        self.assertEqual(sleep_calls, [2.0])
+        self.assertEqual(exchange.wait_for_ticker_price_event.call_count, 2)
+        extra_call = exchange.wait_for_ticker_price_event.call_args_list[1]
+        self.assertEqual(extra_call.kwargs, {"timeout": 3.0, "since": 10.0})
+        self.assertEqual(run_cycle.call_args.kwargs["current_price"], Decimal("103"))
+        self.assertNotIn("force_rest_price", run_cycle.call_args.kwargs)
+        self.assertEqual(price_event_state.last_event_at, 11.5)
+
+    def test_price_event_loop_falls_back_to_rest_when_throttle_extra_wait_timeouts(self):
+        """throttle sleep + 추가 대기까지 새 이벤트가 없으면 REST fallback 으로
+        cycle 을 진행하고 last_event_at 은 건드리지 않는다."""
+        stale_event = UpbitTickerPriceEvent(
+            symbol="KRW-BTC", price=Decimal("101"), updated_at=10.0
+        )
+
+        exchange = Mock()
+        exchange.wait_for_ticker_price_event.side_effect = [stale_event, None]
+        exchange.get_ticker_price_event.return_value = stale_event
+        price_event_state = main.PriceEventLoopState(last_cycle_at=100.0, last_event_at=9.0)
+        sleep_calls = []
+
+        with patch.object(
+            main,
+            "run_trading_cycle",
+            return_value=main.TradingCycleResult(date(2026, 4, 24), 0),
+        ) as run_cycle:
+            main.run_price_event_loop_iteration(
+                exchange=exchange,
+                price_event_state=price_event_state,
+                wait_timeout_seconds=5,
+                min_interval_seconds=3,
+                time_provider=lambda: 101.0,
+                sleep_fn=sleep_calls.append,
+                **self._cycle_kwargs(),
+            )
+
+        self.assertEqual(sleep_calls, [2.0])
+        self.assertEqual(exchange.wait_for_ticker_price_event.call_count, 2)
+        self.assertTrue(run_cycle.call_args.kwargs["force_rest_price"])
+        self.assertEqual(price_event_state.last_event_at, 9.0)
+
     def test_price_event_loop_falls_back_to_rest_polling_when_event_unavailable(self):
         exchange = FakePriceEventExchange(wait_event=None)
         price_event_state = main.PriceEventLoopState()

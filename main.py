@@ -841,9 +841,37 @@ def run_price_event_loop_iteration(
             latest_event = get_latest_ticker_price_event(exchange, cfg.SYMBOL)
             if (
                 latest_event is not None
-                and latest_event.updated_at >= price_event.updated_at
+                and latest_event.updated_at > price_event.updated_at
             ):
                 price_event = latest_event
+            else:
+                # throttle sleep 후에도 더 최신 WS 이벤트가 없으면 낡은 가격으로
+                # 평가하지 않도록 min_interval 만큼 추가 대기한다. 그래도 없으면
+                # REST fallback 경로로 합류 (WS 가 조용할 때의 정상 fallback).
+                extra_event = wait_for_ticker_price_event(
+                    exchange,
+                    cfg.SYMBOL,
+                    timeout=min_interval_seconds,
+                    since=price_event.updated_at,
+                )
+                if extra_event is not None:
+                    price_event = extra_event
+                else:
+                    result = run_trading_cycle(
+                        exchange=exchange,
+                        strategy=strategy,
+                        grid_state=grid_state,
+                        grid_repository=grid_repository,
+                        runtime=runtime,
+                        pending_orders=pending_orders,
+                        current_order_day=current_order_day,
+                        daily_order_count=daily_order_count,
+                        on_grid_updated=on_grid_updated,
+                        pending_order_repository=pending_order_repository,
+                        force_rest_price=True,
+                    )
+                    price_event_state.last_cycle_at = time_provider()
+                    return result
 
     result = run_trading_cycle(
         exchange=exchange,
