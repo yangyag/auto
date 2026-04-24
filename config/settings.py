@@ -37,6 +37,33 @@ def _load_project_env() -> None:
             _load_env_file_without_dotenv(env_file)
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
+def _env_positive_float(name: str, default: float) -> float:
+    value = os.getenv(name)
+    if value is None:
+        return default
+
+    try:
+        parsed = float(value)
+    except ValueError:
+        return default
+    if parsed <= 0:
+        return default
+    return parsed
+
+
 _load_project_env()
 
 # ── 거래소 선택 ──────────────────────────────────────────
@@ -69,6 +96,16 @@ PGSCHEMA = os.getenv("PGSCHEMA", "auto_trading")
 # ── API 키 (환경변수 우선, 없으면 프로젝트 루트 .env 사용) ─────
 API_KEY = os.getenv("UPBIT_ACCESS_KEY", "")
 API_SECRET = os.getenv("UPBIT_SECRET_KEY", "")
+
+# ── 업비트 Public WebSocket 현재가 캐시 ─────────────────────
+UPBIT_WS_PUBLIC_ENABLED = _env_bool("UPBIT_WS_PUBLIC_ENABLED", False)
+UPBIT_WS_PRICE_MAX_AGE_SECONDS = _env_positive_float("UPBIT_WS_PRICE_MAX_AGE_SECONDS", 10.0)
+UPBIT_WS_CANDLE_ENABLED = _env_bool("UPBIT_WS_CANDLE_ENABLED", False)
+UPBIT_WS_CANDLE_MAX_AGE_SECONDS = _env_positive_float("UPBIT_WS_CANDLE_MAX_AGE_SECONDS", 60.0)
+UPBIT_WS_ASSET_ENABLED = _env_bool("UPBIT_WS_ASSET_ENABLED", False)
+UPBIT_WS_ASSET_MAX_AGE_SECONDS = _env_positive_float("UPBIT_WS_ASSET_MAX_AGE_SECONDS", 30.0)
+UPBIT_WS_ORDER_ENABLED = _env_bool("UPBIT_WS_ORDER_ENABLED", False)
+UPBIT_WS_ORDER_MAX_AGE_SECONDS = _env_positive_float("UPBIT_WS_ORDER_MAX_AGE_SECONDS", 10.0)
 
 # ── 리스크 파라미터 ──────────────────────────────────────
 MAX_TOTAL_BUDGET_KRW = None  # 기본은 현재 로드된 그리드 총배정금액을 truth로 본다.

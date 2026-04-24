@@ -84,7 +84,7 @@
 - 시세용(공개): `wss://api.upbit.com/websocket/v1`
 - 내 자산/내 주문용(인증): `wss://api.upbit.com/websocket/v1/private`
 
-현재 저장소는 WebSocket을 아직 쓰지 않고 REST 중심이다.
+현재 저장소는 현재가 조회용 `ticker` 캐시와 브레이크아웃 가드용 분 캔들 `candle.{unit}m` 캐시를 선택적으로 공개 WebSocket으로 쓴다. 잔고와 보유 수량은 선택적으로 인증 WebSocket `myAsset` 캐시를 쓸 수 있다. 주문 상태 조회는 선택적으로 인증 WebSocket `myOrder` 캐시를 terminal 상태(`done`, `cancel`)에만 보수적으로 쓸 수 있다. 모두 기본값은 비활성화이며, 캐시 사용이 불가능하면 기존 REST 조회로 fallback 한다. 주문 생성과 취소는 계속 REST만 사용한다.
 
 ## 인증 핵심 정리
 
@@ -123,13 +123,13 @@
 
 | 기능 | Method | Path | 인증 | 비고 |
 | --- | --- | --- | --- | --- |
-| 현재가 조회 | `GET` | `/v1/ticker` | 불필요 | `markets=KRW-BTC` 같은 형식 |
-| 분 캔들 조회 | `GET` | `/v1/candles/minutes/{unit}` | 불필요 | 현재 Phase 3 브레이크아웃 가드에서 `unit=15` 사용 |
-| 계정 잔고 조회 | `GET` | `/v1/accounts` | 필요 | `자산조회` 권한 |
+| 현재가 조회 | `GET` | `/v1/ticker` | 불필요 | `markets=KRW-BTC` 같은 형식. 옵션 WebSocket ticker 캐시의 fallback |
+| 분 캔들 조회 | `GET` | `/v1/candles/minutes/{unit}` | 불필요 | 현재 브레이크아웃 가드에서 `unit=15` 사용. 옵션 WebSocket candle 캐시의 fallback |
+| 계정 잔고 조회 | `GET` | `/v1/accounts` | 필요 | `자산조회` 권한. 옵션 WebSocket myAsset 캐시의 fallback |
 | 주문 가능 정보 조회 | `GET` | `/v1/orders/chance` | 필요 | `주문조회` 권한 |
 | 주문 생성 | `POST` | `/v1/orders` | 필요 | `주문하기` 권한 |
 | 주문 생성 테스트 | `POST` | `/v1/orders/test` | 필요 | 실제 주문 없음 |
-| 개별 주문 조회 | `GET` | `/v1/order` | 필요 | `uuid` 또는 `identifier` 중 하나 |
+| 개별 주문 조회 | `GET` | `/v1/order` | 필요 | `uuid` 또는 `identifier` 중 하나. 옵션 WebSocket myOrder 캐시의 fallback |
 | 개별 주문 취소 | `DELETE` | `/v1/order` | 필요 | `uuid` 또는 `identifier` 중 하나 |
 | 체결 대기 주문 조회 | `GET` | `/v1/orders/open` | 필요 | 미체결 주문 목록 |
 | 종료 주문 목록 조회 | `GET` | `/v1/orders/closed` | 필요 | 체결/취소 완료 주문 목록 |
@@ -140,24 +140,31 @@
 
 ## 현재가 조회
 
-- 엔드포인트: `GET /v1/ticker`
+- REST 엔드포인트: `GET /v1/ticker`
+- 선택 기능: Public WebSocket `ticker` 캐시
 - 용도: 특정 페어의 현재가 스냅샷 조회
 - 예시 파라미터: `markets=KRW-BTC`
 - 현재 코드 연결:
   - `exchange/crypto.py::get_current_price`
+  - `exchange/upbit_ws.py::UpbitTickerWebSocketCache`
 
 주의:
 
-- 이 API는 스냅샷 조회다.
-- 고빈도 실시간 전략이면 WebSocket Ticker 전환을 검토해야 한다.
+- `UPBIT_WS_PUBLIC_ENABLED=false` 가 기본값이며, 기본 동작은 기존 REST 스냅샷 조회와 같다.
+- WebSocket이 켜져 있어도 전략 평가는 `PRICE_POLL_INTERVAL` 주기에서만 실행된다.
+- WebSocket 의존성 누락, 시작 실패, 첫 tick 없음, stale tick 은 모두 REST ticker fallback 으로 처리한다.
+- 주문 가능 정보, 주문 테스트, 주문 생성/취소는 계속 REST를 사용한다. 주문 상태 조회는 `UPBIT_WS_ORDER_ENABLED=true`일 때 terminal `myOrder` 이벤트만 REST 생략에 사용할 수 있다.
 
 ## 분 캔들 조회
 
-- 엔드포인트: `GET /v1/candles/minutes/{unit}`
+- REST 엔드포인트: `GET /v1/candles/minutes/{unit}`
+- 선택 기능: Public WebSocket `candle.{unit}m` 캐시
 - 현재 프로젝트 사용값: `unit=15`
 - 인증: 불필요
 - 현재 코드 연결:
   - `exchange/crypto.py::get_recent_minute_closes`
+  - `exchange/crypto.py::get_minute_candle_closes`
+  - `exchange/upbit_ws.py::UpbitMinuteCandleWebSocketCache`
   - `main.py::fetch_breakout_guard_status`
 
 핵심 메모:
@@ -165,16 +172,21 @@
 - `market`, `count` 파라미터를 사용한다.
 - 종가는 응답의 `trade_price` 필드를 사용한다.
 - 분 캔들은 체결이 발생한 구간만 생성된다.
-- 현재 프로젝트는 최근 완료된 15분 종가 4개가 같은 방향으로 밴드 밖인지 확인하는 용도로만 쓴다.
+- 브레이크아웃 가드는 `get_minute_candle_closes(symbol, unit_minutes, count, to)`를 통합 지점으로 사용한다.
+- WebSocket 캐시는 `to`를 exclusive cutoff로 보고, candle start가 `to`보다 엄격히 이전인 완료 캔들 종가만 반환한다.
+- `UPBIT_WS_CANDLE_ENABLED=false` 가 기본값이며, 기본 동작은 기존 REST 캔들 조회와 같다.
+- WebSocket 의존성 누락, 시작 실패, 첫 candle 없음, stale stream, 지원하지 않는 unit, 완료 캔들 부족은 모두 REST candle fallback 으로 처리한다.
 
 ## 잔고 조회
 
 - 엔드포인트: `GET /v1/accounts`
+- 선택 기능: Private WebSocket `myAsset` 캐시
 - 권한: `자산조회`
 - 용도: KRW 잔고와 보유 코인 잔고 확인
 - 현재 코드 연결:
   - `exchange/crypto.py::get_balance`
   - `exchange/crypto.py::get_holdings`
+  - `exchange/upbit_ws.py::UpbitAssetWebSocketCache`
   - `python3 main.py balance`
 
 주의:
@@ -182,6 +194,11 @@
 - 응답에는 사용 가능 잔고(`balance`)와 잠금 자산(`locked`) 정보가 함께 올 수 있다.
 - 주문 생성 직후에는 주문에 사용된 자산이 잠금 상태가 될 수 있다.
 - `get_balance()`는 `balance` 필드만 사용하므로 잠금 자산은 포함하지 않는다.
+- `UPBIT_WS_ASSET_ENABLED=false` 가 기본값이며, 기본 동작은 기존 REST `/v1/accounts` 조회와 같다.
+- 인증 WebSocket 엔드포인트는 `wss://api.upbit.com/websocket/v1/private` 이며, 기존 JWT 인증 헤더 생성 로직을 사용한다.
+- `myAsset` 구독 메시지는 `codes`를 포함하지 않는다. 공식 문서 기준 `myAsset`에 `codes`를 넣으면 `WRONG_FORMAT` 오류가 날 수 있다.
+- `myAsset`은 이벤트 기반이므로 시작 직후 첫 이벤트가 없을 수 있다. 첫 이벤트 없음, stale cache, 연결 오류, 의존성 누락, 인증 헤더 생성 실패는 모두 REST `/v1/accounts` fallback 으로 처리한다.
+- 현재 구현은 `assets[].currency`, `assets[].balance`를 캐시하며, 0 잔고도 정상 값으로 취급한다.
 
 ## 주문 가능 정보 조회
 
@@ -284,6 +301,7 @@
 ### 개별 주문 조회
 
 - `GET /v1/order`
+- 선택 기능: Private WebSocket `myOrder` 캐시
 - 권한: `주문조회`
 - `uuid` 또는 `identifier` 중 하나가 필요하다.
 - 주요 응답 필드:
@@ -302,7 +320,18 @@
 현재 코드 연결:
 
 - 조회는 `exchange/crypto.py::get_order_status`에서 사용한다.
+- terminal 주문 이벤트 캐시는 `exchange/upbit_ws.py::UpbitOrderWebSocketCache`에서 관리한다.
 - 취소는 `exchange/crypto.py::cancel_order`에서 사용한다.
+
+주의:
+
+- `UPBIT_WS_ORDER_ENABLED=false` 가 기본값이며, 기본 동작은 기존 REST `/v1/order` 조회와 같다.
+- 인증 WebSocket 엔드포인트는 `wss://api.upbit.com/websocket/v1/private` 이며, 기존 JWT 인증 헤더 생성 로직을 사용한다.
+- `myOrder` 구독 메시지는 설정된 `SYMBOL`을 대문자 `codes`로 제한한다. 예: `codes=["KRW-BTC"]`.
+- 캐시는 `uuid`, `state`, `executed_volume`, `remaining_volume`을 파싱한다. 기본 payload와 JSON list wrapper를 허용하며 단순 키(`uid`, `s`, `ev`, `rv`, `cd`, `ty`)도 처리한다.
+- `get_order_status(order_id)`는 캐시 상태가 `done` 또는 `cancel`일 때만 REST를 생략한다.
+- `wait`, `watch`, `trade`, `prevented`, 첫 이벤트 없음, stale event, 연결 오류, 의존성 누락, 인증 실패, 잘못된 심볼/type/payload는 모두 REST `/v1/order` fallback 으로 처리한다.
+- 캐시 miss 이후 REST 오류는 기존처럼 호출자에게 전파한다. pending-order 상태 적용 로직은 WebSocket 이벤트로 바꾸지 않는다.
 
 ## 체결 대기 주문 조회
 
@@ -441,7 +470,7 @@ BTC 현재가가 1억원 수준이면 **1,000원 단위**가 적용된다. 그�
 - 가격 단위/최소 주문 금액을 KRW 마켓 정책 기준으로 정규화하는 유틸 추가
 - `smp_type` 옵션 도입 검토 (자전거래 방지)
 - `post_only` 옵션 도입 검토 (수수료 최적화)
-- WebSocket MyOrder (`wss://.../private`, type=`myOrder`) 도입 검토 — REST 폴링 대신 실시간 체결 이벤트 수신으로 전환 가능
+- WebSocket MyOrder 캐시 확대 검토 — 현재는 terminal 상태의 보수적 조회 가속에만 사용
 - `orders/closed`를 활용한 재시작 후 체결 이력 대조 로직 추가
 - `orders/cancel_and_new`의 `remain_only` 옵션을 이용한 지정가 재배치 로직 검토
 

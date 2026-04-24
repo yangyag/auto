@@ -629,6 +629,7 @@ def reset_daily_order_count_if_new_day(
 def run():
     logger.info("=== 그리드 자동매매 시작 ===")
 
+    exchange = None
     runtime_lock = acquire_runtime_lock_if_needed()
     try:
         grid_repository = build_grid_repository(cfg)
@@ -724,6 +725,11 @@ def run():
 
             time.sleep(cfg.PRICE_POLL_INTERVAL)
     finally:
+        if exchange is not None and hasattr(exchange, "close"):
+            try:
+                exchange.close()
+            except Exception as exc:  # pragma: no cover - defensive shutdown logging
+                logger.warning(f"거래소 리소스 정리 실패: {exc}")
         if runtime_lock is not None:
             runtime_lock.release()
 

@@ -75,6 +75,8 @@ cd /home/ubuntu/auto
 ```
 
 ## Git / 배포 기준
+- Git 커밋 메시지는 사용자가 다른 언어를 명시하지 않는 한 한국어를 우선한다.
+
 EC2에서 먼저 확인할 것:
 - `git branch -vv`
 - `git status --short`

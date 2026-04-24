@@ -17,8 +17,16 @@ from urllib.parse import unquote, urlencode
 import jwt
 import requests
 
+import config.settings as cfg
 from core.models import Order, OrderExecutionType, OrderSide, OrderStatus
 from exchange.base import BaseExchange
+from exchange.upbit_ws import (
+    UpbitAssetWebSocketCache,
+    UpbitMinuteCandleWebSocketCache,
+    UpbitOrderWebSocketCache,
+    UpbitOrderWebSocketStatus,
+    UpbitTickerWebSocketCache,
+)
 from utils.decimal_utils import DECIMAL_ZERO, format_decimal, to_decimal
 from utils.logger import get_logger
 
@@ -55,6 +63,10 @@ class CryptoExchange(BaseExchange):
         self._rate_limit_states: dict[str, _RateLimitState] = {}
         self._rate_limit_aliases: dict[str, str] = {}
         self._random = random.Random()
+        self._ticker_cache = self._build_ticker_cache()
+        self._candle_cache = self._build_candle_cache()
+        self._asset_cache = self._build_asset_cache()
+        self._order_cache = self._build_order_cache()
         logger.info("업비트 거래소 초기화")
 
     # ── 인증 헬퍼 ────────────────────────────────────────────
@@ -351,6 +363,165 @@ class CryptoExchange(BaseExchange):
     def _delete(self, path: str, params: dict) -> dict:
         return self._request("DELETE", path, params=params, auth=True)
 
+    def _build_ticker_cache(self) -> UpbitTickerWebSocketCache | None:
+        if not cfg.UPBIT_WS_PUBLIC_ENABLED:
+            return None
+
+        try:
+            return UpbitTickerWebSocketCache(
+                max_age_seconds=cfg.UPBIT_WS_PRICE_MAX_AGE_SECONDS,
+            )
+        except Exception as exc:
+            logger.warning(f"업비트 WebSocket 현재가 캐시 초기화 실패: {exc}")
+            return None
+
+    def _build_candle_cache(self) -> UpbitMinuteCandleWebSocketCache | None:
+        if not cfg.UPBIT_WS_CANDLE_ENABLED:
+            return None
+
+        try:
+            return UpbitMinuteCandleWebSocketCache(
+                max_age_seconds=cfg.UPBIT_WS_CANDLE_MAX_AGE_SECONDS,
+            )
+        except Exception as exc:
+            logger.warning(f"업비트 WebSocket 분 캔들 캐시 초기화 실패: {exc}")
+            return None
+
+    def _build_asset_cache(self) -> UpbitAssetWebSocketCache | None:
+        if not cfg.UPBIT_WS_ASSET_ENABLED:
+            return None
+
+        try:
+            return UpbitAssetWebSocketCache(
+                max_age_seconds=cfg.UPBIT_WS_ASSET_MAX_AGE_SECONDS,
+                auth_header_provider=self._auth_header,
+            )
+        except Exception as exc:
+            logger.warning(f"업비트 WebSocket 자산 캐시 초기화 실패: {exc}")
+            return None
+
+    def _build_order_cache(self) -> UpbitOrderWebSocketCache | None:
+        if not cfg.UPBIT_WS_ORDER_ENABLED:
+            return None
+
+        try:
+            return UpbitOrderWebSocketCache(
+                max_age_seconds=cfg.UPBIT_WS_ORDER_MAX_AGE_SECONDS,
+                symbol=cfg.SYMBOL,
+                auth_header_provider=self._auth_header,
+            )
+        except Exception as exc:
+            logger.warning(f"업비트 WebSocket 주문 캐시 초기화 실패: {exc}")
+            return None
+
+    def _get_cached_current_price(self, symbol: str) -> Decimal | None:
+        if self._ticker_cache is None:
+            return None
+
+        try:
+            if not self._ticker_cache.ensure_started(symbol):
+                return None
+            price = self._ticker_cache.get_price(symbol)
+        except Exception as exc:
+            logger.warning(f"업비트 WebSocket 현재가 캐시 사용 실패, REST로 대체: {exc}")
+            return None
+
+        if price is not None:
+            logger.debug(f"현재가 캐시 조회 {symbol}: {price}")
+        return price
+
+    def _get_cached_minute_candle_closes(
+        self,
+        symbol: str,
+        *,
+        unit_minutes: int,
+        count: int,
+        to: datetime | None,
+    ) -> list[Decimal] | None:
+        if self._candle_cache is None:
+            return None
+
+        try:
+            if not self._candle_cache.ensure_started(symbol, unit_minutes):
+                return None
+            closes = self._candle_cache.get_closes(
+                symbol,
+                unit_minutes=unit_minutes,
+                count=count,
+                to=to,
+            )
+        except Exception as exc:
+            logger.warning(f"업비트 WebSocket 분 캔들 캐시 사용 실패, REST로 대체: {exc}")
+            return None
+
+        if closes is not None:
+            logger.debug(
+                f"분 캔들 캐시 조회 {symbol}: unit={unit_minutes}, count={count}, "
+                f"fetched={len(closes)}, to={to}"
+            )
+        return closes
+
+    def _get_cached_asset_balance(self, currency: str) -> Decimal | None:
+        if self._asset_cache is None:
+            return None
+
+        try:
+            if not self._asset_cache.ensure_started():
+                return None
+            balance = self._asset_cache.get_balance(currency)
+        except Exception as exc:
+            logger.warning(f"업비트 WebSocket 자산 캐시 사용 실패, REST로 대체: {exc.__class__.__name__}")
+            return None
+
+        if balance is not None:
+            logger.debug(f"자산 캐시 조회 {currency}: {format_decimal(balance)}")
+        return balance
+
+    def _get_cached_order_status(self, order_id: str) -> OrderStatus | None:
+        if self._order_cache is None:
+            return None
+
+        try:
+            if not self._order_cache.ensure_started():
+                return None
+            cached_status = self._order_cache.get_order_status(order_id)
+        except Exception as exc:
+            logger.warning(f"업비트 WebSocket 주문 캐시 사용 실패, REST로 대체: {exc.__class__.__name__}")
+            return None
+
+        if cached_status is None or cached_status.state not in {"done", "cancel"}:
+            return None
+
+        logger.debug(f"주문 캐시 조회 {order_id}: state={cached_status.state}")
+        return self._build_order_status(cached_status)
+
+    @staticmethod
+    def _build_order_status(result: dict | UpbitOrderWebSocketStatus) -> OrderStatus:
+        if isinstance(result, dict):
+            return OrderStatus(
+                uuid=result["uuid"],
+                state=result["state"],
+                executed_volume=to_decimal(result.get("executed_volume", "0")),
+                remaining_volume=to_decimal(result.get("remaining_volume", "0")),
+            )
+        return OrderStatus(
+            uuid=result.uuid,
+            state=result.state,
+            executed_volume=result.executed_volume,
+            remaining_volume=result.remaining_volume,
+        )
+
+    def close(self) -> None:
+        """Release optional background resources used by this exchange."""
+        if self._ticker_cache is not None:
+            self._ticker_cache.stop()
+        if self._candle_cache is not None:
+            self._candle_cache.stop()
+        if self._asset_cache is not None:
+            self._asset_cache.stop()
+        if self._order_cache is not None:
+            self._order_cache.stop()
+
     # ── BaseExchange 구현 ────────────────────────────────────
 
     def get_current_price(self, symbol: str) -> Decimal:
@@ -358,6 +529,10 @@ class CryptoExchange(BaseExchange):
         현재가 조회.
         symbol 예: "KRW-BTC"
         """
+        cached_price = self._get_cached_current_price(symbol)
+        if cached_price is not None:
+            return cached_price
+
         data = self._get("/v1/ticker", params={"markets": symbol})
         price = to_decimal(data[0]["trade_price"])
         logger.debug(f"현재가 조회 {symbol}: {price}")
@@ -389,6 +564,10 @@ class CryptoExchange(BaseExchange):
 
     def get_balance(self) -> Decimal:
         """KRW 주문 가능 잔고 조회"""
+        cached_balance = self._get_cached_asset_balance("KRW")
+        if cached_balance is not None:
+            return cached_balance
+
         accounts = self._get("/v1/accounts", auth=True)
         for account in accounts:
             if account["currency"] == "KRW":
@@ -403,7 +582,11 @@ class CryptoExchange(BaseExchange):
         보유 수량 조회.
         symbol 예: "KRW-BTC" → currency="BTC" 로 조회
         """
-        currency = symbol.split("-")[-1]
+        currency = symbol.split("-")[-1].upper()
+        cached_balance = self._get_cached_asset_balance(currency)
+        if cached_balance is not None:
+            return cached_balance
+
         accounts = self._get("/v1/accounts", auth=True)
         for account in accounts:
             if account["currency"] == currency:
@@ -451,6 +634,15 @@ class CryptoExchange(BaseExchange):
         to: datetime | None = None,
     ) -> list[Decimal]:
         """업비트 분 캔들 종가 목록을 최신순으로 반환한다."""
+        cached_closes = self._get_cached_minute_candle_closes(
+            symbol,
+            unit_minutes=unit_minutes,
+            count=count,
+            to=to,
+        )
+        if cached_closes is not None:
+            return cached_closes
+
         params: dict[str, Any] = {
             "market": symbol,
             "count": count,
@@ -647,13 +839,12 @@ class CryptoExchange(BaseExchange):
 
     def get_order_status(self, order_id: str) -> OrderStatus:
         """개별 주문 상태 조회."""
+        cached_status = self._get_cached_order_status(order_id)
+        if cached_status is not None:
+            return cached_status
+
         result = self._get("/v1/order", params={"uuid": order_id}, auth=True)
-        return OrderStatus(
-            uuid=result["uuid"],
-            state=result["state"],
-            executed_volume=to_decimal(result.get("executed_volume", "0")),
-            remaining_volume=to_decimal(result.get("remaining_volume", "0")),
-        )
+        return self._build_order_status(result)
 
     def cancel_order(self, order_id: str) -> bool:
         """주문 취소. 성공 시 True."""

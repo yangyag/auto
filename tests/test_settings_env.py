@@ -106,6 +106,70 @@ class SettingsEnvLoadingTest(unittest.TestCase):
             ["env-bot", "db.example", "5433", "grid", "bot", "secret", "custom_schema"],
         )
 
+    def test_settings_loads_upbit_websocket_settings_from_env_file(self):
+        project_root = Path(__file__).resolve().parents[1]
+        settings_source = (project_root / "config" / "settings.py").read_text(encoding="utf-8")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            (tmp_path / "config").mkdir()
+            (tmp_path / "config" / "__init__.py").write_text("", encoding="utf-8")
+            (tmp_path / "config" / "settings.py").write_text(settings_source, encoding="utf-8")
+            (tmp_path / ".env").write_text(
+                "UPBIT_WS_PUBLIC_ENABLED=true\n"
+                "UPBIT_WS_PRICE_MAX_AGE_SECONDS=3.5\n"
+                "UPBIT_WS_CANDLE_ENABLED=true\n"
+                "UPBIT_WS_CANDLE_MAX_AGE_SECONDS=12.5\n"
+                "UPBIT_WS_ASSET_ENABLED=true\n"
+                "UPBIT_WS_ASSET_MAX_AGE_SECONDS=7.5\n"
+                "UPBIT_WS_ORDER_ENABLED=true\n"
+                "UPBIT_WS_ORDER_MAX_AGE_SECONDS=4.5\n",
+                encoding="utf-8",
+            )
+
+            env = os.environ.copy()
+            env.pop("UPBIT_WS_PUBLIC_ENABLED", None)
+            env.pop("UPBIT_WS_PRICE_MAX_AGE_SECONDS", None)
+            env.pop("UPBIT_WS_CANDLE_ENABLED", None)
+            env.pop("UPBIT_WS_CANDLE_MAX_AGE_SECONDS", None)
+            env.pop("UPBIT_WS_ASSET_ENABLED", None)
+            env.pop("UPBIT_WS_ASSET_MAX_AGE_SECONDS", None)
+            env.pop("UPBIT_WS_ORDER_ENABLED", None)
+            env.pop("UPBIT_WS_ORDER_MAX_AGE_SECONDS", None)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    textwrap.dedent(
+                        """
+                        import sys
+                        sys.path.insert(0, r'__TMPDIR__')
+                        import config.settings as settings
+                        print(settings.UPBIT_WS_PUBLIC_ENABLED)
+                        print(settings.UPBIT_WS_PRICE_MAX_AGE_SECONDS)
+                        print(settings.UPBIT_WS_CANDLE_ENABLED)
+                        print(settings.UPBIT_WS_CANDLE_MAX_AGE_SECONDS)
+                        print(settings.UPBIT_WS_ASSET_ENABLED)
+                        print(settings.UPBIT_WS_ASSET_MAX_AGE_SECONDS)
+                        print(settings.UPBIT_WS_ORDER_ENABLED)
+                        print(settings.UPBIT_WS_ORDER_MAX_AGE_SECONDS)
+                        """.replace("__TMPDIR__", str(r"__TMPDIR__"))
+                    ),
+                ],
+                cwd=tmpdir,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertEqual(
+            result.stdout.strip().splitlines(),
+            ["True", "3.5", "True", "12.5", "True", "7.5", "True", "4.5"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
