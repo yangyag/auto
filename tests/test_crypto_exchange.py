@@ -953,46 +953,37 @@ class CryptoExchangeBalanceTest(unittest.TestCase):
         self.assertEqual(status.state, "done")
         get.assert_called_once_with("/v1/order", params={"uuid": "uuid-1"}, auth=True)
 
-    def test_get_order_status_uses_terminal_done_websocket_cache(self):
-        cache = Mock()
-        cache.ensure_started.return_value = True
-        cache.get_order_status.return_value = UpbitOrderWebSocketStatus(
-            uuid="uuid-1",
-            state="done",
-            executed_volume=Decimal("0.001"),
-            remaining_volume=Decimal("0"),
-        )
-        self.exchange._order_cache = cache
+    def test_get_order_status_always_uses_rest_even_when_websocket_cache_is_terminal(self):
+        """주문 상태 판정은 REST authoritative. WS myOrder terminal 힌트가 있어도 REST 재조회한다."""
+        rest_done_payload = {
+            "uuid": "uuid-1",
+            "state": "done",
+            "executed_volume": "0.001",
+            "remaining_volume": "0",
+        }
 
-        with patch.object(self.exchange, "_get") as get:
-            status = self.exchange.get_order_status("uuid-1")
+        for terminal_state in ("done", "cancel"):
+            with self.subTest(state=terminal_state):
+                cache = Mock()
+                cache.ensure_started.return_value = True
+                cache.get_order_status.return_value = UpbitOrderWebSocketStatus(
+                    uuid="uuid-1",
+                    state=terminal_state,
+                    executed_volume=Decimal("0.0004"),
+                    remaining_volume=Decimal("0.0005"),
+                )
+                self.exchange._order_cache = cache
 
-        self.assertEqual(status.uuid, "uuid-1")
-        self.assertEqual(status.state, "done")
-        self.assertEqual(status.executed_volume, Decimal("0.001"))
-        self.assertEqual(status.remaining_volume, Decimal("0"))
-        cache.ensure_started.assert_called_once_with()
-        cache.get_order_status.assert_called_once_with("uuid-1")
-        get.assert_not_called()
+                with patch.object(self.exchange, "_get", return_value=rest_done_payload) as get:
+                    status = self.exchange.get_order_status("uuid-1")
 
-    def test_get_order_status_uses_terminal_cancel_websocket_cache(self):
-        cache = Mock()
-        cache.ensure_started.return_value = True
-        cache.get_order_status.return_value = UpbitOrderWebSocketStatus(
-            uuid="uuid-1",
-            state="cancel",
-            executed_volume=Decimal("0.0004"),
-            remaining_volume=Decimal("0.0005"),
-        )
-        self.exchange._order_cache = cache
-
-        with patch.object(self.exchange, "_get") as get:
-            status = self.exchange.get_order_status("uuid-1")
-
-        self.assertEqual(status.state, "cancel")
-        self.assertEqual(status.executed_volume, Decimal("0.0004"))
-        self.assertEqual(status.remaining_volume, Decimal("0.0005"))
-        get.assert_not_called()
+                # REST 응답이 authoritative — WS 캐시의 executed_volume/state 는 사용하지 않음.
+                self.assertEqual(status.state, "done")
+                self.assertEqual(status.executed_volume, Decimal("0.001"))
+                self.assertEqual(status.remaining_volume, Decimal("0"))
+                get.assert_called_once_with("/v1/order", params={"uuid": "uuid-1"}, auth=True)
+                cache.ensure_started.assert_called_once_with()
+                cache.get_order_status.assert_called_once_with("uuid-1")
 
     def test_get_order_status_falls_back_to_rest_for_non_terminal_websocket_states(self):
         rest_payload = {

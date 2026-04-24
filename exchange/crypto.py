@@ -526,6 +526,9 @@ class CryptoExchange(BaseExchange):
         return balance
 
     def _get_cached_order_status(self, order_id: str) -> OrderStatus | None:
+        # 주문 수명주기는 GET /v1/order 재조회가 authoritative 다. WS myOrder 캐시는
+        # terminal 상태를 로그로 남기는 힌트 용도로만 쓰고, 상태 판정은 항상 REST 로
+        # 교차 확인하도록 None 을 리턴한다.
         if self._order_cache is None:
             return None
 
@@ -537,11 +540,12 @@ class CryptoExchange(BaseExchange):
             logger.warning(f"업비트 WebSocket 주문 캐시 사용 실패, REST로 대체: {exc.__class__.__name__}")
             return None
 
-        if cached_status is None or cached_status.state not in {"done", "cancel"}:
-            return None
-
-        logger.debug(f"주문 캐시 조회 {order_id}: state={cached_status.state}")
-        return self._build_order_status(cached_status)
+        if cached_status is not None and cached_status.state in {"done", "cancel"}:
+            logger.debug(
+                f"WS 주문 terminal 힌트 감지, REST 재조회로 교차 확인: "
+                f"{order_id} state={cached_status.state}"
+            )
+        return None
 
     @staticmethod
     def _build_order_status(result: dict | UpbitOrderWebSocketStatus) -> OrderStatus:
