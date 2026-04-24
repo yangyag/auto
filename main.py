@@ -38,6 +38,21 @@ class GridStateRuntime:
     breakout_guard_reason: str | None = None
 
 
+@dataclass
+class TradingCycleResult:
+    current_order_day: date
+    daily_order_count: int
+    submitted: int = 0
+    completed: int = 0
+    tp_sell_submitted: int = 0
+
+
+@dataclass
+class PriceEventLoopState:
+    last_event_at: float | None = None
+    last_cycle_at: float | None = None
+
+
 class StatePersistenceError(RuntimeError):
     """상태 저장소 반영 실패로 새 주문을 중단해야 하는 경우."""
 
@@ -626,6 +641,228 @@ def reset_daily_order_count_if_new_day(
     return current_order_day, daily_order_count
 
 
+def get_current_price_for_cycle(
+    exchange: BaseExchange,
+    symbol: str,
+    *,
+    force_rest_price: bool = False,
+) -> Decimal:
+    """Fetch the price for one strategy cycle, optionally bypassing WebSocket cache."""
+    if force_rest_price:
+        rest_getter = getattr(exchange, "get_current_price_rest", None)
+        if callable(rest_getter):
+            return rest_getter(symbol)
+
+    return exchange.get_current_price(symbol)
+
+
+def run_trading_cycle(
+    *,
+    exchange: BaseExchange,
+    strategy: GridStrategy,
+    grid_state: GridState,
+    grid_repository: GridStateRepository,
+    runtime: GridStateRuntime,
+    pending_orders: dict[str, Order],
+    current_order_day: date,
+    daily_order_count: int,
+    on_grid_updated: Callable[[], None],
+    pending_order_repository: PendingOrderRepository,
+    current_price: Decimal | None = None,
+    force_rest_price: bool = False,
+) -> TradingCycleResult:
+    """Run one full strategy evaluation cycle without sleeping."""
+    current_order_day, daily_order_count = reset_daily_order_count_if_new_day(
+        current_order_day,
+        daily_order_count,
+    )
+
+    refresh_grid_state_if_changed(grid_state, grid_repository, runtime)
+
+    completed = reconcile_pending_orders(
+        exchange,
+        pending_orders,
+        strategy,
+        on_grid_updated=on_grid_updated,
+        pending_order_repository=pending_order_repository,
+    )
+    if completed:
+        logger.info(grid_state.summary())
+
+    tp_sell_submitted = ensure_tp_sell_orders(
+        exchange=exchange,
+        strategy=strategy,
+        pending_orders=pending_orders,
+        pending_order_repository=pending_order_repository,
+    )
+    if tp_sell_submitted:
+        daily_order_count += tp_sell_submitted
+
+    if current_price is None:
+        current_price = get_current_price_for_cycle(
+            exchange,
+            cfg.SYMBOL,
+            force_rest_price=force_rest_price,
+        )
+    logger.info(f"현재가: {current_price}")
+
+    breakout_guard_status = fetch_breakout_guard_status(exchange, grid_state)
+    log_breakout_guard_transition(runtime, breakout_guard_status)
+
+    pending_slots = {order.slot_index for order in pending_orders.values()}
+    buy_orders, sell_orders = strategy.evaluate_with_pending(
+        current_price,
+        pending_slot_indexes=pending_slots,
+    )
+    buy_orders = apply_breakout_guard_to_buy_orders(
+        buy_orders,
+        breakout_guard_status,
+    )
+    if not sell_orders and not buy_orders:
+        return TradingCycleResult(
+            current_order_day=current_order_day,
+            daily_order_count=daily_order_count,
+            completed=completed,
+            tp_sell_submitted=tp_sell_submitted,
+        )
+
+    submitted = process_cycle_orders(
+        sell_orders=sell_orders,
+        buy_orders=buy_orders,
+        exchange=exchange,
+        strategy=strategy,
+        pending_orders=pending_orders,
+        daily_order_count=daily_order_count,
+        on_grid_updated=on_grid_updated,
+        pending_order_repository=pending_order_repository,
+    )
+    daily_order_count += submitted
+
+    if submitted:
+        logger.info(grid_state.summary())
+
+    return TradingCycleResult(
+        current_order_day=current_order_day,
+        daily_order_count=daily_order_count,
+        submitted=submitted,
+        completed=completed,
+        tp_sell_submitted=tp_sell_submitted,
+    )
+
+
+def can_use_ticker_price_event_loop(exchange: BaseExchange, symbol: str) -> bool:
+    if not cfg.UPBIT_WS_EVENT_LOOP_ENABLED:
+        return False
+
+    starter = getattr(exchange, "ensure_ticker_price_events", None)
+    if not callable(starter):
+        return False
+
+    return bool(starter(symbol))
+
+
+def wait_for_ticker_price_event(
+    exchange: BaseExchange,
+    symbol: str,
+    *,
+    timeout: float,
+    since: float | None,
+):
+    waiter = getattr(exchange, "wait_for_ticker_price_event", None)
+    if not callable(waiter):
+        return None
+
+    return waiter(symbol, timeout=timeout, since=since)
+
+
+def get_latest_ticker_price_event(exchange: BaseExchange, symbol: str):
+    getter = getattr(exchange, "get_ticker_price_event", None)
+    if not callable(getter):
+        return None
+
+    return getter(symbol)
+
+
+def run_price_event_loop_iteration(
+    *,
+    exchange: BaseExchange,
+    strategy: GridStrategy,
+    grid_state: GridState,
+    grid_repository: GridStateRepository,
+    runtime: GridStateRuntime,
+    pending_orders: dict[str, Order],
+    current_order_day: date,
+    daily_order_count: int,
+    on_grid_updated: Callable[[], None],
+    pending_order_repository: PendingOrderRepository,
+    price_event_state: PriceEventLoopState,
+    wait_timeout_seconds: float,
+    min_interval_seconds: float,
+    time_provider: Callable[[], float] = time.monotonic,
+    sleep_fn: Callable[[float], None] = time.sleep,
+) -> TradingCycleResult:
+    """Run one WebSocket event-loop iteration, with REST polling fallback on no event."""
+    wait_timeout_seconds = max(float(wait_timeout_seconds), 0.0)
+    min_interval_seconds = max(float(min_interval_seconds), 0.0)
+    wait_started_at = time_provider()
+    price_event = wait_for_ticker_price_event(
+        exchange,
+        cfg.SYMBOL,
+        timeout=wait_timeout_seconds,
+        since=price_event_state.last_event_at,
+    )
+    wait_elapsed = max(time_provider() - wait_started_at, 0.0)
+
+    if price_event is None:
+        result = run_trading_cycle(
+            exchange=exchange,
+            strategy=strategy,
+            grid_state=grid_state,
+            grid_repository=grid_repository,
+            runtime=runtime,
+            pending_orders=pending_orders,
+            current_order_day=current_order_day,
+            daily_order_count=daily_order_count,
+            on_grid_updated=on_grid_updated,
+            pending_order_repository=pending_order_repository,
+            force_rest_price=True,
+        )
+        price_event_state.last_cycle_at = time_provider()
+        remaining_poll_sleep = wait_timeout_seconds - wait_elapsed
+        if remaining_poll_sleep > 0:
+            sleep_fn(remaining_poll_sleep)
+        return result
+
+    if price_event_state.last_cycle_at is not None:
+        elapsed_since_cycle = max(time_provider() - price_event_state.last_cycle_at, 0.0)
+        throttle_sleep = min_interval_seconds - elapsed_since_cycle
+        if throttle_sleep > 0:
+            sleep_fn(throttle_sleep)
+            latest_event = get_latest_ticker_price_event(exchange, cfg.SYMBOL)
+            if (
+                latest_event is not None
+                and latest_event.updated_at >= price_event.updated_at
+            ):
+                price_event = latest_event
+
+    result = run_trading_cycle(
+        exchange=exchange,
+        strategy=strategy,
+        grid_state=grid_state,
+        grid_repository=grid_repository,
+        runtime=runtime,
+        pending_orders=pending_orders,
+        current_order_day=current_order_day,
+        daily_order_count=daily_order_count,
+        on_grid_updated=on_grid_updated,
+        pending_order_repository=pending_order_repository,
+        current_price=price_event.price,
+    )
+    price_event_state.last_event_at = price_event.updated_at
+    price_event_state.last_cycle_at = time_provider()
+    return result
+
+
 def run():
     logger.info("=== 그리드 자동매매 시작 ===")
 
@@ -652,67 +889,57 @@ def run():
         if pending_orders:
             logger.info(f"미체결 주문 복구: {len(pending_orders)}건")
 
+        price_event_state = PriceEventLoopState()
+        use_price_event_loop = can_use_ticker_price_event_loop(exchange, cfg.SYMBOL)
+        force_rest_polling = cfg.UPBIT_WS_EVENT_LOOP_ENABLED and not use_price_event_loop
+        if use_price_event_loop:
+            logger.info(
+                "현재가 이벤트 루프 활성화 "
+                f"(min_interval={cfg.UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS}s, "
+                f"fallback_poll={cfg.PRICE_POLL_INTERVAL}s)"
+            )
+        elif force_rest_polling:
+            logger.info(f"현재가 REST polling fallback 사용 (interval={cfg.PRICE_POLL_INTERVAL}s)")
+        else:
+            logger.info(f"현재가 polling 루프 사용 (interval={cfg.PRICE_POLL_INTERVAL}s)")
+
         while True:
             try:
-                current_order_day, daily_order_count = reset_daily_order_count_if_new_day(
-                    current_order_day,
-                    daily_order_count,
-                )
-
-                refresh_grid_state_if_changed(grid_state, grid_repository, runtime)
-
-                completed = reconcile_pending_orders(
-                    exchange,
-                    pending_orders,
-                    strategy,
-                    on_grid_updated=persist_current_grid,
-                    pending_order_repository=pending_order_repository,
-                )
-                if completed:
-                    logger.info(grid_state.summary())
-
-                tp_sell_submitted = ensure_tp_sell_orders(
-                    exchange=exchange,
-                    strategy=strategy,
-                    pending_orders=pending_orders,
-                    pending_order_repository=pending_order_repository,
-                )
-                if tp_sell_submitted:
-                    daily_order_count += tp_sell_submitted
-
-                current_price = exchange.get_current_price(cfg.SYMBOL)
-                logger.info(f"현재가: {current_price}")
-
-                breakout_guard_status = fetch_breakout_guard_status(exchange, grid_state)
-                log_breakout_guard_transition(runtime, breakout_guard_status)
-
-                pending_slots = {order.slot_index for order in pending_orders.values()}
-                buy_orders, sell_orders = strategy.evaluate_with_pending(
-                    current_price,
-                    pending_slot_indexes=pending_slots,
-                )
-                buy_orders = apply_breakout_guard_to_buy_orders(
-                    buy_orders,
-                    breakout_guard_status,
-                )
-                if not sell_orders and not buy_orders:
-                    time.sleep(cfg.PRICE_POLL_INTERVAL)
+                if use_price_event_loop:
+                    result = run_price_event_loop_iteration(
+                        exchange=exchange,
+                        strategy=strategy,
+                        grid_state=grid_state,
+                        grid_repository=grid_repository,
+                        runtime=runtime,
+                        pending_orders=pending_orders,
+                        current_order_day=current_order_day,
+                        daily_order_count=daily_order_count,
+                        on_grid_updated=persist_current_grid,
+                        pending_order_repository=pending_order_repository,
+                        price_event_state=price_event_state,
+                        wait_timeout_seconds=cfg.PRICE_POLL_INTERVAL,
+                        min_interval_seconds=cfg.UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS,
+                    )
+                    current_order_day = result.current_order_day
+                    daily_order_count = result.daily_order_count
                     continue
 
-                submitted = process_cycle_orders(
-                    sell_orders=sell_orders,
-                    buy_orders=buy_orders,
+                result = run_trading_cycle(
                     exchange=exchange,
                     strategy=strategy,
+                    grid_state=grid_state,
+                    grid_repository=grid_repository,
+                    runtime=runtime,
                     pending_orders=pending_orders,
+                    current_order_day=current_order_day,
                     daily_order_count=daily_order_count,
                     on_grid_updated=persist_current_grid,
                     pending_order_repository=pending_order_repository,
+                    force_rest_price=force_rest_polling,
                 )
-                daily_order_count += submitted
-
-                if submitted:
-                    logger.info(grid_state.summary())
+                current_order_day = result.current_order_day
+                daily_order_count = result.daily_order_count
 
             except KeyboardInterrupt:
                 logger.info("사용자 중단")

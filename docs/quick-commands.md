@@ -119,6 +119,19 @@ print(cfg.PGHOST, cfg.PGPORT, cfg.PGDATABASE, cfg.PGUSER, cfg.PGSCHEMA)
 PY
 ```
 
+### 현재가 WebSocket 이벤트 루프 설정 확인
+```bash
+python3 - <<'PY'
+import config.settings as cfg
+print("UPBIT_WS_PUBLIC_ENABLED=", cfg.UPBIT_WS_PUBLIC_ENABLED)
+print("UPBIT_WS_EVENT_LOOP_ENABLED=", cfg.UPBIT_WS_EVENT_LOOP_ENABLED)
+print("UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS=", cfg.UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS)
+print("PRICE_POLL_INTERVAL=", cfg.PRICE_POLL_INTERVAL)
+PY
+```
+
+기본값은 public ticker WebSocket 이벤트 루프 사용, 전략 평가 최소 3초 간격, 장애 시 5초 REST polling fallback 이다.
+
 ## 8) grid.properties 예시
 
 ```properties

@@ -1,6 +1,6 @@
 # auto
 
-Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-BTC`와 PostgreSQL 상태 저장소를 전제로 하며, 가격의 절대값이 아니라 poll 구간에서 `buy_price`와 `sell_price`를 어떻게 교차했는지로 매수와 매도를 판단한다. 주문이 접수됐다고 바로 상태를 바꾸지 않고, 업비트 재조회 결과가 `done`으로 확인될 때만 그리드 상태를 갱신한다. BUY 체결이 확인되면 해당 슬롯의 TP 지정가 SELL 주문을 즉시 생성해 pending 으로 관리한다.
+Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-BTC`와 PostgreSQL 상태 저장소를 전제로 하며, 가격의 절대값이 아니라 전략 평가 사이클 사이에서 `buy_price`와 `sell_price`를 어떻게 교차했는지로 매수와 매도를 판단한다. 기본 현재가 루프는 업비트 public `ticker` WebSocket 이벤트를 기다리되, 전략 평가는 최소 3초 간격으로만 실행한다. WebSocket을 사용할 수 없거나 이벤트가 없으면 기존 5초 REST polling 으로 fallback 한다. 주문이 접수됐다고 바로 상태를 바꾸지 않고, 업비트 재조회 결과가 `done`으로 확인될 때만 그리드 상태를 갱신한다. BUY 체결이 확인되면 해당 슬롯의 TP 지정가 SELL 주문을 즉시 생성해 pending 으로 관리한다.
 
 ## 파일 구성 및 역할
 
@@ -8,7 +8,7 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 
 | 분류 | 파일 | 역할 설명 |
 | :--- | :--- | :--- |
-| **Root** | `main.py` | 프로그램 진입점. CLI 커맨드(run, init-grid 등) 처리 및 루프 실행 |
+| **Root** | `main.py` | 프로그램 진입점. CLI 커맨드(run, init-grid 등) 처리 및 WebSocket 이벤트 기반 메인 루프 실행 |
 | **core/** | `grid.py` | 그리드 슬롯의 상태(`GridState`) 관리 및 업데이트 로직 |
 | | `grid_builder.py` | 설정된 속성값에 따라 신규 그리드 슬롯(`GridRow`)을 생성 및 분배 |
 | | `grid_properties.py` | 그리드 범위, 예산 가중치 등 그리드 명세(`GridPropertySpec`) 정의 |
@@ -21,7 +21,8 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 | | `factory.py` | 설정에 따라 적절한 저장소(Repository) 인스턴스를 생성하는 팩토리 |
 | | `interfaces.py` | 저장소 계층의 일관성을 위한 추상 인터페이스 정의 |
 | | `postgres_common.py` | DB 연결 설정 및 트랜잭션 관리를 위한 공통 유틸리티 |
-| **exchange/** | `crypto.py` | 업비트(Upbit) API를 연동하여 실제 주문 제출 및 상태 조회 구현 |
+| **exchange/** | `crypto.py` | 업비트(Upbit) REST API와 선택적 WebSocket 캐시를 연동하여 실제 주문 제출 및 상태 조회 구현 |
+| | `upbit_ws.py` | 업비트 WebSocket ticker/candle/myAsset/myOrder 캐시와 현재가 이벤트 대기 기능 |
 | | `base.py` | 거래소 연동을 위한 공통 추상 클래스(`BaseExchange`) 정의 |
 | **scripts/** | `reset_krw_btc_live.py` | 운영 중인 그리드를 초기화하고 자산을 정리하여 재시작하는 운영 스크립트 |
 | | `show_grid_state.py` | 현재 DB에 저장된 그리드와 주문의 상태를 요약해서 터미널에 출력 |
@@ -36,7 +37,7 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 ## 전략 개요
 - 그리드는 빈 슬롯과 보유 슬롯의 집합으로 운영된다.
 - 빈 슬롯은 하락 교차에서 매수 후보가 되고, 보유 슬롯은 목표 매도 가격 이상에서 매도 후보가 된다.
-- 같은 poll 안에 여러 `buy_price`를 함께 통과하면 여러 슬롯이 동시에 매수 후보가 될 수 있다.
+- 같은 평가 사이클 안에 여러 `buy_price`를 함께 통과하면 여러 슬롯이 동시에 매수 후보가 될 수 있다.
 - 신규 매수는 단순 가격 조건만으로 생성되지 않고, 활성 윈도우, inventory-target gate, 브레이크아웃 가드를 함께 통과해야 한다.
 - BUY 체결이 확정되면 해당 슬롯의 TP 지정가 SELL 주문을 즉시 제출하고, 이미 열린 SELL pending 주문이 있으면 같은 슬롯에 중복 매도를 만들지 않는다.
 - 매도 기준은 저장된 `sell_price` 하나로 고정되지 않고, 보유 기간에 따라 압축되는 `effective_sell_price`를 사용할 수 있다.
@@ -50,7 +51,7 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 - 보유 슬롯은 가능하면 항상 대응하는 TP SELL pending 주문을 하나씩 갖는 구조를 기본으로 한다.
 
 ## 매수 로직
-빈 슬롯의 기본 매수 조건은 `previous_price > buy_price >= current_price` 다. 첫 가격 스냅샷에서는 신규 매수를 만들지 않고, 이후 poll 부터 하락 교차한 empty 슬롯만 매수 후보가 된다.
+빈 슬롯의 기본 매수 조건은 `previous_price > buy_price >= current_price` 다. 첫 가격 스냅샷에서는 신규 매수를 만들지 않고, 이후 전략 평가 사이클부터 하락 교차한 empty 슬롯만 매수 후보가 된다.
 
 가격 조건만 맞는다고 바로 사지 않는다.
 - 활성 윈도우는 `previous_price` 기준으로 계산한다.
@@ -75,6 +76,16 @@ inventory-target gate 도 함께 적용된다.
 - `UPWARD_BUY_ENABLED=True` 일 때 켜지고, 기본값은 `ON` 이다
 
 기본 경로는 이 기능을 켜 둔 상승 재진입 경로다.
+
+## 현재가 루프와 WebSocket 전환
+운영 기본값은 현재가 `ticker` WebSocket 이벤트 루프다.
+
+- `UPBIT_WS_PUBLIC_ENABLED=True`: public ticker WebSocket 캐시를 켠다.
+- `UPBIT_WS_EVENT_LOOP_ENABLED=True`: 메인 루프가 새 ticker 이벤트를 기다렸다가 전략 평가 사이클을 실행한다.
+- `UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS=3`: ticker 이벤트가 더 자주 와도 전략 평가는 최소 3초 간격으로 제한한다.
+- `PRICE_POLL_INTERVAL=5`: WebSocket 의존성 누락, 시작 실패, 연결 오류, 이벤트 없음, stale tick 상황에서 REST 현재가 조회 fallback 주기로 사용한다.
+
+WebSocket callback/thread 는 가격 이벤트만 메모리 캐시에 저장한다. pending 주문, 그리드 상태, DB 저장, 주문 제출은 모두 `main.py`의 단일 실행 경로에서 직렬로 처리한다. 따라서 이벤트 폭주가 있어도 주문 판단은 backlog를 순차 처리하지 않고 최신 가격으로 coalesce 된다.
 
 ## 매도 로직과 Age TP
 BUY 체결이 확인되면 해당 슬롯의 `effective_sell_price` 기준 지정가 SELL 주문을 즉시 제출한다. 따라서 기본 매도 경로는 “현재가를 보고 그때 SELL을 새로 만든다”보다 “체결 직후 TP SELL을 미리 걸어둔다”에 가깝다. 보유 슬롯에 열린 SELL pending 주문이 없을 때만 누락된 TP 주문을 보강한다.
@@ -149,6 +160,8 @@ rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단
 - `ACTIVE_WINDOW_BELOW_CURRENT_SLOTS`, `ACTIVE_WINDOW_ABOVE_CURRENT_REENTRY_SLOTS`: 빈 슬롯 매수 후보 범위를 제어한다.
 - `BREAKOUT_GUARD_ENABLED`, `BREAKOUT_GUARD_CANDLE_UNIT`, `BREAKOUT_GUARD_CONSECUTIVE_CANDLES`: 추세장 신규 매수 차단 규칙을 제어한다.
 - `GRID_TP_MODEL`, `GRID_TP_K_BASE=9.0`, `GRID_TP_K_FLOOR=7.0`: 신규 생성 그리드의 TP 규칙과 Age TP 압축 기준을 결정한다.
+- `UPBIT_WS_PUBLIC_ENABLED`, `UPBIT_WS_EVENT_LOOP_ENABLED`, `UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS`: 현재가 WebSocket 이벤트 루프와 최소 전략 평가 간격을 제어한다.
+- `UPBIT_WS_CANDLE_ENABLED`, `UPBIT_WS_ASSET_ENABLED`, `UPBIT_WS_ORDER_ENABLED`: 캔들/자산/주문 상태 WebSocket 캐시 사용 여부를 제어한다. 주문 생성과 취소는 계속 REST만 사용한다.
 
 ## 참고 문서
 - [docs/UPBIT_API_REFERENCE.md](docs/UPBIT_API_REFERENCE.md)

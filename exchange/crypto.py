@@ -25,6 +25,7 @@ from exchange.upbit_ws import (
     UpbitMinuteCandleWebSocketCache,
     UpbitOrderWebSocketCache,
     UpbitOrderWebSocketStatus,
+    UpbitTickerPriceEvent,
     UpbitTickerWebSocketCache,
 )
 from utils.decimal_utils import DECIMAL_ZERO, format_decimal, to_decimal
@@ -430,6 +431,53 @@ class CryptoExchange(BaseExchange):
             logger.debug(f"현재가 캐시 조회 {symbol}: {price}")
         return price
 
+    def ensure_ticker_price_events(self, symbol: str) -> bool:
+        """Return True when the public ticker WebSocket can be used for event waits."""
+        if self._ticker_cache is None:
+            return False
+
+        try:
+            return self._ticker_cache.ensure_started(symbol)
+        except Exception as exc:
+            logger.warning(f"업비트 WebSocket 현재가 이벤트 시작 실패, REST polling으로 대체: {exc}")
+            return False
+
+    def get_ticker_price_event(self, symbol: str) -> UpbitTickerPriceEvent | None:
+        """Return the latest fresh ticker WebSocket event without blocking."""
+        if self._ticker_cache is None:
+            return None
+
+        try:
+            if not self._ticker_cache.ensure_started(symbol):
+                return None
+            return self._ticker_cache.get_price_event(symbol)
+        except Exception as exc:
+            logger.warning(f"업비트 WebSocket 현재가 이벤트 조회 실패, REST polling으로 대체: {exc}")
+            return None
+
+    def wait_for_ticker_price_event(
+        self,
+        symbol: str,
+        *,
+        timeout: float | None,
+        since: float | None = None,
+    ) -> UpbitTickerPriceEvent | None:
+        """Wait for a fresh ticker WebSocket event; callers keep REST fallback."""
+        if self._ticker_cache is None:
+            return None
+
+        try:
+            if not self._ticker_cache.ensure_started(symbol):
+                return None
+            return self._ticker_cache.wait_for_price_event(
+                symbol,
+                timeout=timeout,
+                since=since,
+            )
+        except Exception as exc:
+            logger.warning(f"업비트 WebSocket 현재가 이벤트 대기 실패, REST polling으로 대체: {exc}")
+            return None
+
     def _get_cached_minute_candle_closes(
         self,
         symbol: str,
@@ -533,6 +581,10 @@ class CryptoExchange(BaseExchange):
         if cached_price is not None:
             return cached_price
 
+        return self.get_current_price_rest(symbol)
+
+    def get_current_price_rest(self, symbol: str) -> Decimal:
+        """현재가 REST 조회. WebSocket event fallback 경로에서 명시적으로 사용한다."""
         data = self._get("/v1/ticker", params={"markets": symbol})
         price = to_decimal(data[0]["trade_price"])
         logger.debug(f"현재가 조회 {symbol}: {price}")

@@ -15,6 +15,7 @@ from exchange.upbit_ws import (
     UpbitMinuteCandleWebSocketCache,
     UpbitOrderWebSocketCache,
     UpbitOrderWebSocketStatus,
+    UpbitTickerPriceEvent,
     UpbitTickerWebSocketCache,
 )
 
@@ -225,6 +226,39 @@ class CryptoExchangeBalanceTest(unittest.TestCase):
 
         current_time = 1006.0
         self.assertIsNone(cache.get_price("KRW-BTC"))
+
+    def test_upbit_ticker_websocket_cache_waits_for_newer_price_event(self):
+        current_time = 1000.0
+
+        def time_provider():
+            return current_time
+
+        cache = UpbitTickerWebSocketCache(
+            max_age_seconds=5,
+            websocket_app_factory=Mock(),
+            time_provider=time_provider,
+        )
+        self._subscribe_cache_symbols(cache, "KRW-BTC")
+
+        cache._on_message(None, b'{"cd":"KRW-BTC","tp":110000000}')
+        event = cache.wait_for_price_event("KRW-BTC", timeout=0, since=None)
+
+        self.assertEqual(
+            event,
+            UpbitTickerPriceEvent(
+                symbol="KRW-BTC",
+                price=Decimal("110000000"),
+                updated_at=1000.0,
+            ),
+        )
+        self.assertIsNone(cache.wait_for_price_event("KRW-BTC", timeout=0, since=1000.0))
+
+        current_time = 1001.0
+        cache._on_message(None, b'{"cd":"KRW-BTC","tp":111000000}')
+
+        event = cache.wait_for_price_event("KRW-BTC", timeout=0, since=1000.0)
+        self.assertEqual(event.price, Decimal("111000000"))
+        self.assertEqual(event.updated_at, 1001.0)
 
     def test_upbit_ticker_websocket_cache_returns_none_after_connection_error(self):
         cache = UpbitTickerWebSocketCache(

@@ -97,9 +97,11 @@ PGSCHEMA = os.getenv("PGSCHEMA", "auto_trading")
 API_KEY = os.getenv("UPBIT_ACCESS_KEY", "")
 API_SECRET = os.getenv("UPBIT_SECRET_KEY", "")
 
-# ── 업비트 Public WebSocket 현재가 캐시 ─────────────────────
-UPBIT_WS_PUBLIC_ENABLED = _env_bool("UPBIT_WS_PUBLIC_ENABLED", False)
+# ── 업비트 Public WebSocket 현재가 캐시 / 이벤트 루프 ───────
+UPBIT_WS_PUBLIC_ENABLED = _env_bool("UPBIT_WS_PUBLIC_ENABLED", True)
 UPBIT_WS_PRICE_MAX_AGE_SECONDS = _env_positive_float("UPBIT_WS_PRICE_MAX_AGE_SECONDS", 10.0)
+UPBIT_WS_EVENT_LOOP_ENABLED = _env_bool("UPBIT_WS_EVENT_LOOP_ENABLED", True)
+UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS = _env_positive_float("UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS", 3.0)
 UPBIT_WS_CANDLE_ENABLED = _env_bool("UPBIT_WS_CANDLE_ENABLED", False)
 UPBIT_WS_CANDLE_MAX_AGE_SECONDS = _env_positive_float("UPBIT_WS_CANDLE_MAX_AGE_SECONDS", 60.0)
 UPBIT_WS_ASSET_ENABLED = _env_bool("UPBIT_WS_ASSET_ENABLED", False)

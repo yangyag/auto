@@ -20,6 +20,7 @@
 - Python 3.11+
 - PostgreSQL 접속 정보
 - 업비트 API 키
+- 업비트 REST/WebSocket 엔드포인트로 나가는 네트워크 연결
 
 선택:
 - `uv` (`python3 -m venv .venv` 가 실패할 때 사용)
@@ -74,6 +75,10 @@ cp .env_sample .env
 UPBIT_ACCESS_KEY=YOUR_UPBIT_ACCESS_KEY
 UPBIT_SECRET_KEY=YOUR_UPBIT_SECRET_KEY
 
+UPBIT_WS_PUBLIC_ENABLED=true
+UPBIT_WS_EVENT_LOOP_ENABLED=true
+UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS=3
+
 STATE_BOT_KEY=krw-btc-live
 
 PGHOST=127.0.0.1
@@ -86,6 +91,8 @@ PGSCHEMA=auto_trading
 
 주의:
 - `config/settings.py`는 프로젝트 루트 `.env`를 읽는다.
+- 현재가 루프는 기본적으로 public ticker WebSocket 이벤트 기반으로 동작한다.
+- WebSocket 장애, 이벤트 없음, 의존성 누락 시 기존 5초 REST polling 으로 fallback 한다.
 - 같은 서버에 `/home/ubuntu/llm.env` 가 있어도 이 저장소 설정 파일이 아니다.
 - EC2 운영 서버 기준 자동매매 `.env` 경로는 `/home/ubuntu/auto/.env` 다.
 

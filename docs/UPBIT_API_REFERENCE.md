@@ -4,7 +4,7 @@
 
 이 문서는 현재 저장소에서 사용하는 업비트 Open API 관련 내용을 빠르게 참고하기 위한 **실무용 요약본**이다.
 
-- 기준일: 2026-04-15
+- 기준일: 2026-04-24
 - API 버전: v1.6.2 (공식 문서 기준)
 - 기준 범위: 가상화폐 거래, 업비트 거래소, REST API 중심
 - 우선 대상: 현재 코드에서 직접 쓰는 인증/현재가/잔고/주문 생성/주문 조회/주문 취소
@@ -26,6 +26,11 @@
 ### 자주 보는 Reference
 
 - 현재가 조회: <https://docs.upbit.com/kr/reference/list-tickers>
+- WebSocket 가이드: <https://docs.upbit.com/kr/reference/websocket-guide>
+- WebSocket 현재가: <https://docs.upbit.com/kr/reference/websocket-ticker>
+- WebSocket 분 캔들: <https://docs.upbit.com/kr/reference/websocket-candle>
+- WebSocket 내 자산: <https://docs.upbit.com/kr/reference/websocket-myasset>
+- WebSocket 내 주문: <https://docs.upbit.com/kr/reference/websocket-myorder>
 - 잔고 조회: <https://docs.upbit.com/kr/reference/get-balance>
 - 주문 가능 정보 조회: <https://docs.upbit.com/kr/reference/available-order-information>
 - 주문 생성: <https://docs.upbit.com/kr/reference/new-order>
@@ -46,6 +51,7 @@
 - 현재 설정: `config/settings.py`의 `EXCHANGE_TYPE = "crypto"`
 - 현재 구현 중심 파일:
   - `exchange/crypto.py`
+  - `exchange/upbit_ws.py`
   - `main.py`
   - `strategy/grid_strategy.py`
 
@@ -64,11 +70,11 @@
 
 현재 프로젝트는 둘 다 사용하지만, 핵심은 다음 흐름이다.
 
-1. Quotation API로 현재가 조회
-2. 내부 전략으로 매수/매도 판단
+1. Public WebSocket `ticker` 이벤트를 수신해 최신 현재가 캐시 갱신
+2. 최소 3초 간격 전략 평가 사이클에서 매수/매도 판단
 3. Exchange API로 잔고/주문 가능 여부 확인
 4. Exchange API로 주문 생성
-5. 필요 시 주문 조회/취소
+5. 필요 시 REST 또는 terminal `myOrder` 캐시로 주문 조회, REST로 주문 취소
 
 ## 기본 Endpoint
 
@@ -84,7 +90,7 @@
 - 시세용(공개): `wss://api.upbit.com/websocket/v1`
 - 내 자산/내 주문용(인증): `wss://api.upbit.com/websocket/v1/private`
 
-현재 저장소는 현재가 조회용 `ticker` 캐시와 브레이크아웃 가드용 분 캔들 `candle.{unit}m` 캐시를 선택적으로 공개 WebSocket으로 쓴다. 잔고와 보유 수량은 선택적으로 인증 WebSocket `myAsset` 캐시를 쓸 수 있다. 주문 상태 조회는 선택적으로 인증 WebSocket `myOrder` 캐시를 terminal 상태(`done`, `cancel`)에만 보수적으로 쓸 수 있다. 모두 기본값은 비활성화이며, 캐시 사용이 불가능하면 기존 REST 조회로 fallback 한다. 주문 생성과 취소는 계속 REST만 사용한다.
+현재 저장소는 현재가 조회용 `ticker` 캐시와 브레이크아웃 가드용 분 캔들 `candle.{unit}m` 캐시를 선택적으로 공개 WebSocket으로 쓴다. 잔고와 보유 수량은 선택적으로 인증 WebSocket `myAsset` 캐시를 쓸 수 있다. 주문 상태 조회는 선택적으로 인증 WebSocket `myOrder` 캐시를 terminal 상태(`done`, `cancel`)에만 보수적으로 쓸 수 있다. 현재가 `ticker` WebSocket과 ticker 이벤트 기반 메인 루프는 기본 활성화이며, 장애/의존성 없음/이벤트 없음이면 기존 REST polling으로 fallback 한다. 주문 생성과 취소는 계속 REST만 사용한다.
 
 ## 인증 핵심 정리
 
@@ -146,13 +152,17 @@
 - 예시 파라미터: `markets=KRW-BTC`
 - 현재 코드 연결:
   - `exchange/crypto.py::get_current_price`
+  - `exchange/crypto.py::wait_for_ticker_price_event`
   - `exchange/upbit_ws.py::UpbitTickerWebSocketCache`
+  - `main.py::run_price_event_loop_iteration`
 
 주의:
 
-- `UPBIT_WS_PUBLIC_ENABLED=false` 가 기본값이며, 기본 동작은 기존 REST 스냅샷 조회와 같다.
-- WebSocket이 켜져 있어도 전략 평가는 `PRICE_POLL_INTERVAL` 주기에서만 실행된다.
-- WebSocket 의존성 누락, 시작 실패, 첫 tick 없음, stale tick 은 모두 REST ticker fallback 으로 처리한다.
+- `UPBIT_WS_PUBLIC_ENABLED=true` 가 기본값이며, ticker 캐시와 메인 이벤트 루프가 public WebSocket ticker를 우선 사용한다.
+- `UPBIT_WS_EVENT_LOOP_ENABLED=true` 가 기본값이면 메인 루프는 새 ticker 이벤트를 기다렸다가 최신 가격으로 한 사이클을 실행한다.
+- 이벤트 기반 전략 평가는 `UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS=3` 기본값으로 최소 3초 간격 throttle을 적용한다.
+- WebSocket callback/thread 는 가격 이벤트 캐시만 갱신하고, 주문/DB/전략 상태 변경은 `main.py`의 단일 루프에서 직렬 처리한다.
+- WebSocket 의존성 누락, 시작 실패, 첫 tick 없음, 이벤트 timeout, stale tick 은 모두 기존 `PRICE_POLL_INTERVAL=5` REST ticker polling fallback 으로 처리한다.
 - 주문 가능 정보, 주문 테스트, 주문 생성/취소는 계속 REST를 사용한다. 주문 상태 조회는 `UPBIT_WS_ORDER_ENABLED=true`일 때 terminal `myOrder` 이벤트만 REST 생략에 사용할 수 있다.
 
 ## 분 캔들 조회
@@ -262,9 +272,9 @@
 - 코드상 매수는 `side=bid`, 매도는 `side=ask`로 매핑된다.
 - 빈 슬롯 하락 교차 매수와 보유 슬롯 매도는 `ord_type=limit`를 사용한다.
 - 빈 슬롯은 `previous_price > buy_price >= current_price` 인 하락 교차일 때 지정가 주문을 낸다.
-- 한 poll 안에 여러 `buy_price`를 아래로 동시에 통과하면 그 empty 슬롯들은 모두 지정가 매수 주문 후보가 된다.
-- 빈 슬롯은 `previous_price < buy_price <= current_price` 인 empty 슬롯이 한 poll 동안 정확히 1개일 때만 `ord_type=price` 시장가 예산매수를 낸다.
-- 한 poll 안에 여러 `buy_price`를 동시에 위로 돌파하면 그 상승 구간 매수는 건너뛴다.
+- 한 평가 사이클 안에 여러 `buy_price`를 아래로 동시에 통과하면 그 empty 슬롯들은 모두 지정가 매수 주문 후보가 된다.
+- 빈 슬롯은 `previous_price < buy_price <= current_price` 인 empty 슬롯이 한 평가 사이클 동안 정확히 1개일 때만 `ord_type=price` 시장가 예산매수를 낸다.
+- 한 평가 사이클 안에 여러 `buy_price`를 동시에 위로 돌파하면 그 상승 구간 매수는 건너뛴다.
 - 보유 슬롯은 현재가가 `sell_price` 이상이면 바로 매도 후보가 된다.
 - 매수 주문은 접수 시점이 아니라 `GET /v1/order` 재조회에서 `state=done`으로 확인될 때만 해당 슬롯의 `held_qty`에 반영된다.
 
@@ -468,6 +478,7 @@ BTC 현재가가 1억원 수준이면 **1,000원 단위**가 적용된다. 그�
 - `Remaining-Req` 파싱 및 throttling 추가
 - 미체결 주문 조회(`orders/open`)를 통한 재시작 복구 로직 보강
 - 가격 단위/최소 주문 금액을 KRW 마켓 정책 기준으로 정규화하는 유틸 추가
+- 현재가 WebSocket ticker 이벤트 기반 메인 루프 추가: 최소 3초 throttle, 5초 REST fallback
 - `smp_type` 옵션 도입 검토 (자전거래 방지)
 - `post_only` 옵션 도입 검토 (수수료 최적화)
 - WebSocket MyOrder 캐시 확대 검토 — 현재는 terminal 상태의 보수적 조회 가속에만 사용

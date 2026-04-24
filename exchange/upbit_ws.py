@@ -37,6 +37,15 @@ class UpbitOrderWebSocketStatus:
     remaining_volume: Decimal
 
 
+@dataclass(frozen=True)
+class UpbitTickerPriceEvent:
+    """Fresh public ticker price event cached with its monotonic update time."""
+
+    symbol: str
+    price: Decimal
+    updated_at: float
+
+
 class UpbitTickerWebSocketCache:
     """Threaded cache for public Upbit ticker trade_price messages."""
 
@@ -53,6 +62,7 @@ class UpbitTickerWebSocketCache:
         self._time_provider = time_provider or time.monotonic
         self._url = url
         self._lock = threading.Lock()
+        self._condition = threading.Condition(self._lock)
         self._prices: dict[str, tuple[Decimal, float]] = {}
         self._codes: set[str] = set()
         self._app = None
@@ -110,23 +120,57 @@ class UpbitTickerWebSocketCache:
 
     def get_price(self, symbol: str) -> Decimal | None:
         """Return a fresh cached price, or None when missing/stale."""
+        event = self.get_price_event(symbol)
+        if event is None:
+            return None
+        return event.price
+
+    def get_price_event(self, symbol: str) -> UpbitTickerPriceEvent | None:
+        """Return a fresh cached ticker event, or None when missing/stale."""
         code = self._normalize_symbol(symbol)
         if not code:
             return None
 
-        now = self._time_provider()
-        with self._lock:
+        with self._condition:
             if self._connection_failed:
                 return None
-            cached = self._prices.get(code)
+            return self._fresh_price_event_locked(code, self._time_provider())
 
-        if cached is None:
+    def wait_for_price_event(
+        self,
+        symbol: str,
+        *,
+        timeout: float | None,
+        since: float | None = None,
+    ) -> UpbitTickerPriceEvent | None:
+        """Block until a fresh ticker event newer than ``since`` arrives, or timeout."""
+        code = self._normalize_symbol(symbol)
+        if not code:
             return None
 
-        price, updated_at = cached
-        if now - updated_at > self.max_age_seconds:
-            return None
-        return price
+        deadline = None
+        if timeout is not None:
+            timeout = max(float(timeout), 0.0)
+            deadline = self._time_provider() + timeout
+
+        with self._condition:
+            while True:
+                now = self._time_provider()
+                if self._connection_failed or self._start_failed:
+                    return None
+
+                event = self._fresh_price_event_locked(code, now, since=since)
+                if event is not None:
+                    return event
+
+                if deadline is None:
+                    remaining = None
+                else:
+                    remaining = deadline - now
+                    if remaining <= 0:
+                        return None
+
+                self._condition.wait(remaining)
 
     def stop(self) -> None:
         """Best-effort shutdown hook for tests or controlled process teardown."""
@@ -135,6 +179,7 @@ class UpbitTickerWebSocketCache:
             self._app = None
             self._thread = None
             self._started = False
+            self._condition.notify_all()
         if app is not None and hasattr(app, "close"):
             app.close()
 
@@ -151,6 +196,7 @@ class UpbitTickerWebSocketCache:
         except Exception as exc:  # pragma: no cover - depends on websocket-client runtime
             with self._lock:
                 self._connection_failed = True
+                self._condition.notify_all()
             logger.warning(f"Upbit public WebSocket stopped unexpectedly; REST fallback remains available: {exc}")
         finally:
             with self._lock:
@@ -158,6 +204,7 @@ class UpbitTickerWebSocketCache:
                     self._app = None
                     self._thread = None
                     self._started = False
+                self._condition.notify_all()
 
     def _on_open(self, ws, codes: list[str]) -> None:
         subscribe_message = [
@@ -168,6 +215,7 @@ class UpbitTickerWebSocketCache:
         ws.send(json.dumps(subscribe_message))
         with self._lock:
             self._connection_failed = False
+            self._condition.notify_all()
         logger.info(f"Upbit public WebSocket subscribed: codes={codes}")
 
     def _on_message(self, _ws, message) -> None:
@@ -209,16 +257,37 @@ class UpbitTickerWebSocketCache:
 
         with self._lock:
             self._prices[code] = (price, self._time_provider())
+            self._condition.notify_all()
 
     def _on_error(self, _ws, error) -> None:
         with self._lock:
             self._connection_failed = True
+            self._condition.notify_all()
         logger.warning(f"Upbit public WebSocket error; REST fallback remains available: {error}")
 
     def _on_close(self, _ws, close_status_code, close_msg) -> None:
         with self._lock:
             self._connection_failed = True
+            self._condition.notify_all()
         logger.info(f"Upbit public WebSocket closed: code={close_status_code}, msg={close_msg}")
+
+    def _fresh_price_event_locked(
+        self,
+        code: str,
+        now: float,
+        *,
+        since: float | None = None,
+    ) -> UpbitTickerPriceEvent | None:
+        cached = self._prices.get(code)
+        if cached is None:
+            return None
+
+        price, updated_at = cached
+        if since is not None and updated_at <= since:
+            return None
+        if now - updated_at > self.max_age_seconds:
+            return None
+        return UpbitTickerPriceEvent(symbol=code, price=price, updated_at=updated_at)
 
     @staticmethod
     def _decode_message(message):
