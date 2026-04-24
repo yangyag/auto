@@ -98,6 +98,26 @@ EC2에 최신 커밋 반영 기본 순서:
 - pull 이 tracked 변경과 충돌하면 무작정 되돌리지 말고 어떤 파일인지 먼저 확인한다.
 
 ## Python 실행 환경 메모
+
+### EC2
+- EC2에는 `/home/ubuntu/auto/.venv` 가 이미 구성되어 있다. 새로 만들지 말고 기존 venv 를 그대로 사용한다.
+- 쉘에서 직접 작업할 때는 activate 스크립트로 활성화한다.
+
+```bash
+source /home/ubuntu/auto/.venv/bin/activate
+```
+
+- 배포 스크립트나 원격 명령처럼 activate 없이 실행할 때는 `.venv/bin/python` 절대 경로를 직접 호출한다. `run.sh` 도 `PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh` 형태로 넘긴다.
+- `requirements.txt` 가 변경되어 의존성을 재설치해야 할 때도 `.venv` 를 재생성하지 말고 기존 venv 에 설치만 추가한다.
+
+```bash
+/home/ubuntu/auto/.venv/bin/python -m pip install -r requirements.txt
+```
+
+- `.venv/` 는 git untracked 상태가 정상이다. `git clean -fd` 같은 파괴적 정리 대상에서 반드시 제외한다.
+- venv 가 실제로 깨졌다고 판단되면 재생성 전에 먼저 `/home/ubuntu/auto/.venv/bin/python -c "import main"` 로 실패 원인을 확인한다. import 가 되면 venv 자체 문제가 아니라 설정/의존성 문제일 가능성이 높다.
+
+### 로컬
 - 이 작업 디렉터리는 시스템 `python3 -m venv .venv` 가 `ensurepip` 부재로 실패할 수 있다.
 - 같은 문제가 다시 나오면 우선 `uv`로 가상환경을 만든다.
 
