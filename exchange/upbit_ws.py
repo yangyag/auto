@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import random
 import re
 import threading
 import time
@@ -25,6 +26,22 @@ logger = get_logger(__name__)
 UPBIT_PUBLIC_WS_URL = "wss://api.upbit.com/websocket/v1"
 UPBIT_PRIVATE_WS_URL = "wss://api.upbit.com/websocket/v1/private"
 UPBIT_SUPPORTED_MINUTE_CANDLE_UNITS = {1, 3, 5, 10, 15, 30, 60, 240}
+
+_RECONNECT_INITIAL_SECONDS = 1.0
+_RECONNECT_MAX_SECONDS = 30.0
+_RECONNECT_RESET_AFTER_SECONDS = 30.0
+_RECONNECT_JITTER_RATIO = 0.2
+
+
+def _next_backoff_seconds(current: float) -> float:
+    if current <= 0.0:
+        return _RECONNECT_INITIAL_SECONDS
+    return min(_RECONNECT_MAX_SECONDS, current * 2.0)
+
+
+def _jittered_backoff_seconds(base: float, random_fn: Callable[[], float]) -> float:
+    jitter = (random_fn() * 2.0 - 1.0) * _RECONNECT_JITTER_RATIO
+    return max(0.0, base * (1.0 + jitter))
 
 
 @dataclass(frozen=True)
@@ -56,13 +73,18 @@ class UpbitTickerWebSocketCache:
         websocket_app_factory: Optional[Callable] = None,
         time_provider: Callable[[], float] | None = None,
         url: str = UPBIT_PUBLIC_WS_URL,
+        sleep_fn: Callable[[float], None] | None = None,
+        random_fn: Callable[[], float] | None = None,
     ):
         self.max_age_seconds = float(max_age_seconds)
         self._websocket_app_factory = websocket_app_factory
         self._time_provider = time_provider or time.monotonic
         self._url = url
+        self._sleep_fn = sleep_fn
+        self._random_fn = random_fn or random.random
         self._lock = threading.Lock()
         self._condition = threading.Condition(self._lock)
+        self._shutdown = threading.Event()
         self._prices: dict[str, tuple[Decimal, float]] = {}
         self._codes: set[str] = set()
         self._app = None
@@ -72,7 +94,7 @@ class UpbitTickerWebSocketCache:
         self._connection_failed = False
 
     def ensure_started(self, symbol: str) -> bool:
-        """Start the background WebSocket thread once, returning False on unsafe setup."""
+        """Start the reconnect loop thread once, returning False on unsafe setup."""
         code = self._normalize_symbol(symbol)
         if not code:
             return False
@@ -90,33 +112,18 @@ class UpbitTickerWebSocketCache:
                 logger.warning("Upbit public WebSocket disabled: websocket-client is not installed")
                 return False
 
-            codes = sorted(self._codes)
-            try:
-                app = app_factory(
-                    self._url,
-                    on_open=lambda ws: self._on_open(ws, codes),
-                    on_message=self._on_message,
-                    on_error=self._on_error,
-                    on_close=self._on_close,
-                )
-                thread = threading.Thread(
-                    target=self._run_forever,
-                    args=(app,),
-                    daemon=True,
-                    name="upbit-public-ticker-ws",
-                )
-                self._app = app
-                self._thread = thread
-                self._started = True
-                thread.start()
-                return True
-            except Exception as exc:
-                self._app = None
-                self._thread = None
-                self._started = False
-                self._start_failed = True
-                logger.warning(f"Upbit public WebSocket start failed; REST fallback will be used: {exc}")
-                return False
+            self._shutdown.clear()
+            self._connection_failed = False
+            thread = threading.Thread(
+                target=self._reconnect_loop,
+                args=(app_factory,),
+                daemon=True,
+                name="upbit-public-ticker-ws",
+            )
+            self._thread = thread
+            self._started = True
+            thread.start()
+            return True
 
     def get_price(self, symbol: str) -> Decimal | None:
         """Return a fresh cached price, or None when missing/stale."""
@@ -176,12 +183,13 @@ class UpbitTickerWebSocketCache:
         """Best-effort shutdown hook for tests or controlled process teardown."""
         with self._lock:
             app = self._app
-            self._app = None
-            self._thread = None
-            self._started = False
+            self._shutdown.set()
             self._condition.notify_all()
         if app is not None and hasattr(app, "close"):
-            app.close()
+            try:
+                app.close()
+            except Exception:
+                pass
 
     def _resolve_websocket_app_factory(self) -> Optional[Callable]:
         if self._websocket_app_factory is not None:
@@ -190,21 +198,66 @@ class UpbitTickerWebSocketCache:
             return None
         return getattr(websocket, "WebSocketApp", None)
 
-    def _run_forever(self, app) -> None:
+    def _reconnect_loop(self, app_factory: Callable) -> None:
+        backoff = 0.0
         try:
-            app.run_forever(ping_interval=30, ping_timeout=10)
-        except Exception as exc:  # pragma: no cover - depends on websocket-client runtime
-            with self._lock:
-                self._connection_failed = True
-                self._condition.notify_all()
-            logger.warning(f"Upbit public WebSocket stopped unexpectedly; REST fallback remains available: {exc}")
+            while not self._shutdown.is_set():
+                with self._lock:
+                    codes = sorted(self._codes)
+
+                try:
+                    app = app_factory(
+                        self._url,
+                        on_open=lambda ws, _codes=codes: self._on_open(ws, _codes),
+                        on_message=self._on_message,
+                        on_error=self._on_error,
+                        on_close=self._on_close,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        f"Upbit public WebSocket factory failed; retrying after backoff: {exc}"
+                    )
+                    backoff = _next_backoff_seconds(backoff)
+                    self._sleep_for_reconnect(backoff)
+                    continue
+
+                with self._lock:
+                    self._app = app
+
+                connected_at = self._time_provider()
+                try:
+                    app.run_forever(ping_interval=30, ping_timeout=10)
+                except Exception as exc:
+                    logger.warning(
+                        f"Upbit public WebSocket stopped unexpectedly; REST fallback remains available: {exc}"
+                    )
+
+                disconnected_at = self._time_provider()
+                with self._lock:
+                    if self._app is app:
+                        self._app = None
+                    self._connection_failed = True
+                    self._condition.notify_all()
+
+                if self._shutdown.is_set():
+                    break
+
+                if disconnected_at - connected_at >= _RECONNECT_RESET_AFTER_SECONDS:
+                    backoff = 0.0
+                backoff = _next_backoff_seconds(backoff)
+                self._sleep_for_reconnect(backoff)
         finally:
             with self._lock:
-                if self._app is app:
-                    self._app = None
-                    self._thread = None
-                    self._started = False
+                self._thread = None
+                self._started = False
                 self._condition.notify_all()
+
+    def _sleep_for_reconnect(self, base_seconds: float) -> None:
+        duration = _jittered_backoff_seconds(base_seconds, self._random_fn)
+        if self._sleep_fn is not None:
+            self._sleep_fn(duration)
+            return
+        self._shutdown.wait(timeout=duration)
 
     def _on_open(self, ws, codes: list[str]) -> None:
         subscribe_message = [
@@ -310,12 +363,17 @@ class UpbitMinuteCandleWebSocketCache:
         websocket_app_factory: Optional[Callable] = None,
         time_provider: Callable[[], float] | None = None,
         url: str = UPBIT_PUBLIC_WS_URL,
+        sleep_fn: Callable[[float], None] | None = None,
+        random_fn: Callable[[], float] | None = None,
     ):
         self.max_age_seconds = float(max_age_seconds)
         self._websocket_app_factory = websocket_app_factory
         self._time_provider = time_provider or time.monotonic
         self._url = url
+        self._sleep_fn = sleep_fn
+        self._random_fn = random_fn or random.random
         self._lock = threading.Lock()
+        self._shutdown = threading.Event()
         self._candles: dict[tuple[str, int, datetime], tuple[Decimal, float]] = {}
         self._last_message_at: dict[tuple[str, int], float] = {}
         self._subscriptions: set[tuple[str, int]] = set()
@@ -327,7 +385,7 @@ class UpbitMinuteCandleWebSocketCache:
         self._connection_failed = False
 
     def ensure_started(self, symbol: str, unit_minutes: int) -> bool:
-        """Start the background WebSocket thread once for a supported symbol/unit."""
+        """Start the reconnect loop once for a supported symbol/unit."""
         code = self._normalize_symbol(symbol)
         unit = self._normalize_unit(unit_minutes)
         if not code or unit is None:
@@ -347,35 +405,19 @@ class UpbitMinuteCandleWebSocketCache:
                 logger.warning("Upbit public candle WebSocket disabled: websocket-client is not installed")
                 return False
 
-            subscriptions = sorted(self._subscriptions)
-            try:
-                app = app_factory(
-                    self._url,
-                    on_open=lambda ws: self._on_open(ws, subscriptions),
-                    on_message=self._on_message,
-                    on_error=self._on_error,
-                    on_close=self._on_close,
-                )
-                thread = threading.Thread(
-                    target=self._run_forever,
-                    args=(app,),
-                    daemon=True,
-                    name="upbit-public-candle-ws",
-                )
-                self._app = app
-                self._thread = thread
-                self._started = True
-                self._active_subscriptions = set(subscriptions)
-                thread.start()
-                return True
-            except Exception as exc:
-                self._app = None
-                self._thread = None
-                self._started = False
-                self._active_subscriptions = set()
-                self._start_failed = True
-                logger.warning(f"Upbit public candle WebSocket start failed; REST fallback will be used: {exc}")
-                return False
+            self._shutdown.clear()
+            self._connection_failed = False
+            self._active_subscriptions = set(self._subscriptions)
+            thread = threading.Thread(
+                target=self._reconnect_loop,
+                args=(app_factory,),
+                daemon=True,
+                name="upbit-public-candle-ws",
+            )
+            self._thread = thread
+            self._started = True
+            thread.start()
+            return True
 
     def get_closes(
         self,
@@ -421,12 +463,12 @@ class UpbitMinuteCandleWebSocketCache:
         """Best-effort shutdown hook for tests or controlled process teardown."""
         with self._lock:
             app = self._app
-            self._app = None
-            self._thread = None
-            self._started = False
-            self._active_subscriptions = set()
+            self._shutdown.set()
         if app is not None and hasattr(app, "close"):
-            app.close()
+            try:
+                app.close()
+            except Exception:
+                pass
 
     def _resolve_websocket_app_factory(self) -> Optional[Callable]:
         if self._websocket_app_factory is not None:
@@ -435,20 +477,66 @@ class UpbitMinuteCandleWebSocketCache:
             return None
         return getattr(websocket, "WebSocketApp", None)
 
-    def _run_forever(self, app) -> None:
+    def _reconnect_loop(self, app_factory: Callable) -> None:
+        backoff = 0.0
         try:
-            app.run_forever(ping_interval=30, ping_timeout=10)
-        except Exception as exc:  # pragma: no cover - depends on websocket-client runtime
-            with self._lock:
-                self._connection_failed = True
-            logger.warning(f"Upbit public candle WebSocket stopped unexpectedly; REST fallback remains available: {exc}")
+            while not self._shutdown.is_set():
+                with self._lock:
+                    subscriptions = sorted(self._subscriptions)
+                    self._active_subscriptions = set(subscriptions)
+
+                try:
+                    app = app_factory(
+                        self._url,
+                        on_open=lambda ws, _subs=subscriptions: self._on_open(ws, _subs),
+                        on_message=self._on_message,
+                        on_error=self._on_error,
+                        on_close=self._on_close,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        f"Upbit public candle WebSocket factory failed; retrying after backoff: {exc}"
+                    )
+                    backoff = _next_backoff_seconds(backoff)
+                    self._sleep_for_reconnect(backoff)
+                    continue
+
+                with self._lock:
+                    self._app = app
+
+                connected_at = self._time_provider()
+                try:
+                    app.run_forever(ping_interval=30, ping_timeout=10)
+                except Exception as exc:
+                    logger.warning(
+                        f"Upbit public candle WebSocket stopped unexpectedly; REST fallback remains available: {exc}"
+                    )
+
+                disconnected_at = self._time_provider()
+                with self._lock:
+                    if self._app is app:
+                        self._app = None
+                    self._connection_failed = True
+
+                if self._shutdown.is_set():
+                    break
+
+                if disconnected_at - connected_at >= _RECONNECT_RESET_AFTER_SECONDS:
+                    backoff = 0.0
+                backoff = _next_backoff_seconds(backoff)
+                self._sleep_for_reconnect(backoff)
         finally:
             with self._lock:
-                if self._app is app:
-                    self._app = None
-                    self._thread = None
-                    self._started = False
-                    self._active_subscriptions = set()
+                self._thread = None
+                self._started = False
+                self._active_subscriptions = set()
+
+    def _sleep_for_reconnect(self, base_seconds: float) -> None:
+        duration = _jittered_backoff_seconds(base_seconds, self._random_fn)
+        if self._sleep_fn is not None:
+            self._sleep_fn(duration)
+            return
+        self._shutdown.wait(timeout=duration)
 
     def _on_open(self, ws, subscriptions: list[tuple[str, int]]) -> None:
         by_unit: dict[int, list[str]] = {}
@@ -591,13 +679,18 @@ class UpbitAssetWebSocketCache:
         websocket_app_factory: Optional[Callable] = None,
         time_provider: Callable[[], float] | None = None,
         url: str = UPBIT_PRIVATE_WS_URL,
+        sleep_fn: Callable[[float], None] | None = None,
+        random_fn: Callable[[], float] | None = None,
     ):
         self.max_age_seconds = float(max_age_seconds)
         self._auth_header_provider = auth_header_provider
         self._websocket_app_factory = websocket_app_factory
         self._time_provider = time_provider or time.monotonic
         self._url = url
+        self._sleep_fn = sleep_fn
+        self._random_fn = random_fn or random.random
         self._lock = threading.Lock()
+        self._shutdown = threading.Event()
         self._balances: dict[str, Decimal] = {}
         self._last_event_at: float | None = None
         self._app = None
@@ -607,7 +700,7 @@ class UpbitAssetWebSocketCache:
         self._connection_failed = False
 
     def ensure_started(self) -> bool:
-        """Start the private asset stream once, returning False when REST should be used."""
+        """Start the private asset reconnect loop once, returning False when REST should be used."""
         with self._lock:
             if self._started:
                 return True
@@ -621,43 +714,28 @@ class UpbitAssetWebSocketCache:
                 return False
 
             try:
-                auth_headers = self._auth_header_provider()
+                initial_auth = self._auth_header_provider()
             except Exception:
                 self._start_failed = True
                 logger.warning("Upbit private asset WebSocket auth header unavailable; REST fallback will be used")
                 return False
-            if not isinstance(auth_headers, dict) or not auth_headers.get("Authorization"):
+            if not isinstance(initial_auth, dict) or not initial_auth.get("Authorization"):
                 self._start_failed = True
                 logger.warning("Upbit private asset WebSocket auth header invalid; REST fallback will be used")
                 return False
 
-            try:
-                app = app_factory(
-                    self._url,
-                    header=auth_headers,
-                    on_open=self._on_open,
-                    on_message=self._on_message,
-                    on_error=self._on_error,
-                    on_close=self._on_close,
-                )
-                thread = threading.Thread(
-                    target=self._run_forever,
-                    args=(app,),
-                    daemon=True,
-                    name="upbit-private-asset-ws",
-                )
-                self._app = app
-                self._thread = thread
-                self._started = True
-                thread.start()
-                return True
-            except Exception:
-                self._app = None
-                self._thread = None
-                self._started = False
-                self._start_failed = True
-                logger.warning("Upbit private asset WebSocket start failed; REST fallback will be used")
-                return False
+            self._shutdown.clear()
+            self._connection_failed = False
+            thread = threading.Thread(
+                target=self._reconnect_loop,
+                args=(app_factory,),
+                daemon=True,
+                name="upbit-private-asset-ws",
+            )
+            self._thread = thread
+            self._started = True
+            thread.start()
+            return True
 
     def get_balance(self, currency: str) -> Decimal | None:
         """Return a fresh cached asset balance, or None when REST should be used."""
@@ -677,11 +755,12 @@ class UpbitAssetWebSocketCache:
         """Best-effort shutdown hook for tests or controlled process teardown."""
         with self._lock:
             app = self._app
-            self._app = None
-            self._thread = None
-            self._started = False
+            self._shutdown.set()
         if app is not None and hasattr(app, "close"):
-            app.close()
+            try:
+                app.close()
+            except Exception:
+                pass
 
     def _resolve_websocket_app_factory(self) -> Optional[Callable]:
         if self._websocket_app_factory is not None:
@@ -690,19 +769,71 @@ class UpbitAssetWebSocketCache:
             return None
         return getattr(websocket, "WebSocketApp", None)
 
-    def _run_forever(self, app) -> None:
+    def _reconnect_loop(self, app_factory: Callable) -> None:
+        backoff = 0.0
         try:
-            app.run_forever(ping_interval=30, ping_timeout=10)
-        except Exception:  # pragma: no cover - depends on websocket-client runtime
-            with self._lock:
-                self._connection_failed = True
-            logger.warning("Upbit private asset WebSocket stopped unexpectedly; REST fallback remains available")
+            while not self._shutdown.is_set():
+                try:
+                    auth_headers = self._auth_header_provider()
+                except Exception:
+                    logger.warning("Upbit private asset WebSocket auth header unavailable; retrying")
+                    backoff = _next_backoff_seconds(backoff)
+                    self._sleep_for_reconnect(backoff)
+                    continue
+                if not isinstance(auth_headers, dict) or not auth_headers.get("Authorization"):
+                    logger.warning("Upbit private asset WebSocket auth header invalid; retrying")
+                    backoff = _next_backoff_seconds(backoff)
+                    self._sleep_for_reconnect(backoff)
+                    continue
+
+                try:
+                    app = app_factory(
+                        self._url,
+                        header=auth_headers,
+                        on_open=self._on_open,
+                        on_message=self._on_message,
+                        on_error=self._on_error,
+                        on_close=self._on_close,
+                    )
+                except Exception:
+                    logger.warning("Upbit private asset WebSocket factory failed; retrying after backoff")
+                    backoff = _next_backoff_seconds(backoff)
+                    self._sleep_for_reconnect(backoff)
+                    continue
+
+                with self._lock:
+                    self._app = app
+
+                connected_at = self._time_provider()
+                try:
+                    app.run_forever(ping_interval=30, ping_timeout=10)
+                except Exception:
+                    logger.warning("Upbit private asset WebSocket stopped unexpectedly; REST fallback remains available")
+
+                disconnected_at = self._time_provider()
+                with self._lock:
+                    if self._app is app:
+                        self._app = None
+                    self._connection_failed = True
+
+                if self._shutdown.is_set():
+                    break
+
+                if disconnected_at - connected_at >= _RECONNECT_RESET_AFTER_SECONDS:
+                    backoff = 0.0
+                backoff = _next_backoff_seconds(backoff)
+                self._sleep_for_reconnect(backoff)
         finally:
             with self._lock:
-                if self._app is app:
-                    self._app = None
-                    self._thread = None
-                    self._started = False
+                self._thread = None
+                self._started = False
+
+    def _sleep_for_reconnect(self, base_seconds: float) -> None:
+        duration = _jittered_backoff_seconds(base_seconds, self._random_fn)
+        if self._sleep_fn is not None:
+            self._sleep_fn(duration)
+            return
+        self._shutdown.wait(timeout=duration)
 
     def _on_open(self, ws) -> None:
         subscribe_message = [
@@ -803,6 +934,8 @@ class UpbitOrderWebSocketCache:
         websocket_app_factory: Optional[Callable] = None,
         time_provider: Callable[[], float] | None = None,
         url: str = UPBIT_PRIVATE_WS_URL,
+        sleep_fn: Callable[[float], None] | None = None,
+        random_fn: Callable[[], float] | None = None,
     ):
         self.max_age_seconds = float(max_age_seconds)
         self._symbol = self._normalize_symbol(symbol or "")
@@ -810,7 +943,10 @@ class UpbitOrderWebSocketCache:
         self._websocket_app_factory = websocket_app_factory
         self._time_provider = time_provider or time.monotonic
         self._url = url
+        self._sleep_fn = sleep_fn
+        self._random_fn = random_fn or random.random
         self._lock = threading.Lock()
+        self._shutdown = threading.Event()
         self._orders: dict[str, tuple[UpbitOrderWebSocketStatus, float]] = {}
         self._app = None
         self._thread: threading.Thread | None = None
@@ -819,7 +955,7 @@ class UpbitOrderWebSocketCache:
         self._connection_failed = False
 
     def ensure_started(self) -> bool:
-        """Start the private order stream once, returning False when REST should be used."""
+        """Start the private order reconnect loop once, returning False when REST should be used."""
         with self._lock:
             if self._started:
                 return True
@@ -833,43 +969,28 @@ class UpbitOrderWebSocketCache:
                 return False
 
             try:
-                auth_headers = self._auth_header_provider()
+                initial_auth = self._auth_header_provider()
             except Exception:
                 self._start_failed = True
                 logger.warning("Upbit private order WebSocket auth header unavailable; REST fallback will be used")
                 return False
-            if not isinstance(auth_headers, dict) or not auth_headers.get("Authorization"):
+            if not isinstance(initial_auth, dict) or not initial_auth.get("Authorization"):
                 self._start_failed = True
                 logger.warning("Upbit private order WebSocket auth header invalid; REST fallback will be used")
                 return False
 
-            try:
-                app = app_factory(
-                    self._url,
-                    header=auth_headers,
-                    on_open=self._on_open,
-                    on_message=self._on_message,
-                    on_error=self._on_error,
-                    on_close=self._on_close,
-                )
-                thread = threading.Thread(
-                    target=self._run_forever,
-                    args=(app,),
-                    daemon=True,
-                    name="upbit-private-order-ws",
-                )
-                self._app = app
-                self._thread = thread
-                self._started = True
-                thread.start()
-                return True
-            except Exception:
-                self._app = None
-                self._thread = None
-                self._started = False
-                self._start_failed = True
-                logger.warning("Upbit private order WebSocket start failed; REST fallback will be used")
-                return False
+            self._shutdown.clear()
+            self._connection_failed = False
+            thread = threading.Thread(
+                target=self._reconnect_loop,
+                args=(app_factory,),
+                daemon=True,
+                name="upbit-private-order-ws",
+            )
+            self._thread = thread
+            self._started = True
+            thread.start()
+            return True
 
     def get_order_status(self, order_id: str) -> UpbitOrderWebSocketStatus | None:
         """Return a fresh cached order event, or None when REST should be used."""
@@ -895,11 +1016,12 @@ class UpbitOrderWebSocketCache:
         """Best-effort shutdown hook for tests or controlled process teardown."""
         with self._lock:
             app = self._app
-            self._app = None
-            self._thread = None
-            self._started = False
+            self._shutdown.set()
         if app is not None and hasattr(app, "close"):
-            app.close()
+            try:
+                app.close()
+            except Exception:
+                pass
 
     def _resolve_websocket_app_factory(self) -> Optional[Callable]:
         if self._websocket_app_factory is not None:
@@ -908,19 +1030,71 @@ class UpbitOrderWebSocketCache:
             return None
         return getattr(websocket, "WebSocketApp", None)
 
-    def _run_forever(self, app) -> None:
+    def _reconnect_loop(self, app_factory: Callable) -> None:
+        backoff = 0.0
         try:
-            app.run_forever(ping_interval=30, ping_timeout=10)
-        except Exception:  # pragma: no cover - depends on websocket-client runtime
-            with self._lock:
-                self._connection_failed = True
-            logger.warning("Upbit private order WebSocket stopped unexpectedly; REST fallback remains available")
+            while not self._shutdown.is_set():
+                try:
+                    auth_headers = self._auth_header_provider()
+                except Exception:
+                    logger.warning("Upbit private order WebSocket auth header unavailable; retrying")
+                    backoff = _next_backoff_seconds(backoff)
+                    self._sleep_for_reconnect(backoff)
+                    continue
+                if not isinstance(auth_headers, dict) or not auth_headers.get("Authorization"):
+                    logger.warning("Upbit private order WebSocket auth header invalid; retrying")
+                    backoff = _next_backoff_seconds(backoff)
+                    self._sleep_for_reconnect(backoff)
+                    continue
+
+                try:
+                    app = app_factory(
+                        self._url,
+                        header=auth_headers,
+                        on_open=self._on_open,
+                        on_message=self._on_message,
+                        on_error=self._on_error,
+                        on_close=self._on_close,
+                    )
+                except Exception:
+                    logger.warning("Upbit private order WebSocket factory failed; retrying after backoff")
+                    backoff = _next_backoff_seconds(backoff)
+                    self._sleep_for_reconnect(backoff)
+                    continue
+
+                with self._lock:
+                    self._app = app
+
+                connected_at = self._time_provider()
+                try:
+                    app.run_forever(ping_interval=30, ping_timeout=10)
+                except Exception:
+                    logger.warning("Upbit private order WebSocket stopped unexpectedly; REST fallback remains available")
+
+                disconnected_at = self._time_provider()
+                with self._lock:
+                    if self._app is app:
+                        self._app = None
+                    self._connection_failed = True
+
+                if self._shutdown.is_set():
+                    break
+
+                if disconnected_at - connected_at >= _RECONNECT_RESET_AFTER_SECONDS:
+                    backoff = 0.0
+                backoff = _next_backoff_seconds(backoff)
+                self._sleep_for_reconnect(backoff)
         finally:
             with self._lock:
-                if self._app is app:
-                    self._app = None
-                    self._thread = None
-                    self._started = False
+                self._thread = None
+                self._started = False
+
+    def _sleep_for_reconnect(self, base_seconds: float) -> None:
+        duration = _jittered_backoff_seconds(base_seconds, self._random_fn)
+        if self._sleep_fn is not None:
+            self._sleep_fn(duration)
+            return
+        self._shutdown.wait(timeout=duration)
 
     def _on_open(self, ws) -> None:
         subscription = {"type": "myOrder"}

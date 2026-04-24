@@ -1,4 +1,5 @@
 import json
+import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -1284,16 +1285,26 @@ class CryptoExchangeBalanceTest(unittest.TestCase):
 
     def test_upbit_order_websocket_cache_does_not_log_auth_token_on_start_failure(self):
         token = "secret-token"
+        cache_holder: list[UpbitOrderWebSocketCache] = []
+
+        def stop_after_first_backoff(_duration: float) -> None:
+            cache_holder[0]._shutdown.set()
+
         cache = UpbitOrderWebSocketCache(
             max_age_seconds=5,
             symbol="KRW-BTC",
             auth_header_provider=Mock(return_value={"Authorization": f"Bearer {token}"}),
             websocket_app_factory=Mock(side_effect=RuntimeError(f"Bearer {token}")),
             time_provider=lambda: 1000.0,
+            sleep_fn=stop_after_first_backoff,
         )
+        cache_holder.append(cache)
 
         with patch.object(upbit_ws.logger, "warning") as warning:
-            self.assertFalse(cache.ensure_started())
+            self.assertTrue(cache.ensure_started())
+            cache._thread.join(timeout=2)
+
+        self.assertFalse(cache._thread is not None and cache._thread.is_alive())
 
         messages = " ".join(str(call.args[0]) for call in warning.call_args_list)
         self.assertNotIn(token, messages)
@@ -1517,3 +1528,189 @@ class CryptoExchangeBalanceTest(unittest.TestCase):
                 self.exchange._request("GET", "/v1/test")
 
         self.assertEqual(request.call_count, 1)
+
+    def test_upbit_ticker_websocket_cache_reconnect_loop_retries_with_exponential_backoff(self):
+        factory_calls = []
+        app = Mock()
+        app.run_forever = Mock(return_value=None)
+        app.close = Mock()
+
+        def factory(*args, **kwargs):
+            factory_calls.append((args, kwargs))
+            return app
+
+        sleeps: list[float] = []
+        cache_holder: list[UpbitTickerWebSocketCache] = []
+
+        def sleep_fn(duration: float) -> None:
+            sleeps.append(duration)
+            if len(sleeps) >= 3:
+                cache_holder[0]._shutdown.set()
+
+        cache = UpbitTickerWebSocketCache(
+            max_age_seconds=5,
+            websocket_app_factory=factory,
+            time_provider=lambda: 1000.0,
+            sleep_fn=sleep_fn,
+            random_fn=lambda: 0.5,
+        )
+        cache_holder.append(cache)
+
+        self.assertTrue(cache.ensure_started("KRW-BTC"))
+        cache._thread.join(timeout=2)
+
+        self.assertFalse(cache._thread is not None and cache._thread.is_alive())
+        self.assertGreaterEqual(len(factory_calls), 3)
+        self.assertEqual(sleeps[:3], [1.0, 2.0, 4.0])
+
+    def test_upbit_ticker_websocket_cache_stop_ends_reconnect_loop(self):
+        app = Mock()
+        app.close = Mock()
+        running = threading.Event()
+
+        def run_forever(*_args, **_kwargs):
+            running.set()
+            cache._shutdown.wait(timeout=2)
+
+        app.run_forever = run_forever
+
+        cache = UpbitTickerWebSocketCache(
+            max_age_seconds=5,
+            websocket_app_factory=lambda *a, **kw: app,
+            time_provider=lambda: 1000.0,
+            sleep_fn=lambda _d: None,
+            random_fn=lambda: 0.5,
+        )
+
+        self.assertTrue(cache.ensure_started("KRW-BTC"))
+        self.assertTrue(running.wait(timeout=2))
+
+        cache.stop()
+        cache._thread.join(timeout=2)
+
+        self.assertFalse(cache._thread is not None and cache._thread.is_alive())
+        app.close.assert_called()
+
+    def test_upbit_asset_websocket_cache_reissues_auth_header_on_each_attempt(self):
+        auth_calls = []
+
+        def auth_provider():
+            auth_calls.append(len(auth_calls))
+            return {"Authorization": f"Bearer token-{len(auth_calls)}"}
+
+        app = Mock()
+        app.run_forever = Mock(return_value=None)
+        app.close = Mock()
+
+        factory_headers: list[dict] = []
+
+        def factory(*_args, **kwargs):
+            factory_headers.append(kwargs.get("header"))
+            return app
+
+        sleeps: list[float] = []
+        cache_holder: list[UpbitAssetWebSocketCache] = []
+
+        def sleep_fn(duration: float) -> None:
+            sleeps.append(duration)
+            if len(sleeps) >= 3:
+                cache_holder[0]._shutdown.set()
+
+        cache = UpbitAssetWebSocketCache(
+            max_age_seconds=5,
+            auth_header_provider=auth_provider,
+            websocket_app_factory=factory,
+            time_provider=lambda: 1000.0,
+            sleep_fn=sleep_fn,
+            random_fn=lambda: 0.5,
+        )
+        cache_holder.append(cache)
+
+        self.assertTrue(cache.ensure_started())
+        cache._thread.join(timeout=2)
+
+        self.assertFalse(cache._thread is not None and cache._thread.is_alive())
+        # 1 initial bootstrap call + at least 3 reconnect loop reissues
+        self.assertGreaterEqual(len(auth_calls), 4)
+        authorizations = [h.get("Authorization") for h in factory_headers if h]
+        self.assertEqual(len(authorizations), len(set(authorizations)))  # 매번 다른 Authorization
+        self.assertGreaterEqual(len(factory_headers), 3)
+
+    def test_upbit_order_websocket_cache_reissues_auth_header_on_each_attempt(self):
+        auth_calls = []
+
+        def auth_provider():
+            auth_calls.append(len(auth_calls))
+            return {"Authorization": f"Bearer order-token-{len(auth_calls)}"}
+
+        app = Mock()
+        app.run_forever = Mock(return_value=None)
+        app.close = Mock()
+
+        factory_headers: list[dict] = []
+
+        def factory(*_args, **kwargs):
+            factory_headers.append(kwargs.get("header"))
+            return app
+
+        sleeps: list[float] = []
+        cache_holder: list[UpbitOrderWebSocketCache] = []
+
+        def sleep_fn(duration: float) -> None:
+            sleeps.append(duration)
+            if len(sleeps) >= 3:
+                cache_holder[0]._shutdown.set()
+
+        cache = UpbitOrderWebSocketCache(
+            max_age_seconds=5,
+            symbol="KRW-BTC",
+            auth_header_provider=auth_provider,
+            websocket_app_factory=factory,
+            time_provider=lambda: 1000.0,
+            sleep_fn=sleep_fn,
+            random_fn=lambda: 0.5,
+        )
+        cache_holder.append(cache)
+
+        self.assertTrue(cache.ensure_started())
+        cache._thread.join(timeout=2)
+
+        self.assertFalse(cache._thread is not None and cache._thread.is_alive())
+        self.assertGreaterEqual(len(auth_calls), 4)
+        authorizations = [h.get("Authorization") for h in factory_headers if h]
+        self.assertEqual(len(authorizations), len(set(authorizations)))
+        self.assertGreaterEqual(len(factory_headers), 3)
+
+    def test_upbit_candle_websocket_cache_reconnect_loop_retries_after_disconnect(self):
+        app = Mock()
+        app.run_forever = Mock(return_value=None)
+        app.close = Mock()
+
+        factory_calls = []
+
+        def factory(*args, **kwargs):
+            factory_calls.append((args, kwargs))
+            return app
+
+        sleeps: list[float] = []
+        cache_holder: list[UpbitMinuteCandleWebSocketCache] = []
+
+        def sleep_fn(duration: float) -> None:
+            sleeps.append(duration)
+            if len(sleeps) >= 3:
+                cache_holder[0]._shutdown.set()
+
+        cache = UpbitMinuteCandleWebSocketCache(
+            max_age_seconds=30,
+            websocket_app_factory=factory,
+            time_provider=lambda: 1000.0,
+            sleep_fn=sleep_fn,
+            random_fn=lambda: 0.5,
+        )
+        cache_holder.append(cache)
+
+        self.assertTrue(cache.ensure_started("KRW-BTC", 15))
+        cache._thread.join(timeout=2)
+
+        self.assertFalse(cache._thread is not None and cache._thread.is_alive())
+        self.assertGreaterEqual(len(factory_calls), 3)
