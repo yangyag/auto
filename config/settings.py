@@ -139,6 +139,7 @@ BREAKOUT_GUARD_FAILURE_POLICY = "open" if BREAKOUT_GUARD_FAIL_OPEN else "close"
 
 # ── 모니터링 주기 ────────────────────────────────────────
 PRICE_POLL_INTERVAL = 5      # 가격 조회 간격 (초)
+STALE_PREVIOUS_PRICE_THRESHOLD_SECONDS = 30  # previous_price 메모리 stale 판정 임계값 (초)
 
 # ── 로그 ─────────────────────────────────────────────────
 LOG_DIR = "logs"

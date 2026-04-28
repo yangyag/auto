@@ -743,3 +743,101 @@ class GridStrategyCrossingTest(unittest.TestCase):
         strategy.grid.current_inventory_ratio.assert_called()
         strategy.grid.target_inventory_ratio.assert_called()
         strategy.grid.band_position_z.assert_called()
+
+
+class GridStrategyStalePreviousPriceGuardTest(unittest.TestCase):
+    """previous_price 메모리 stale 가드 (DB 단절 후 BUY 폭발 방지)."""
+
+    def _build_strategy(self, rows):
+        return GridStrategy(GridState.from_rows("KRW-BTC", rows), Mock(), "KRW-BTC")
+
+    def _patch_monotonic(self, values):
+        sequence = list(values)
+        for i in range(1, len(sequence)):
+            assert sequence[i] >= sequence[i - 1], (
+                f"time.monotonic mock 은 단조 비감소여야 한다: {sequence}"
+            )
+        iterator = iter(sequence)
+        return patch(
+            "strategy.grid_strategy.time.monotonic",
+            side_effect=lambda: next(iterator),
+        )
+
+    def _single_buy_row(self):
+        return [
+            GridRow(
+                index=1,
+                buy_price=Decimal("100"),
+                held_qty=Decimal("0"),
+                sell_price=Decimal("110"),
+                planned_qty=Decimal("1"),
+            )
+        ]
+
+    def test_stale_previous_price_skips_buy_and_runs_sell(self):
+        rows = self._single_buy_row() + [
+            GridRow(
+                index=2,
+                buy_price=Decimal("90"),
+                held_qty=Decimal("1"),
+                sell_price=Decimal("99"),
+                planned_qty=Decimal("1"),
+                filled_at=datetime(2026, 4, 28, 0, 0, tzinfo=timezone.utc),
+            )
+        ]
+        strategy = self._build_strategy(rows)
+        threshold = settings.STALE_PREVIOUS_PRICE_THRESHOLD_SECONDS
+
+        with self._patch_monotonic([0.0, float(threshold) + 1.0]):
+            strategy.evaluate(Decimal("105"))
+            with self.assertLogs("strategy.grid_strategy", level="INFO") as captured:
+                buy_orders, sell_orders = strategy.evaluate(Decimal("100"))
+
+        self.assertEqual(buy_orders, [])
+        self.assertEqual(len(sell_orders), 1)
+        self.assertEqual(sell_orders[0].slot_index, 2)
+        self.assertEqual(strategy.previous_price, Decimal("100"))
+        self.assertEqual(strategy.previous_price_at, float(threshold) + 1.0)
+        self.assertTrue(
+            any("stale previous_price" in line for line in captured.output),
+            f"stale 로그가 누락됨: {captured.output}",
+        )
+
+    def test_stale_threshold_boundary_just_below_runs_normally(self):
+        rows = self._single_buy_row()
+        strategy = self._build_strategy(rows)
+        threshold = settings.STALE_PREVIOUS_PRICE_THRESHOLD_SECONDS
+
+        with self._patch_monotonic([0.0, float(threshold) - 0.5]):
+            strategy.evaluate(Decimal("105"))
+            buy_orders, sell_orders = strategy.evaluate(Decimal("100"))
+
+        self.assertEqual(len(buy_orders), 1)
+        self.assertEqual(buy_orders[0].slot_index, 1)
+        self.assertEqual(buy_orders[0].price, Decimal("100"))
+        self.assertEqual(sell_orders, [])
+        self.assertEqual(strategy.previous_price, Decimal("100"))
+        self.assertEqual(strategy.previous_price_at, float(threshold) - 0.5)
+
+    def test_previous_price_at_updated_on_every_branch(self):
+        rows = self._single_buy_row()
+        strategy = self._build_strategy(rows)
+        threshold = settings.STALE_PREVIOUS_PRICE_THRESHOLD_SECONDS
+
+        # 분기 1: cold-start (previous_price is None)
+        with self._patch_monotonic([10.0]):
+            strategy.evaluate(Decimal("105"))
+        self.assertEqual(strategy.previous_price, Decimal("105"))
+        self.assertEqual(strategy.previous_price_at, 10.0)
+
+        # 분기 2: 정상 (elapsed <= threshold)
+        with self._patch_monotonic([10.0 + 1.0]):
+            strategy.evaluate(Decimal("106"))
+        self.assertEqual(strategy.previous_price, Decimal("106"))
+        self.assertEqual(strategy.previous_price_at, 11.0)
+
+        # 분기 3: stale (elapsed > threshold)
+        with self._patch_monotonic([11.0 + float(threshold) + 0.1]):
+            strategy.evaluate(Decimal("104"))
+        self.assertEqual(strategy.previous_price, Decimal("104"))
+        self.assertEqual(strategy.previous_price_at, 11.0 + float(threshold) + 0.1)

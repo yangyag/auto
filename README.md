@@ -93,6 +93,10 @@ inventory-target gate 도 함께 적용된다.
 
 즉 매수는 "가격이 닿았는가"만이 아니라 "지금 구간에서 이 정도 재고를 더 들고 가도 되는가"를 함께 본다.
 
+추가로 시간 기반 stale 가드가 매수 평가 진입부를 막는다. 직전 평가 이후 `STALE_PREVIOUS_PRICE_THRESHOLD_SECONDS` 초보다 더 흘렀으면 그 cycle 의 신규 매수 평가를 통째로 스킵하고 `previous_price` 만 현재가로 baseline 재설정한다. SELL 평가는 영향받지 않는다. 시간 측정은 `time.monotonic()` 기준이라 NTP 보정/시계 역행에 면역이다.
+
+> **쉽게 말하면**: DB 단절·네트워크 장애 등으로 봇이 한참 멈췄다 깨어났을 때, 메모리에 박제돼 있던 옛 가격과 현재가를 한 tick으로 비교해 매수 라인을 한꺼번에 가로지르는 사고를 막는 가드다. "오랫동안 평가가 멎어 있던 직후의 첫 비교는 신뢰하지 않고 한 cycle 쉰다." 콜드스타트 가드의 시간 기반 확장판.
+
 ## 상승 재진입 옵션
 상승 구간의 단일 슬롯 상향 돌파 매수는 옵션 기능이다.
 
@@ -206,6 +210,7 @@ rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단
 - `BREAKOUT_GUARD_ENABLED`, `BREAKOUT_GUARD_CANDLE_UNIT`, `BREAKOUT_GUARD_CONSECUTIVE_CANDLES`: 추세장 신규 매수 차단 규칙을 제어한다.
 - `GRID_TP_MODEL`, `GRID_TP_K_BASE=9.0`, `GRID_TP_K_FLOOR=7.0`: 신규 생성 그리드의 TP 규칙과 Age TP 압축 기준을 결정한다.
 - `UPBIT_WS_PUBLIC_ENABLED`, `UPBIT_WS_EVENT_LOOP_ENABLED`, `UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS`: 현재가 WebSocket 이벤트 루프와 최소 전략 평가 간격을 제어한다.
+- `STALE_PREVIOUS_PRICE_THRESHOLD_SECONDS=30`: cycle 사이 경과 시간이 이 값을 초과하면 그 cycle 의 신규 매수 평가를 스킵하고 `previous_price` 만 baseline 재설정한다. DB 단절 후 stale `previous_price` 와 현재가 한 tick 비교로 BUY 다수가 fan-out 되는 사고 방지용.
 - `UPBIT_WS_CANDLE_ENABLED`, `UPBIT_WS_ASSET_ENABLED`, `UPBIT_WS_ORDER_ENABLED`: 캔들/자산/주문 상태 WebSocket 캐시 사용 여부를 제어한다. 주문 생성과 취소는 계속 REST만 사용한다. `UPBIT_WS_ORDER_ENABLED=true` 여도 주문 상태의 terminal 판정은 반드시 `GET /v1/order` REST 재조회 기준이며, WS myOrder 캐시는 관측/힌트 용도다.
 
 ## 참고 문서

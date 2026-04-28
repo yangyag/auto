@@ -2,6 +2,7 @@
 그리드 전략 핵심 로직
 현재가를 받아 매수/매도 대상 슬롯을 판별하고 주문을 생성한다.
 """
+import time
 from decimal import Decimal
 from typing import List, Tuple
 
@@ -24,6 +25,7 @@ class GridStrategy:
         self.exchange = exchange
         self.symbol = symbol
         self.previous_price: Decimal | None = None
+        self.previous_price_at: float | None = None  # time.monotonic() 기준
 
     def evaluate(self, current_price: Decimal) -> Tuple[List[Order], List[Order]]:
         return self.evaluate_with_pending(current_price)
@@ -38,9 +40,23 @@ class GridStrategy:
         매수/매도 주문 목록을 반환한다.
         """
         effective_pending_slots = pending_slot_indexes or set()
+        now = time.monotonic()
+
         if self.previous_price is None:
             self.previous_price = current_price
+            self.previous_price_at = now
             return [], self._make_sell_orders(current_price)
+
+        if self.previous_price_at is not None:
+            elapsed = now - self.previous_price_at
+            if elapsed > cfg.STALE_PREVIOUS_PRICE_THRESHOLD_SECONDS:
+                logger.info(
+                    f"매수 평가 스킵(stale previous_price) → "
+                    f"prev={self.previous_price} cur={current_price} elapsed={elapsed:.1f}s"
+                )
+                self.previous_price = current_price
+                self.previous_price_at = now
+                return [], self._make_sell_orders(current_price)
 
         active_slot_indexes = self._resolve_active_buy_window_slot_indexes(self.previous_price)
         buy_orders = self._make_buy_orders(
@@ -51,6 +67,7 @@ class GridStrategy:
         )
         sell_orders = self._make_sell_orders(current_price)
         self.previous_price = current_price
+        self.previous_price_at = now
         return buy_orders, sell_orders
 
     def _make_buy_orders(
