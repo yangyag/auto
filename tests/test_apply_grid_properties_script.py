@@ -39,6 +39,8 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
             self.config.PGUSER,
             "--password",
             self.config.PGPASSWORD,
+            "--current-price",
+            "130000000",
             "--force",
         ]
 
@@ -122,13 +124,13 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
         step_pct_properties = (
             "MIN_BUY_PRICE=91623000\n"
             "MAX_BUY_PRICE=127886000\n"
-            "TOTAL_BUDGET_KRW=4000000\n"
+            "LOWER_BUDGET_KRW=4000000\n"
             f"GRID_STEP_PCT={self.STEP_PCT_FOR_20_SLOTS}\n"
         )
         count_properties = (
             "MIN_BUY_PRICE=91623000\n"
             "MAX_BUY_PRICE=127886000\n"
-            "TOTAL_BUDGET_KRW=4000000\n"
+            "LOWER_BUDGET_KRW=4000000\n"
             "GRID_COUNT=20\n"
         )
 
@@ -150,7 +152,7 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
         original = project_properties.read_text(encoding="utf-8") if project_properties.exists() else None
         try:
             project_properties.write_text(
-                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nTOTAL_BUDGET_KRW=4000000\nGRID_COUNT=20\n",
+                "MIN_BUY_PRICE=91623000\nMAX_BUY_PRICE=127886000\nLOWER_BUDGET_KRW=4000000\nGRID_COUNT=20\n",
                 encoding="utf-8",
             )
             result = subprocess.run(
@@ -171,6 +173,8 @@ class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):
                     self.config.PGUSER,
                     "--password",
                     self.config.PGPASSWORD,
+                    "--current-price",
+                    "130000000",
                     "--force",
                 ],
                 cwd=self.project_root / "scripts",

@@ -165,7 +165,7 @@ class BalanceCommandTest(unittest.TestCase):
              patch.object(main.cfg, "GRID_LOWER_PRICE", Decimal("92253123")), \
              patch.object(main.cfg, "GRID_UPPER_PRICE", Decimal("111137221")), \
              patch.object(main.cfg, "GRID_SLOT_COUNT", 10), \
-             patch.object(main.cfg, "GRID_TOTAL_BUDGET_KRW", Decimal("2000000")), \
+             patch.object(main.cfg, "GRID_LOWER_BUDGET_KRW", Decimal("2000000")), \
              patch.object(main.cfg, "GRID_TP_MODEL", "k"), \
              patch.object(main.cfg, "GRID_TP_K_BASE", Decimal("9.0")), \
              patch.object(main.cfg, "GRID_TP_K_FLOOR", Decimal("7.0")), \
@@ -178,8 +178,8 @@ class BalanceCommandTest(unittest.TestCase):
                     lower_price=Decimal("92253123"),
                     upper_price=Decimal("111137221"),
                     slot_count=10,
-                    total_budget=Decimal("2000000"),
-                    current_price=None,
+                    lower_budget=Decimal("2000000"),
+                    current_price=Decimal("130000000"),
                 )
 
         self.assertEqual(result, 0)
@@ -187,7 +187,7 @@ class BalanceCommandTest(unittest.TestCase):
         saved_snapshot = repository.save.call_args.args[0]
         self.assertEqual(saved_snapshot.symbol, "KRW-BTC")
         self.assertIn("저장 대상: postgres:auto_trading/krw-btc-live", stdout.getvalue())
-        self.assertIn("총예산: 2000000 KRW", stdout.getvalue())
+        self.assertIn("하단 매수합 목표: 2000000 KRW", stdout.getvalue())
         self.assertIn("TP 모델: k", stdout.getvalue())
         self.assertIn("TP k_base: 9", stdout.getvalue())
         self.assertIn("TP k_floor: 7", stdout.getvalue())
@@ -214,7 +214,7 @@ class BalanceCommandTest(unittest.TestCase):
              patch.object(main.cfg, "GRID_LOWER_PRICE", Decimal("92253123")), \
              patch.object(main.cfg, "GRID_UPPER_PRICE", Decimal("111137221")), \
              patch.object(main.cfg, "GRID_SLOT_COUNT", 10), \
-             patch.object(main.cfg, "GRID_TOTAL_BUDGET_KRW", Decimal("2000000")), \
+             patch.object(main.cfg, "GRID_LOWER_BUDGET_KRW", Decimal("2000000")), \
              patch.object(main.cfg, "GRID_TP_MODEL", "k"), \
              patch.object(main.cfg, "GRID_TP_K_BASE", Decimal("9.0")), \
              patch.object(main.cfg, "GRID_TP_K_FLOOR", Decimal("7.0")), \
@@ -227,8 +227,8 @@ class BalanceCommandTest(unittest.TestCase):
                     lower_price=Decimal("92253123"),
                     upper_price=Decimal("111137221"),
                     slot_count=10,
-                    total_budget=Decimal("2000000"),
-                    current_price=None,
+                    lower_budget=Decimal("2000000"),
+                    current_price=Decimal("130000000"),
                 )
 
         self.assertEqual(result, 1)

@@ -47,7 +47,7 @@ Git 커밋 메시지는 사용자가 다른 언어를 명시하지 않는 한 �
 - `grid.properties` DB 반영 (기본 시드 경로): `.venv/bin/python scripts/apply_grid_properties_to_postgres.py --force`
 - DB 그리드 상태 조회 (읽기 전용): `.venv/bin/python scripts/show_grid_state.py`
 - 라이브 전체 리셋 (stop → 미체결 취소 → BTC 시장가 전량 매도 → `grid.properties` 기준 재시드 → run): `.venv/bin/python scripts/reset_krw_btc_live.py`
-- 소프트 예산 조정 (보유 수량, 가격, `filled_at` 유지, `planned_qty` 만 재계산): `.venv/bin/python scripts/adjust_budget_live.py --target-budget <KRW>` 또는 `--target-lower-budget <KRW>` (현재가 미만 슬롯의 매수합이 지정 금액이 되도록 총 예산을 가중치 비율로 역산). 두 옵션은 mutually exclusive.
+- 소프트 예산 조정 (보유 수량, 가격, `filled_at` 유지, `planned_qty` 만 재계산): `.venv/bin/python scripts/adjust_budget_live.py --target-lower-budget <KRW>` (현재가 미만 슬롯의 매수합이 지정 금액이 되도록 총 예산을 가중치 비율로 역산).
 
 ## 아키텍처
 
@@ -73,7 +73,7 @@ Git 커밋 메시지는 사용자가 다른 언어를 명시하지 않는 한 �
 
 ## 흔한 함정
 
-- `grid.properties` 의 `TOTAL_BUDGET_KRW` 는 상단/중단/하단 **0.7× / 1.0× / 1.3×** 가중치로 분배된다. 정상 시드된 그리드는 `show_grid_state.py` 출력에서 `bottom_slot_planned_buy_budget > top_slot_planned_buy_budget` 이 성립한다 — 이걸 sanity check 로 쓴다.
+- `grid.properties` 의 `LOWER_BUDGET_KRW` 는 시드 시점 현재가를 ticker REST 로 1회 조회하여 `buy_price < 현재가` 슬롯의 매수합 목표값으로 해석된다. 시스템이 가중치 비율로 implicit 총 예산을 역산한 뒤 상단/중단/하단 **0.7× / 1.0× / 1.3×** 가중치로 분배한다. 정상 시드된 그리드는 `show_grid_state.py` 출력에서 `bottom_slot_planned_buy_budget > top_slot_planned_buy_budget` 이 성립한다 — 이걸 sanity check 로 쓴다.
 - `grid.properties` 는 `GRID_COUNT` 와 `GRID_STEP_PCT` 중 **정확히 하나만** 받는다.
 - EC2 의 venv 는 `/home/ubuntu/auto/.venv` 에 이미 구성되어 있다. **재생성하지 말고 그대로 쓴다.** `.venv/` 는 정상적으로 untracked 상태이며 `git clean -fd` 로 날려서는 안 된다. 자세한 건 `docs/operations.md` "Python 실행 환경 메모" 참고.
 - EC2 호스트의 `/home/ubuntu/llm.env` 는 다른 서비스용 파일이다. 자동매매 봇의 env 는 `/home/ubuntu/auto/.env` 다.

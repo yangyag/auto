@@ -1028,7 +1028,7 @@ def run_grid_init(
     lower_price: Decimal,
     upper_price: Decimal,
     slot_count: int,
-    total_budget: Decimal,
+    lower_budget: Decimal,
     tp_model: str | None = None,
     tp_k_base: Decimal | None = None,
     tp_k_floor: Decimal | None = None,
@@ -1057,11 +1057,16 @@ def run_grid_init(
             return 1
 
         live_price = current_price if current_price is not None else exchange.get_current_price(cfg.SYMBOL)
+        if live_price <= DECIMAL_ZERO:
+            print("상태: 실패")
+            print(f"사유: 현재가가 0 이하입니다: {live_price}")
+            return 1
         rows = build_cash_only_grid(
             lower_price=lower_price,
             upper_price=upper_price,
             slot_count=slot_count,
-            total_budget_krw=total_budget,
+            lower_budget_krw=lower_budget,
+            current_price=live_price,
             tp_model=resolved_tp_model,
             tp_k_base=tp_k_base,
             tp_k_floor=tp_k_floor,
@@ -1069,6 +1074,11 @@ def run_grid_init(
         state = GridState.from_rows(cfg.SYMBOL, rows)
         validate_grid_state(state)
         budget_summary = summarize_planned_buy_budget(rows)
+        lower_indices = [idx for idx, row in enumerate(rows) if row.buy_price < live_price]
+        actual_lower_total = sum(
+            (rows[i].buy_price * rows[i].planned_qty for i in lower_indices),
+            DECIMAL_ZERO,
+        )
 
         metadata = existing_snapshot.metadata if existing_snapshot.metadata.version is not None else None
         saved_snapshot = repository.save(state.to_snapshot(metadata))
@@ -1085,7 +1095,9 @@ def run_grid_init(
     print(f"상단 경계: {format_decimal(upper_price)} KRW")
     print(f"하단 경계: {format_decimal(lower_price)} KRW")
     print(f"슬롯 수: {slot_count}")
-    print(f"총예산: {format_decimal(total_budget)} KRW")
+    print(f"하단 매수합 목표: {format_decimal(lower_budget)} KRW")
+    print(f"하단 슬롯 수: {len(lower_indices)} / {len(rows)}")
+    print(f"양자화 후 실제 하단 매수합: {format_decimal(actual_lower_total)} KRW")
     print(f"TP 모델: {resolved_tp_model}")
     print(f"TP k_base: {format_decimal(tp_k_base or cfg.GRID_TP_K_BASE)}")
     print(f"TP k_floor: {format_decimal(tp_k_floor or cfg.GRID_TP_K_FLOOR)}")
@@ -1093,6 +1105,11 @@ def run_grid_init(
     print(f"상단 슬롯 배정 금액: {format_decimal(budget_summary.top_slot)} KRW")
     print(f"하단 슬롯 배정 금액: {format_decimal(budget_summary.bottom_slot)} KRW")
     print(f"버전: {saved_snapshot.metadata.version}")
+    if len(lower_indices) == len(rows):
+        print(
+            "[경고] 현재가가 최상단 buy_price 보다 높아 모든 슬롯이 '하단'으로 잡혔습니다. "
+            "이 경우 --lower-budget 이 곧 총 예산이 됩니다."
+        )
     print("상태: 성공")
     return 0
 
@@ -1107,7 +1124,7 @@ def build_cli_parser() -> argparse.ArgumentParser:
     grid_parser.add_argument("--lower-price", type=decimal_arg, default=cfg.GRID_LOWER_PRICE)
     grid_parser.add_argument("--upper-price", type=decimal_arg, default=cfg.GRID_UPPER_PRICE)
     grid_parser.add_argument("--slot-count", type=int, default=cfg.GRID_SLOT_COUNT)
-    grid_parser.add_argument("--total-budget", type=decimal_arg, default=cfg.GRID_TOTAL_BUDGET_KRW)
+    grid_parser.add_argument("--lower-budget", type=decimal_arg, default=cfg.GRID_LOWER_BUDGET_KRW)
     grid_parser.add_argument("--tp-model", choices=("k",), default=cfg.GRID_TP_MODEL)
     grid_parser.add_argument("--tp-k-base", type=decimal_arg, default=cfg.GRID_TP_K_BASE)
     grid_parser.add_argument("--tp-k-floor", type=decimal_arg, default=cfg.GRID_TP_K_FLOOR)
@@ -1135,7 +1152,7 @@ def main(argv: list[str] | None = None) -> int:
             lower_price=args.lower_price,
             upper_price=args.upper_price,
             slot_count=args.slot_count,
-            total_budget=args.total_budget,
+            lower_budget=args.lower_budget,
             tp_model=args.tp_model,
             tp_k_base=args.tp_k_base,
             tp_k_floor=args.tp_k_floor,

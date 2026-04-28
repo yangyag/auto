@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""
-라이브 그리드의 예산을 증액 또는 감액합니다. (방법 A: 보수적 업데이트)
-리뷰 의견을 반영하여 DB 상태를 기준으로 엄격하게 동작하도록 개편되었습니다.
+"""라이브 그리드의 하단 매수합 목표를 갱신해 planned_qty 만 재계산한다.
+
+DB 의 ladder 와 보유 수량은 그대로 두고, buy_price < 현재가 인 슬롯의
+매수합이 사용자 지정 금액이 되도록 가중치 비율로 역산해 슬롯별
+planned_qty 를 다시 계산한다.
 """
 import argparse
 import sys
@@ -23,16 +25,11 @@ from utils.upbit_market import MIN_KRW_ORDER_AMOUNT
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="라이브 그리드 예산 증/감액 스크립트 (개선판)")
-    budget_group = parser.add_mutually_exclusive_group(required=True)
-    budget_group.add_argument(
-        "--target-budget",
-        type=Decimal,
-        help="새로운 목표 총 예산 금액 (KRW)",
-    )
-    budget_group.add_argument(
+    parser = argparse.ArgumentParser(description="라이브 그리드 하단 매수합 조정 스크립트")
+    parser.add_argument(
         "--target-lower-budget",
         type=Decimal,
+        required=True,
         help=(
             "현재가 미만 슬롯들의 매수합 목표 금액 (KRW). "
             "현재가를 조회해서 buy_price < 현재가 인 슬롯의 가중치 비율로 총 예산을 역산한다."
@@ -54,54 +51,8 @@ def fetch_current_price(symbol: str) -> Decimal:
         exchange.close()
 
 
-def resolve_target_budget_from_lower(
-    snapshot: GridSnapshot,
-    current_price: Decimal,
-    target_lower_budget: Decimal,
-) -> tuple[Decimal, list[int], Decimal]:
-    """현재가 미만 슬롯의 매수합이 target_lower_budget 이 되도록 총 예산을 역산한다.
-
-    build_weighted_slot_budgets 가 total_budget 에 단순 비례하므로, 임의 total 로
-    가중치 비율을 한 번 계산한 뒤 lower_ratio = (하단 가중치 합) / (전체 가중치 합)
-    으로 역산한다. 양자화(quantize) 손실은 호출 측 리포트에서 별도 표시한다.
-    """
-    if target_lower_budget <= DECIMAL_ZERO:
-        raise ValueError("에러: --target-lower-budget 은 0보다 커야 합니다.")
-
-    grid_count = len(snapshot.rows)
-    probe_total = Decimal("1")
-    probe_spec = GridPropertySpec(
-        min_buy_price=snapshot.rows[-1].buy_price,
-        max_buy_price=snapshot.rows[0].buy_price,
-        total_budget_krw=probe_total,
-        grid_count=grid_count,
-    )
-    probe_weights = build_weighted_slot_budgets(probe_spec)
-
-    lower_indices = [
-        idx for idx, row in enumerate(snapshot.rows) if row.buy_price < current_price
-    ]
-    if not lower_indices:
-        raise ValueError(
-            f"에러: 현재가({format_decimal(current_price)} KRW) 미만의 슬롯이 없습니다. "
-            f"top_buy_price={format_decimal(snapshot.rows[0].buy_price)} KRW"
-        )
-
-    lower_weight_sum = sum((probe_weights[i] for i in lower_indices), DECIMAL_ZERO)
-    if lower_weight_sum <= DECIMAL_ZERO:
-        raise ValueError("에러: 하단 가중치 합이 0 이하입니다. 그리드 가중치 분배를 확인하세요.")
-    total_weight = sum(probe_weights, DECIMAL_ZERO)
-    lower_ratio = lower_weight_sum / total_weight
-
-    target_total_budget = target_lower_budget / lower_ratio
-    return target_total_budget, lower_indices, lower_ratio
-
-
-def compute_lower_actual_total(
-    rows: list,
-    lower_indices: list[int],
-) -> Decimal:
-    """양자화 후 슬롯 단위에서 실제 하단 매수합(buy_price × planned_qty)을 계산."""
+def compute_lower_actual_total(rows, lower_indices: list[int]) -> Decimal:
+    """양자화 후 하단 슬롯의 buy_price × planned_qty 합. held_qty 와 무관."""
     total = DECIMAL_ZERO
     for idx in lower_indices:
         row = rows[idx]
@@ -132,17 +83,26 @@ def list_open_buys(order_repo: PostgresOrderRepository) -> list:
 
 def build_updated_rows(
     snapshot: GridSnapshot,
-    target_budget: Decimal,
-) -> tuple[list, Decimal]:
-    """현재 DB ladder 기준으로 새 planned_qty를 계산하고, 저장 전 전 슬롯 검증."""
+    target_lower_budget: Decimal,
+    current_price: Decimal,
+) -> tuple[list, Decimal, list[int], Decimal, Decimal]:
+    """현재 DB ladder 와 현재가 기준으로 새 planned_qty 를 계산.
+
+    Returns: (updated_rows, new_planned_buy_budget, lower_indices, lower_ratio, target_total_budget).
+    """
     grid_count = len(snapshot.rows)
     spec = GridPropertySpec(
         min_buy_price=snapshot.rows[-1].buy_price,
         max_buy_price=snapshot.rows[0].buy_price,
-        total_budget_krw=target_budget,
+        lower_budget_krw=target_lower_budget,
         grid_count=grid_count,
     )
-    slot_budgets = build_weighted_slot_budgets(spec)
+    buy_prices_desc = [row.buy_price for row in snapshot.rows]
+    slot_budgets, lower_indices, lower_ratio, target_total_budget = build_weighted_slot_budgets(
+        spec,
+        current_price=current_price,
+        buy_prices_desc=buy_prices_desc,
+    )
 
     updated_rows = []
     new_planned_buy_budget = DECIMAL_ZERO
@@ -174,24 +134,18 @@ def build_updated_rows(
         if row.is_empty:
             new_planned_buy_budget += order_total
 
-    return updated_rows, new_planned_buy_budget
+    return updated_rows, new_planned_buy_budget, lower_indices, lower_ratio, target_total_budget
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     bot_key = args.bot_key
-    lower_mode = args.target_lower_budget is not None
-    target_budget = args.target_budget
     target_lower_budget = args.target_lower_budget
 
-    if not lower_mode and target_budget <= DECIMAL_ZERO:
-        print("에러: 목표 총 예산은 0보다 커야 합니다.")
-        return 1
-    if lower_mode and target_lower_budget <= DECIMAL_ZERO:
+    if target_lower_budget <= DECIMAL_ZERO:
         print("에러: --target-lower-budget 은 0보다 커야 합니다.")
         return 1
 
-    # 1. 저장소 초기화
     grid_repo = PostgresGridRepository(
         host=cfg.PGHOST,
         port=cfg.PGPORT,
@@ -215,13 +169,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"에러: DB에 bot_key='{bot_key}' 인 그리드 상태가 없습니다.")
         return 1
 
-    # 2. 현재 상태 로드 및 검증
     snapshot = grid_repo.load()
     if not snapshot.rows:
         print("에러: 로드된 그리드 슬롯이 없습니다.")
         return 1
 
-    # 3. Open BUY 주문 확인 (리뷰 3번 반영)
     open_buys = list_open_buys(order_repo)
     if open_buys:
         print(f"에러: 현재 열려 있는 BUY 주문이 {len(open_buys)}개 있습니다.")
@@ -230,32 +182,21 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - Slot {o.slot_index}: {o.order_id}")
         return 1
 
-    # 4. DB 데이터 일관성 검증 (리뷰 2, 5번 반영)
     try:
         validate_snapshot_rows(snapshot)
     except ValueError as exc:
         print(exc)
         return 1
 
-    # 4.5 하단 매수합 모드: 현재가 조회 → 가중치 역산으로 target_budget 결정
-    current_price: Decimal | None = None
-    lower_indices: list[int] = []
-    lower_ratio: Decimal | None = None
-    if lower_mode:
-        try:
-            current_price = fetch_current_price(snapshot.symbol or cfg.SYMBOL)
-        except Exception as exc:
-            print(f"에러: 현재가 조회 실패: {exc}")
-            return 1
-        try:
-            target_budget, lower_indices, lower_ratio = resolve_target_budget_from_lower(
-                snapshot, current_price, target_lower_budget
-            )
-        except ValueError as exc:
-            print(exc)
-            return 1
+    try:
+        current_price = fetch_current_price(snapshot.symbol or cfg.SYMBOL)
+    except Exception as exc:
+        print(f"에러: 현재가 조회 실패: {exc}")
+        return 1
+    if current_price <= DECIMAL_ZERO:
+        print(f"에러: 현재가가 0 이하입니다: {current_price}")
+        return 1
 
-    # 5. 인벤토리 현황 계산 및 요약 (리뷰 4, 6번 반영)
     current_inventory_cost = sum((r.buy_price * r.held_qty for r in snapshot.rows), DECIMAL_ZERO)
     current_planned_buy_budget = sum(
         (r.buy_price * r.planned_qty for r in snapshot.rows if r.is_empty),
@@ -263,36 +204,36 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     try:
-        updated_rows, new_planned_buy_budget = build_updated_rows(snapshot, target_budget)
+        updated_rows, new_planned_buy_budget, lower_indices, lower_ratio, target_total_budget = build_updated_rows(
+            snapshot, target_lower_budget, current_price,
+        )
     except ValueError as exc:
         print(exc)
         return 1
 
-    # 6. 리포트 출력 및 감액 시 경고
+    actual_lower_total = compute_lower_actual_total(updated_rows, lower_indices)
+
     print("=" * 60)
     print(f" 그리드 예산 조정 리포트 (Bot: {bot_key})")
     print("-" * 60)
-    if lower_mode:
-        actual_lower_total = compute_lower_actual_total(updated_rows, lower_indices)
-        print(f" 0. [하단 매수합 모드]")
-        print(f"    - 현재가(KRW-BTC): {format_decimal(current_price)} KRW")
-        print(f"    - 하단 슬롯 수: {len(lower_indices)} / {len(snapshot.rows)}")
-        print(f"    - 하단 가중치 비율: {format_decimal(lower_ratio)}")
-        print(f"    - 목표 하단 매수합: {format_decimal(target_lower_budget)} KRW")
-        print(f"    - 양자화 후 실제 하단 매수합: {format_decimal(actual_lower_total)} KRW")
-        if len(lower_indices) == len(snapshot.rows):
-            print(
-                "    [경고] 현재가가 최상단 buy_price 보다 높아 모든 슬롯이 '하단'으로 잡혔습니다. "
-                "이 경우 --target-lower-budget 와 --target-budget 가 동일한 의미가 됩니다."
-            )
-    print(f" 1. 목표 총 예산: {format_decimal(target_budget)} KRW")
-    print(f" 2. 현재 인벤토리 가치: {format_decimal(current_inventory_cost)} KRW")
-    print(f" 3. 적용 전 매수 대기 예산: {format_decimal(current_planned_buy_budget)} KRW")
-    print(f" 4. 적용 후 매수 대기 예산: {format_decimal(new_planned_buy_budget)} KRW")
+    print(f" 0. 현재가(KRW-BTC): {format_decimal(current_price)} KRW")
+    print(f"    하단 슬롯 수: {len(lower_indices)} / {len(snapshot.rows)}")
+    print(f"    하단 가중치 비율: {format_decimal(lower_ratio)}")
+    print(f"    목표 하단 매수합: {format_decimal(target_lower_budget)} KRW")
+    print(f"    양자화 후 실제 하단 매수합: {format_decimal(actual_lower_total)} KRW")
+    print(f"    역산된 implicit total budget: {format_decimal(target_total_budget)} KRW")
+    if len(lower_indices) == len(snapshot.rows):
+        print(
+            "    [경고] 현재가가 최상단 buy_price 보다 높아 모든 슬롯이 '하단'으로 잡혔습니다. "
+            "이 경우 --target-lower-budget 가 곧 총 예산이 됩니다."
+        )
+    print(f" 1. 현재 인벤토리 가치: {format_decimal(current_inventory_cost)} KRW")
+    print(f" 2. 적용 전 매수 대기 예산: {format_decimal(current_planned_buy_budget)} KRW")
+    print(f" 3. 적용 후 매수 대기 예산: {format_decimal(new_planned_buy_budget)} KRW")
     print("-" * 60)
 
-    if target_budget < current_inventory_cost:
-        print(" [경고] 목표 예산이 현재 보유 중인 인벤토리 가치보다 작습니다!")
+    if target_total_budget < current_inventory_cost:
+        print(" [경고] 역산된 총 예산이 현재 보유 중인 인벤토리 가치보다 작습니다!")
         print(" 이 조정은 '빈 슬롯'의 매수 금액만 줄일 뿐, 이미 보유한 물량을 매도하지는 않습니다.")
         print(" 실제 예산 회수는 현재 보유 물량이 매도된 후에나 완료됩니다.")
         if not args.force:
@@ -300,7 +241,6 @@ def main(argv: list[str] | None = None) -> int:
             print(" 강제 진행하려면 --force 옵션을 사용하세요.")
             return 1
 
-    # 7. 저장 (리뷰 2번 반영: 일관성 확인 후 한꺼번에 저장)
     print(" DB 업데이트를 진행하시겠습니까? (y/n): ", end="")
     confirm = input().strip().lower()
     if confirm != 'y':

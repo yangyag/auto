@@ -137,7 +137,7 @@ PY
 ```properties
 MIN_BUY_PRICE=91623000
 MAX_BUY_PRICE=127886000
-TOTAL_BUDGET_KRW=4000000
+LOWER_BUDGET_KRW=4000000
 GRID_STEP_PCT=1.770527625862
 TP_MODEL=k
 TP_K_BASE=9.0
@@ -147,7 +147,7 @@ TP_K_FLOOR=7.0
 의미:
 - `MIN_BUY_PRICE`: 최하단 슬롯 buy_price
 - `MAX_BUY_PRICE`: 최상단 슬롯 buy_price
-- `TOTAL_BUDGET_KRW`: 그리드 전체에 배정할 총예산
+- `LOWER_BUDGET_KRW`: 시드 시점 현재가 미만 슬롯의 매수합 목표 KRW. 시스템이 시드 시점 ticker REST 로 현재가를 조회한 뒤 가중치 비율로 implicit 총 예산을 역산해 슬롯별로 배분한다
 - `GRID_COUNT`: 슬롯 개수
 - `GRID_STEP_PCT`: 슬롯 간격 비율
 - `TP_MODEL`: TP 계산 모드, 현재 운영 기준은 `k`

@@ -150,7 +150,7 @@ PY
 ```properties
 MIN_BUY_PRICE=98000000
 MAX_BUY_PRICE=121000000
-TOTAL_BUDGET_KRW=2400000
+LOWER_BUDGET_KRW=2400000
 GRID_STEP_PCT=0.222165440322
 TP_MODEL=k
 TP_K_BASE=9.0
@@ -161,7 +161,7 @@ TP_K_FLOOR=7.0
 - `MIN_BUY_PRICE`, `MAX_BUY_PRICE`는 업비트 KRW 호가 단위에 맞아야 한다.
 - `grid.properties`는 `GRID_COUNT` 또는 `GRID_STEP_PCT` 중 정확히 하나만 둔다.
 - `main.py init-grid`는 슬롯 개수 기반이다.
-- `grid.properties` 경로는 `TOTAL_BUDGET_KRW`를 상단/중단/하단 가중치로 배분한다.
+- `LOWER_BUDGET_KRW` 는 시드 시점 현재가 미만 슬롯의 매수합 목표값이며, 시스템이 가중치 비율로 implicit 총 예산을 역산해 상단/중단/하단 가중치로 배분한다.
 - `config/settings.py`의 `GRID_TP_K_BASE` 와 `grid.properties`의 `TP_K_BASE` 는 맞춰 두는 것이 안전하다.
 
 ## 9. 비파괴 검증

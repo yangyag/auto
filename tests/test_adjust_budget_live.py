@@ -82,10 +82,9 @@ class TestAdjustBudgetLiveScript(PostgresIntegrationTestCase):
     def save_grid(self, rows: tuple[GridRow, ...]) -> None:
         self.grid_repo.save(GridSnapshot(symbol="KRW-BTC", rows=rows))
 
-    def run_script(self, args):
-        """스크립트 실행 및 결과 캡처"""
+    def run_script(self, args, *, current_price: Decimal = Decimal("120000000")):
+        """스크립트 실행 및 결과 캡처. current_price 가 모든 슬롯 buy_price 보다 높으면 lower_budget 이 곧 total_budget 이 된다."""
         output = io.StringIO()
-        # bot-key를 명시적으로 전달하거나 cfg 설정을 따르게 함
         full_args = args + ["--bot-key", self.config.STATE_BOT_KEY]
         with patch("sys.stdout", new=output), patch("sys.stdin", io.StringIO("y\n")):
             try:
@@ -95,7 +94,8 @@ class TestAdjustBudgetLiveScript(PostgresIntegrationTestCase):
                      patch("config.settings.PGUSER", self.config.PGUSER), \
                      patch("config.settings.PGPASSWORD", self.config.PGPASSWORD), \
                      patch("config.settings.PGSCHEMA", self.config.PGSCHEMA), \
-                     patch("config.settings.STATE_BOT_KEY", self.config.STATE_BOT_KEY):
+                     patch("config.settings.STATE_BOT_KEY", self.config.STATE_BOT_KEY), \
+                     patch("scripts.adjust_budget_live.fetch_current_price", return_value=current_price):
                     exit_code = main(full_args)
             except SystemExit as e:
                 exit_code = e.code
@@ -103,7 +103,7 @@ class TestAdjustBudgetLiveScript(PostgresIntegrationTestCase):
 
     def test_increase_budget_success(self):
         # 300만 -> 600만 증액. 과거 정수 quantize 버그라면 여기서 planned_qty가 0이 됐어야 한다.
-        exit_code, output = self.run_script(["--target-budget", "6000000"])
+        exit_code, output = self.run_script(["--target-lower-budget", "6000000"])
 
         self.assertEqual(exit_code, 0)
         self.assertIn("상태: 성공", output)
@@ -130,7 +130,7 @@ class TestAdjustBudgetLiveScript(PostgresIntegrationTestCase):
             )
         )
 
-        exit_code, output = self.run_script(["--target-budget", "6000000"])
+        exit_code, output = self.run_script(["--target-lower-budget", "6000000"])
 
         self.assertEqual(exit_code, 1)
         self.assertIn("에러: 현재 열려 있는 BUY 주문이 1개 있습니다.", output)
@@ -146,10 +146,10 @@ class TestAdjustBudgetLiveScript(PostgresIntegrationTestCase):
         )
         original = self.grid_repo.load()
 
-        exit_code, output = self.run_script(["--target-budget", "500000"])
+        exit_code, output = self.run_script(["--target-lower-budget", "500000"])
 
         self.assertEqual(exit_code, 1)
-        self.assertIn("[경고] 목표 예산이 현재 보유 중인 인벤토리 가치보다 작습니다!", output)
+        self.assertIn("[경고] 역산된 총 예산이 현재 보유 중인 인벤토리 가치보다 작습니다!", output)
         self.assertIn("강제 진행하려면 --force 옵션을 사용하세요.", output)
         self.assertEqual(self.grid_repo.load(), original)
 
@@ -161,7 +161,7 @@ class TestAdjustBudgetLiveScript(PostgresIntegrationTestCase):
             )
         )
 
-        exit_code, output = self.run_script(["--target-budget", "500000", "--force"])
+        exit_code, output = self.run_script(["--target-lower-budget", "500000", "--force"])
 
         self.assertEqual(exit_code, 0)
         self.assertIn("상태: 성공", output)
@@ -181,7 +181,7 @@ class TestAdjustBudgetLiveScript(PostgresIntegrationTestCase):
         )
         original = self.grid_repo.load()
 
-        exit_code, output = self.run_script(["--target-budget", "6000000"])
+        exit_code, output = self.run_script(["--target-lower-budget", "6000000"])
 
         self.assertEqual(exit_code, 1)
         self.assertIn("에러: buy_price가 내림차순이 아닙니다", output)
@@ -196,7 +196,7 @@ class TestAdjustBudgetLiveScript(PostgresIntegrationTestCase):
         )
         original = self.grid_repo.load()
 
-        exit_code, output = self.run_script(["--target-budget", "6000000"])
+        exit_code, output = self.run_script(["--target-lower-budget", "6000000"])
 
         self.assertEqual(exit_code, 1)
         self.assertIn("에러: 슬롯 인덱스 불일치", output)
@@ -205,7 +205,7 @@ class TestAdjustBudgetLiveScript(PostgresIntegrationTestCase):
     def test_fail_if_slot_notional_below_upbit_minimum(self):
         original = self.grid_repo.load()
 
-        exit_code, output = self.run_script(["--target-budget", "10000"])
+        exit_code, output = self.run_script(["--target-lower-budget", "10000"])
 
         self.assertEqual(exit_code, 1)
         self.assertIn("업비트 최소 주문 금액보다 작습니다", output)
@@ -214,7 +214,7 @@ class TestAdjustBudgetLiveScript(PostgresIntegrationTestCase):
     def test_fail_if_planned_qty_quantizes_to_zero(self):
         original = self.grid_repo.load()
 
-        exit_code, output = self.run_script(["--target-budget", "1"])
+        exit_code, output = self.run_script(["--target-lower-budget", "1"])
 
         self.assertEqual(exit_code, 1)
         self.assertIn("planned_qty가 0 이하가 됩니다", output)
@@ -230,7 +230,7 @@ class TestAdjustBudgetLiveScript(PostgresIntegrationTestCase):
             )
         )
 
-        exit_code, output = self.run_script(["--target-budget", "6000000", "--force"])
+        exit_code, output = self.run_script(["--target-lower-budget", "6000000", "--force"])
 
         self.assertEqual(exit_code, 0)
         self.assertIn("상태: 성공", output)
