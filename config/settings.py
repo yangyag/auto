@@ -112,7 +112,7 @@ UPBIT_WS_ORDER_MAX_AGE_SECONDS = _env_positive_float("UPBIT_WS_ORDER_MAX_AGE_SEC
 # ── 리스크 파라미터 ──────────────────────────────────────
 MAX_TOTAL_BUDGET_KRW = None  # 기본은 현재 로드된 그리드 총배정금액을 truth로 본다.
 MAX_OPERATING_BUDGET_KRW = None  # q_current 분모는 기본적으로 현재 그리드 총배정금액을 따른다.
-MAX_DAILY_ORDERS = 50        # 일일 최대 주문 횟수
+MAX_DAILY_ORDERS = 150       # 일일 최대 주문 횟수 (0.2% 갭 × 70 슬롯에서 사이클당 ~140건 → 150 으로 상향)
 MIN_BALANCE_RESERVE = Decimal("10000")  # 최소 유보 잔고 KRW (이 금액 이하이면 매수 block)
 UPBIT_FEE_RATE = Decimal("0.0005")  # 매수 필요 KRW 추정에 반영할 업비트 수수료율
 FEE_BUFFER_KRW = Decimal("100")  # 수수료 외 추가 안전 버퍼
