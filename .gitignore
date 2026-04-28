@@ -8,3 +8,4 @@ __pycache__/
 .pytest_cache/
 grid.txt
 aws/
+.claude/settings.local.json

@@ -6,15 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 이 저장소는 용도별 문서가 이미 분리되어 있다. 추측하지 말고 해당 문서를 먼저 확인한다.
 
-- `AGENTS.md` — 인프라, 운영, EC2 배포, 작업 파이프라인, venv 규칙
 - `README.md` — 트레이딩 전략과 프로그램 로직 (매수/매도 규칙, 그리드 상태, Age TP, 브레이크아웃 가드, 주문 수명주기)
+- `docs/operations.md` — 인프라, 운영, EC2 배포, venv 규칙
 - `setup.md` — 최초 설치 절차
 - `docs/quick-commands.md` — 자주 쓰는 운영 명령 모음
 - `docs/UPBIT_API_REFERENCE.md` — 업비트 REST/WebSocket API 메모
 
-## 작업 파이프라인 (AGENTS.md 기준)
+`AGENTS.md` 는 codex CLI 전용 지침서다. Claude Code 세션에서는 참고하지 않는다.
 
-기본 흐름은 `Planner → Generator → Evaluator` 다. 수식, 계산, 전략 로직, 예산 분배, 재고 비율, TP/리스크 규칙이 하나라도 바뀌면 흐름은 `Planner → Math Expert → Generator → Evaluator` 로 격상된다. Math Expert 는 코드 작성 전에 로직 정합성, 단위 일관성, 경계 조건을 검증하며 — 항상 최신 모델을 `xhigh` reasoning effort 로 쓴다 — 검증에 실패하면 계획을 Planner 단계로 되돌린다. 비단순 작업은 각 역할을 실제로 분리된 에이전트로 수행한다.
+## 작업 파이프라인
+
+전략 로직, 수식, 예산 분배, TP/리스크 규칙, 트리거 조건이 변경되는
+작업에서는 `strategy-pipeline` skill 의 흐름을 따른다.
+검증 우선 원칙을 유지하고, 실거래 부작용 없는 검증 경로를 우선한다.
 
 Git 커밋 메시지는 사용자가 다른 언어를 명시하지 않는 한 한국어를 우선한다.
 
@@ -71,5 +75,5 @@ Git 커밋 메시지는 사용자가 다른 언어를 명시하지 않는 한 �
 
 - `grid.properties` 의 `TOTAL_BUDGET_KRW` 는 상단/중단/하단 **0.7× / 1.0× / 1.3×** 가중치로 분배된다. 정상 시드된 그리드는 `show_grid_state.py` 출력에서 `bottom_slot_planned_buy_budget > top_slot_planned_buy_budget` 이 성립한다 — 이걸 sanity check 로 쓴다.
 - `grid.properties` 는 `GRID_COUNT` 와 `GRID_STEP_PCT` 중 **정확히 하나만** 받는다.
-- EC2 의 venv 는 `/home/ubuntu/auto/.venv` 에 이미 구성되어 있다. **재생성하지 말고 그대로 쓴다.** `.venv/` 는 정상적으로 untracked 상태이며 `git clean -fd` 로 날려서는 안 된다. 자세한 건 AGENTS.md "Python 실행 환경 메모" 참고.
+- EC2 의 venv 는 `/home/ubuntu/auto/.venv` 에 이미 구성되어 있다. **재생성하지 말고 그대로 쓴다.** `.venv/` 는 정상적으로 untracked 상태이며 `git clean -fd` 로 날려서는 안 된다. 자세한 건 `docs/operations.md` "Python 실행 환경 메모" 참고.
 - EC2 호스트의 `/home/ubuntu/llm.env` 는 다른 서비스용 파일이다. 자동매매 봇의 env 는 `/home/ubuntu/auto/.env` 다.
