@@ -47,7 +47,7 @@ Git 커밋 메시지는 사용자가 다른 언어를 명시하지 않는 한 �
 - `grid.properties` DB 반영 (기본 시드 경로): `.venv/bin/python scripts/apply_grid_properties_to_postgres.py --force`
 - DB 그리드 상태 조회 (읽기 전용): `.venv/bin/python scripts/show_grid_state.py`
 - 라이브 전체 리셋 (stop → 미체결 취소 → BTC 시장가 전량 매도 → `grid.properties` 기준 재시드 → run): `.venv/bin/python scripts/reset_krw_btc_live.py`
-- 소프트 예산 조정 (보유 수량, 가격, `filled_at` 유지, `planned_qty` 만 재계산): `.venv/bin/python scripts/adjust_budget_live.py --target-budget <KRW>`
+- 소프트 예산 조정 (보유 수량, 가격, `filled_at` 유지, `planned_qty` 만 재계산): `.venv/bin/python scripts/adjust_budget_live.py --target-budget <KRW>` 또는 `--target-lower-budget <KRW>` (현재가 미만 슬롯의 매수합이 지정 금액이 되도록 총 예산을 가중치 비율로 역산). 두 옵션은 mutually exclusive.
 
 ## 아키텍처
 

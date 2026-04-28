@@ -30,7 +30,7 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 | **scripts/** | `reset_krw_btc_live.py` | 운영 중인 그리드를 초기화하고 자산을 정리하여 재시작하는 운영 스크립트 |
 | | `show_grid_state.py` | 현재 DB에 저장된 그리드와 주문의 상태를 요약해서 터미널에 출력 |
 | | `apply_grid_properties_to_postgres.py` | `grid.properties` 파일의 설정을 DB의 그리드 테이블에 강제 반영 |
-| | `adjust_budget_live.py` | 현재 DB 그리드의 가격 구조와 보유 수량은 유지한 채 `planned_qty`만 재계산하여 예산을 보수적으로 증액/감액 |
+| | `adjust_budget_live.py` | 현재 DB 그리드의 가격 구조와 보유 수량은 유지한 채 `planned_qty`만 재계산하여 예산을 보수적으로 증액/감액. `--target-budget` (절대 총액) 또는 `--target-lower-budget` (현재가 미만 슬롯의 매수합 목표값) 중 하나로 지정 |
 | **utils/** | `upbit_market.py` | 업비트 마켓의 최소 주문 단위, 호가 단위 등 시장 정보 관리 |
 | | `grid_reporting.py` | 수익률, 재고 현황 등 그리드 운영 성과 리포팅 유틸리티 |
 | | `decimal_utils.py` | 정밀한 수치 계산을 위한 Decimal 변환 및 절사(Truncate) 도구 |
@@ -196,8 +196,11 @@ rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단
 
 - 목적: 현재 DB의 `buy_price` ladder, `held_qty`, `sell_price`, `filled_at` 는 유지하고 `planned_qty`만 새 총예산 기준으로 다시 계산
 - 적용 범위: 빈 슬롯은 즉시 새 `planned_qty`가 반영되고, 보유 슬롯은 현재 보유 수량을 유지한 채 다음 복원 시점부터 새 `planned_qty` 의미를 사용
-- 안전장치: DB ladder 연속성/내림차순 검증, open BUY 주문 차단, BTC 수량 step 내림, 업비트 최소 주문 금액 검사, `target_budget < current_inventory_cost` 경고와 `--force` 요구
-- 권장 절차: `./stop.sh` -> open BUY 없음 확인 -> `.venv/bin/python scripts/adjust_budget_live.py --target-budget <KRW>` -> `./run.sh`
+- 입력 옵션 (mutually exclusive, 정확히 하나 필수):
+  - `--target-budget <KRW>`: 그리드 전체 총 예산을 절대값으로 지정.
+  - `--target-lower-budget <KRW>`: 업비트 ticker REST 로 현재가 1회 조회 후, `buy_price < 현재가` 인 슬롯들의 매수합(= Σ `buy_price × planned_qty`)이 지정 금액이 되도록 가중치 비율로 총 예산을 역산. `build_weighted_slot_budgets` 가 총 예산에 단순 비례하므로 정확히 역산되지만, BTC 수량 양자화(`ROUND_DOWN`)로 양자화 후 실제 하단 합은 목표보다 살짝 작다(편향 단방향, 슬롯당 최대 ~1 BTC step × buy_price). 현재가가 최상단 `buy_price` 보다 높아 모든 슬롯이 "하단" 으로 잡히는 엣지케이스에서는 경고를 출력한다.
+- 안전장치: DB ladder 연속성/내림차순 검증, open BUY 주문 차단(확정 전후 2회), BTC 수량 step 내림, 업비트 최소 주문 금액 검사, `target_budget < current_inventory_cost` 경고와 `--force` 요구, 사용자 `y/n` 확정 후에만 DB 저장.
+- 권장 절차: `./stop.sh` -> open BUY 없음 확인 -> `.venv/bin/python scripts/adjust_budget_live.py --target-budget <KRW>` (또는 `--target-lower-budget <KRW>`) -> `./run.sh`
 - 주의: 이 스크립트는 soft adjust 경로다. 이미 보유한 물량을 즉시 줄이지 않으므로, 목표 예산이 현재 인벤토리 원가보다 작아도 실제 예산 회수는 매도 이후에 완료된다.
 
 ## 핵심 설정 의미

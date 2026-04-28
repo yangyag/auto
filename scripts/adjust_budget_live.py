@@ -24,15 +24,89 @@ from utils.upbit_market import MIN_KRW_ORDER_AMOUNT
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="라이브 그리드 예산 증/감액 스크립트 (개선판)")
-    parser.add_argument(
+    budget_group = parser.add_mutually_exclusive_group(required=True)
+    budget_group.add_argument(
         "--target-budget",
         type=Decimal,
-        required=True,
         help="새로운 목표 총 예산 금액 (KRW)",
+    )
+    budget_group.add_argument(
+        "--target-lower-budget",
+        type=Decimal,
+        help=(
+            "현재가 미만 슬롯들의 매수합 목표 금액 (KRW). "
+            "현재가를 조회해서 buy_price < 현재가 인 슬롯의 가중치 비율로 총 예산을 역산한다."
+        ),
     )
     parser.add_argument("--bot-key", default=cfg.STATE_BOT_KEY)
     parser.add_argument("--force", action="store_true", help="인벤토리 초과 경고 등을 무시하고 강제 실행")
     return parser
+
+
+def fetch_current_price(symbol: str) -> Decimal:
+    """업비트 ticker REST 로 현재가 1회 조회. WS 캐시는 깨우지 않는다."""
+    from exchange.crypto import CryptoExchange
+
+    exchange = CryptoExchange(cfg.API_KEY or "", cfg.API_SECRET or "")
+    try:
+        return exchange.get_current_price_rest(symbol)
+    finally:
+        exchange.close()
+
+
+def resolve_target_budget_from_lower(
+    snapshot: GridSnapshot,
+    current_price: Decimal,
+    target_lower_budget: Decimal,
+) -> tuple[Decimal, list[int], Decimal]:
+    """현재가 미만 슬롯의 매수합이 target_lower_budget 이 되도록 총 예산을 역산한다.
+
+    build_weighted_slot_budgets 가 total_budget 에 단순 비례하므로, 임의 total 로
+    가중치 비율을 한 번 계산한 뒤 lower_ratio = (하단 가중치 합) / (전체 가중치 합)
+    으로 역산한다. 양자화(quantize) 손실은 호출 측 리포트에서 별도 표시한다.
+    """
+    if target_lower_budget <= DECIMAL_ZERO:
+        raise ValueError("에러: --target-lower-budget 은 0보다 커야 합니다.")
+
+    grid_count = len(snapshot.rows)
+    probe_total = Decimal("1")
+    probe_spec = GridPropertySpec(
+        min_buy_price=snapshot.rows[-1].buy_price,
+        max_buy_price=snapshot.rows[0].buy_price,
+        total_budget_krw=probe_total,
+        grid_count=grid_count,
+    )
+    probe_weights = build_weighted_slot_budgets(probe_spec)
+
+    lower_indices = [
+        idx for idx, row in enumerate(snapshot.rows) if row.buy_price < current_price
+    ]
+    if not lower_indices:
+        raise ValueError(
+            f"에러: 현재가({format_decimal(current_price)} KRW) 미만의 슬롯이 없습니다. "
+            f"top_buy_price={format_decimal(snapshot.rows[0].buy_price)} KRW"
+        )
+
+    lower_weight_sum = sum((probe_weights[i] for i in lower_indices), DECIMAL_ZERO)
+    if lower_weight_sum <= DECIMAL_ZERO:
+        raise ValueError("에러: 하단 가중치 합이 0 이하입니다. 그리드 가중치 분배를 확인하세요.")
+    total_weight = sum(probe_weights, DECIMAL_ZERO)
+    lower_ratio = lower_weight_sum / total_weight
+
+    target_total_budget = target_lower_budget / lower_ratio
+    return target_total_budget, lower_indices, lower_ratio
+
+
+def compute_lower_actual_total(
+    rows: list,
+    lower_indices: list[int],
+) -> Decimal:
+    """양자화 후 슬롯 단위에서 실제 하단 매수합(buy_price × planned_qty)을 계산."""
+    total = DECIMAL_ZERO
+    for idx in lower_indices:
+        row = rows[idx]
+        total += row.buy_price * row.planned_qty
+    return total
 
 
 def validate_snapshot_rows(snapshot: GridSnapshot) -> None:
@@ -105,11 +179,16 @@ def build_updated_rows(
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    target_budget = args.target_budget
     bot_key = args.bot_key
+    lower_mode = args.target_lower_budget is not None
+    target_budget = args.target_budget
+    target_lower_budget = args.target_lower_budget
 
-    if target_budget <= DECIMAL_ZERO:
+    if not lower_mode and target_budget <= DECIMAL_ZERO:
         print("에러: 목표 총 예산은 0보다 커야 합니다.")
+        return 1
+    if lower_mode and target_lower_budget <= DECIMAL_ZERO:
+        print("에러: --target-lower-budget 은 0보다 커야 합니다.")
         return 1
 
     # 1. 저장소 초기화
@@ -158,6 +237,24 @@ def main(argv: list[str] | None = None) -> int:
         print(exc)
         return 1
 
+    # 4.5 하단 매수합 모드: 현재가 조회 → 가중치 역산으로 target_budget 결정
+    current_price: Decimal | None = None
+    lower_indices: list[int] = []
+    lower_ratio: Decimal | None = None
+    if lower_mode:
+        try:
+            current_price = fetch_current_price(snapshot.symbol or cfg.SYMBOL)
+        except Exception as exc:
+            print(f"에러: 현재가 조회 실패: {exc}")
+            return 1
+        try:
+            target_budget, lower_indices, lower_ratio = resolve_target_budget_from_lower(
+                snapshot, current_price, target_lower_budget
+            )
+        except ValueError as exc:
+            print(exc)
+            return 1
+
     # 5. 인벤토리 현황 계산 및 요약 (리뷰 4, 6번 반영)
     current_inventory_cost = sum((r.buy_price * r.held_qty for r in snapshot.rows), DECIMAL_ZERO)
     current_planned_buy_budget = sum(
@@ -175,6 +272,19 @@ def main(argv: list[str] | None = None) -> int:
     print("=" * 60)
     print(f" 그리드 예산 조정 리포트 (Bot: {bot_key})")
     print("-" * 60)
+    if lower_mode:
+        actual_lower_total = compute_lower_actual_total(updated_rows, lower_indices)
+        print(f" 0. [하단 매수합 모드]")
+        print(f"    - 현재가(KRW-BTC): {format_decimal(current_price)} KRW")
+        print(f"    - 하단 슬롯 수: {len(lower_indices)} / {len(snapshot.rows)}")
+        print(f"    - 하단 가중치 비율: {format_decimal(lower_ratio)}")
+        print(f"    - 목표 하단 매수합: {format_decimal(target_lower_budget)} KRW")
+        print(f"    - 양자화 후 실제 하단 매수합: {format_decimal(actual_lower_total)} KRW")
+        if len(lower_indices) == len(snapshot.rows):
+            print(
+                "    [경고] 현재가가 최상단 buy_price 보다 높아 모든 슬롯이 '하단'으로 잡혔습니다. "
+                "이 경우 --target-lower-budget 와 --target-budget 가 동일한 의미가 됩니다."
+            )
     print(f" 1. 목표 총 예산: {format_decimal(target_budget)} KRW")
     print(f" 2. 현재 인벤토리 가치: {format_decimal(current_inventory_cost)} KRW")
     print(f" 3. 적용 전 매수 대기 예산: {format_decimal(current_planned_buy_budget)} KRW")
