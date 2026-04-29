@@ -49,6 +49,9 @@ Git 커밋 메시지는 사용자가 다른 언어를 명시하지 않는 한 �
 - 라이브 전체 리셋 (stop → 미체결 취소 → BTC 시장가 전량 매도 → `grid.properties` 기준 재시드 → run): `.venv/bin/python scripts/reset_krw_btc_live.py`
 - 소프트 예산 조정 (보유 수량, 가격, `filled_at` 유지, `planned_qty` 만 재계산): `.venv/bin/python scripts/adjust_budget_live.py --target-lower-budget <KRW>` (현재가 미만 슬롯의 매수합이 지정 금액이 되도록 총 예산을 가중치 비율로 역산).
 
+### 실현 손익 분석
+- `.venv/bin/python scripts/upbit_realized_pnl.py [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--period daily|weekly|monthly|yearly|all]` — 업비트 `GET /v1/orders/closed` + `/v1/order` 만 사용하는 read-only 실현손익 분석. 기본 최근 90일, KRW-BTC, FIFO 매칭으로 수수료 차감 순손익 산출. 매칭 안 되는 매도(윈도우 시작 이전 매수분)는 별도 'unmatched' 라인.
+
 ## 아키텍처
 
 업비트 `KRW-BTC` 기반 그리드 자동매매 봇이며 상태는 PostgreSQL 에 저장된다. `main.py` 메인 루프는 업비트 public ticker WebSocket 이벤트 구동이고, 장애 시 5초 REST polling 으로 fallback 한다. 전략 평가는 최소 3초 간격으로 throttle 된다. **DB 쓰기와 주문 제출은 모두 메인 스레드에서 직렬로 처리된다.** WebSocket 콜백은 `exchange/upbit_ws.py` 의 인메모리 캐시만 채우므로, 틱 폭주가 있어도 backlog 로 쌓이지 않고 최신 가격으로 coalesce 된다.

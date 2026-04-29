@@ -7,6 +7,24 @@ description: 전략 로직, 수식, 계산식, 예산 분배, TP/리스크 규�
 
 전략/수식/리스크 로직을 다루는 작업의 표준 작업 흐름이다. 실거래 부작용이 발생할 수 있는 영역이므로 검증 우선 원칙을 강제한다.
 
+## ⚠️ Subagent 호출 메커니즘 (반드시 준수)
+
+이 skill에서 "subagent로 분리" 라는 표현은 **반드시 Task 도구를 통한 실제 subagent 호출**을 의미한다. 다음을 절대 금지한다:
+
+- ❌ 같은 세션 안에서 "이제 Math Expert 모드로 검토하겠습니다"라고 말하고 자기가 검증하는 것
+- ❌ "Math Expert 관점에서 보면..." 같은 롤플레이로 검증을 흉내내는 것
+- ❌ Math Expert/Generator/Evaluator 정의 파일을 컨텍스트로 읽고 그 관점을 흉내내는 것
+
+올바른 호출 방법:
+
+- ✅ Task 도구를 명시적으로 invoke해서 `subagent_type: math-expert`(또는 `generator`, `evaluator`)로 호출
+- ✅ 별도의 fresh 컨텍스트에서 subagent가 작업하고, 최종 결과만 메인 세션으로 반환되는 구조
+- ✅ 사용자에게 "Launching agent: math-expert" 같은 UI 알림이 보이는 게 정상
+
+**왜 이게 중요한가**: 같은 컨텍스트에서 역할만 바꾸면 Math Expert가 Planner의 출력을 정당화하는 sunk cost가 그대로 작용한다. 컨텍스트 격리가 깨지면 검증의 의미 자체가 사라진다. 메인 세션이 자기 출력을 자기가 검증하는 것은 진짜 검증이 아니다.
+
+호출이 막히는 환경(Task 도구 미사용 가능 등)이라면, 검증을 흉내내지 말고 사용자에게 **"subagent 호출이 불가능하므로 검증을 메인 세션이 수행함"** 이라고 명시적으로 알린다. 절대 분리된 척 하지 않는다.
+
 ## 적용 판별
 
 이 파이프라인은 다음 작업에 적용한다:
@@ -55,7 +73,12 @@ Planner의 출력에는 반드시 다음이 포함되어야 한다:
 
 ## Math Expert
 
-수학적 정합성을 검증하는 단계. **이 단계는 반드시 별도 subagent로 분리한다.** 정의는 `agents/math-expert.md`를 따른다.
+수학적 정합성을 검증하는 단계. **반드시 Task 도구로 `math-expert` subagent를 호출해야 한다.** 정의는 `agents/math-expert.md`를 따른다.
+
+호출 방식:
+- Task 도구 invoke → `subagent_type: math-expert`
+- prompt에 Planner가 정리한 계획 + 검증할 수식/계산 명세를 명시적으로 전달
+- 같은 세션 안에서 "Math Expert 관점으로 검토" 같은 롤플레이 금지
 
 검증 대상:
 - 수식, 계산식, 기준값
@@ -80,9 +103,14 @@ Planner의 출력에는 반드시 다음이 포함되어야 한다:
 
 ## Generator
 
-구현 단계. **별도 subagent로 분리하는 것을 기본으로 한다.** 정의는 `agents/generator.md`를 따른다.
+구현 단계. **분리 기준에 해당되는 작업은 반드시 Task 도구로 `generator` subagent를 호출한다.** 정의는 `agents/generator.md`를 따른다.
 
-**단, Math Expert 검증 대상 작업은 Math Expert 승인 전에는 절대 구현하지 않는다.**
+호출 방식:
+- Task 도구 invoke → `subagent_type: generator`
+- prompt에 Planner가 고정한 범위/완료 기준/영향 인터페이스 + (해당 시) Math Expert APPROVED 명세를 그대로 전달
+- 같은 세션 안에서 "Generator 모드로 구현" 같은 롤플레이 금지
+
+**단, Math Expert 검증 대상 작업은 Math Expert APPROVED 전에는 절대 구현하지 않는다.**
 
 분리 기준은 **파일 수가 아니라 작업 부피와 성격**이다. 다음 중 하나라도 해당되면 분리한다:
 
@@ -116,7 +144,12 @@ Generator는 자의적으로 범위를 확장하지 않는다. "이 김에 이�
 
 ## Evaluator
 
-구현 후 반드시 수행하는 별도 검토 단계. 가능하면 별도 subagent로 분리한다. 정의는 `agents/evaluator.md`를 따른다.
+구현 후 반드시 수행하는 별도 검토 단계. **반드시 Task 도구로 `evaluator` subagent를 호출한다.** 정의는 `agents/evaluator.md`를 따른다.
+
+호출 방식:
+- Task 도구 invoke → `subagent_type: evaluator`
+- prompt에 변경된 파일 목록 + Planner 범위 + (해당 시) Math Expert APPROVED 명세를 전달
+- 같은 세션 안에서 "Evaluator 관점으로 검토" 같은 롤플레이 금지. 본인이 짠 코드를 본인이 자기 출력으로 검증하는 것은 검증이 아니다.
 
 핵심 질문은 "돌아가는가"가 아니라 **"운영 중 깨질 지점이 남아 있는가"** 이다.
 
@@ -132,17 +165,22 @@ Evaluator는 구현자와 다른 관점에서 본다. 본인이 짠 코드라도
 
 ## Subagent 분리 가이드
 
-분리 결정은 **파일 수가 아니라 작업 부피와 성격**으로 한다.
+분리 결정은 **파일 수가 아니라 작업 부피와 성격**으로 한다. 분리하기로 결정했다면 **반드시 Task 도구로 호출**한다. 같은 세션에서 역할 연기로 흉내내는 것은 금지.
 
-- **단순 변경** (Math Expert 불필요, 짧은 수정): 메인 세션에서 Planner → Generator → Evaluator 흐름을 따라가도 된다. Evaluator만 subagent로 분리해도 충분.
-- **수식/리스크 변경 (Math Expert 필요)**: Math Expert는 반드시 별도 subagent (opus). Generator도 subagent로 분리해서 검증된 식을 깨끗한 컨텍스트로 받게 한다 (sonnet). Evaluator도 분리.
-- **부피가 큰 작업**: 파일 수와 무관하게, 추가/변경 코드량이 많거나 새 클래스/모듈을 통째로 작성하는 경우 Generator를 분리한다. 메인 세션 컨텍스트 보호와 비용 절감 양쪽에서 이득.
-- **컨텍스트가 이미 무거운 상태**: 긴 대화나 여러 파일 탐색 후라면 짧은 작업이라도 Generator를 분리하는 게 안전하다.
+- **단순 변경** (Math Expert 불필요, 짧은 수정): 메인 세션에서 Planner → Generator를 직접 처리해도 된다. Evaluator는 Task 도구로 반드시 호출.
+- **수식/리스크 변경 (Math Expert 필요)**: Math Expert는 Task 도구로 호출 필수 (opus). Generator도 Task 도구로 호출해서 검증된 식을 fresh 컨텍스트로 받게 한다 (sonnet). Evaluator도 Task 도구로 호출.
+- **부피가 큰 작업**: 파일 수와 무관하게, 추가/변경 코드량이 많거나 새 클래스/모듈을 통째로 작성하는 경우 Generator를 Task 도구로 호출. 메인 세션 컨텍스트 보호와 비용 절감 양쪽에서 이득.
+- **컨텍스트가 이미 무거운 상태**: 긴 대화나 여러 파일 탐색 후라면 짧은 작업이라도 Generator를 Task 도구로 분리.
 
-분리 시 주의:
-- Generator subagent는 Planner가 정리한 범위/완료 기준/영향 인터페이스를 명시적으로 받아야 한다. 그래야 깨끗한 컨텍스트의 이점이 살아난다.
-- Math Expert APPROVED 결과는 Generator에게 그대로 전달한다. 요약하지 않는다.
-- 즉시 다음 행동을 막는 핵심 결정이 얽힌 작업은 메인 세션이 직접 처리한다.
+**Task 도구 호출 시 주의:**
+- `subagent_type` 필드에 정확한 이름 사용 (`math-expert`, `generator`, `evaluator`)
+- `prompt`에 필요한 컨텍스트를 모두 명시적으로 전달 (subagent는 fresh 컨텍스트로 시작하므로 메인 세션이 이미 본 정보를 추측할 수 없음)
+- Math Expert APPROVED 결과는 Generator prompt에 그대로 전달. 요약 금지.
+- Planner가 정리한 범위/완료 기준/영향 인터페이스는 명시적 텍스트로 전달.
+
+**호출 결과 확인:**
+- subagent 호출이 일어나면 사용자 UI에 "Launching agent: ..." 표시가 나타남
+- 표시가 안 나타나면 호출이 안 된 것이므로, 같은 세션에서 흉내내지 말고 사용자에게 알린다.
 
 ## 흐름이 깨지는 신호
 
