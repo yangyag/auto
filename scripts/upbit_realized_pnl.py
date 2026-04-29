@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
-"""업비트 체결 완료 주문 기반 실현손익(Realized PnL) 분석 스크립트.
+"""업비트 실현 손익 분석 (KRW-BTC, read-only).
 
-읽기 전용. 실거래 주문은 절대 내지 않는다.
+매칭 방식: 슬롯 1:1 매칭. identifier 의 슬롯 번호로 BUY ↔ SELL 짝지음.
+글로벌 FIFO 와 의도적으로 다른 결과를 생산 (봇 슬롯 단위 매핑 의미).
+
+identifier 형식: '{STATE_BOT_KEY}-{buy|sell}-{slot}-{ms}-{hex12}'
+발급 지점: main.py:ensure_order_identifier() (line 110-118).
+STATE_BOT_KEY 는 cfg.STATE_BOT_KEY 로 동적 참조 (운영 환경별 호환).
+
+한계: 같은 millisecond 의 BUY/SELL trade 가 슬롯 안에서 동률일 때 uuid
+tie-break 로 SELL 이 먼저 처리될 가능성 (운영상 거의 불가능, 안내 노트).
 
 사용법:
     .venv/bin/python scripts/upbit_realized_pnl.py [--from YYYY-MM-DD] [--to YYYY-MM-DD]
@@ -15,6 +23,7 @@
 """
 import argparse
 import hashlib
+import re
 import sys
 import time
 import uuid
@@ -33,6 +42,35 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import config.settings as cfg
+
+# ── 슬롯 identifier 파싱 ──────────────────────────────────────
+
+
+def _slot_pattern() -> re.Pattern:
+    r"""cfg.STATE_BOT_KEY 를 동적으로 참조해 슬롯 패턴 컴파일.
+
+    운영 환경: STATE_BOT_KEY="krw-btc-live" 이면
+    패턴: ^krw-btc-live-(buy|sell)-(\d+)-
+    """
+    return re.compile(rf'^{re.escape(cfg.STATE_BOT_KEY)}-(buy|sell)-(\d+)-')
+
+
+SLOT_PATTERN = _slot_pattern()
+
+
+def extract_slot_index(identifier: str | None) -> int | None:
+    """identifier 에서 슬롯 번호 추출.
+
+    형식: '{STATE_BOT_KEY}-{buy|sell}-{slot}-{ms}-{hex12}'
+    발급 지점: main.py:ensure_order_identifier()
+    """
+    if not identifier:
+        return None
+    m = SLOT_PATTERN.match(identifier)
+    if not m:
+        return None
+    return int(m.group(2))
+
 
 # ── 상수 ─────────────────────────────────────────────────────
 BASE_URL = "https://api.upbit.com"
@@ -229,45 +267,67 @@ def group_key(time_key: datetime, period: str) -> str:
 
 def run_fifo(
     sorted_orders: list[dict],
-    api_key: str,
-    api_secret: str,
-) -> tuple[list[dict], list[dict]]:
-    """시간 순 정렬된 주문 목록에서 FIFO 매칭을 수행한다.
+) -> tuple[list[dict], list[dict], list[dict], list[dict], dict[int, list[dict]]]:
+    """슬롯 1:1 매칭 (글로벌 FIFO 가 아님).
+
+    Math Expert APPROVED 산식. 슬롯별 큐로 분리하여 같은 슬롯의
+    BUY ↔ SELL 만 매칭한다. identifier 패턴이 안 맞는 주문은 unparseable.
+
+    의도된 동작: 글로벌 FIFO 와 다른 결과를 의도적으로 생산한다 (봇 슬롯 1:1 매핑 의미).
 
     Returns:
-        realized_lines: 매칭된 SELL 라인 목록
-        unmatched_lines: 윈도우 시작 이전 BUY 없이 남은 SELL 라인 목록
+        realized_lines    : 매칭된 SELL 라인 목록
+        unmatched_lines   : 같은 슬롯 BUY 큐 비어있어 매칭 못 한 SELL 라인 목록
+        unparseable_buys  : identifier 패턴 안 맞는 BUY 주문 목록
+        unparseable_sells : identifier 패턴 안 맞는 SELL 주문 목록
+        queues_by_slot    : 슬롯별 잔여 BUY 큐 (매칭 후 남은 것)
     """
-    # BUY FIFO 큐: {'qty': Decimal, 'unit_cost': Decimal, 'uuid': str}
-    queue: list[dict] = []
+    queues_by_slot: dict[int, list[dict]] = {}
     realized_lines: list[dict] = []
     unmatched_lines: list[dict] = []
+    unparseable_buys: list[dict] = []
+    unparseable_sells: list[dict] = []
 
     for order in sorted_orders:
-        side = order["side"]
+        slot = extract_slot_index(order.get("identifier"))
+
         exec_vol = _to_decimal(order["executed_volume"])
         exec_funds = _to_decimal(order["executed_funds"])
         paid_fee = _to_decimal(order["paid_fee"])
+        time_key = order["_time_key"]
 
-        if side == "bid":
-            # ── BUY 처리 ──────────────────────────────────────
+        if slot is None:
+            # identifier 패턴 안 맞음 (수동 주문, 외부 봇 등)
+            entry = {
+                "uuid": order["uuid"],
+                "qty": exec_vol,
+                "executed_funds": exec_funds,
+                "time_key": time_key,
+            }
+            if order["side"] == "bid":
+                unparseable_buys.append(entry)
+            else:
+                unparseable_sells.append(entry)
+            continue
+
+        if order["side"] == "bid":
+            # ── BUY 처리: 슬롯 큐에 적재 ─────────────────────
             buy_qty = exec_vol                                   # Decimal BTC
-            buy_gross_krw = exec_funds                           # Decimal KRW
-            buy_total_cost = exec_funds + paid_fee               # Decimal KRW
+            buy_total_cost = exec_funds + paid_fee               # Decimal KRW (수수료 포함)
             buy_unit_cost = buy_total_cost / buy_qty             # Decimal KRW/BTC
-            queue.append({
+            queues_by_slot.setdefault(slot, []).append({
                 "qty": buy_qty,
                 "unit_cost": buy_unit_cost,
-                "uuid": order["uuid"],
+                "buy_uuid": order["uuid"],
+                "time_key": time_key,
             })
 
-        elif side == "ask":
-            # ── SELL 처리 ──────────────────────────────────────
+        elif order["side"] == "ask":
+            # ── SELL 처리: 같은 슬롯 큐에서만 FIFO 매칭 ────────
             sell_qty = exec_vol
             sell_gross_krw = exec_funds
-            time_key = order["_time_key"]  # 미리 채워진 time_key
 
-            # sell_gross_krw == 0 가드
+            # sell_gross_krw == 0 가드 (기존 동일)
             if sell_gross_krw == Decimal("0"):
                 if paid_fee == Decimal("0"):
                     warn_anomaly(
@@ -282,6 +342,8 @@ def run_fifo(
                     )
                     continue
 
+            # 같은 슬롯의 큐에서만 FIFO 매칭
+            queue = queues_by_slot.get(slot, [])
             remaining_qty = sell_qty
             matched_cost = Decimal("0")
             matched_qty_tot = Decimal("0")
@@ -296,8 +358,9 @@ def run_fifo(
                 if head["qty"] == Decimal("0"):
                     queue.pop(0)
                 elif head["qty"] < Decimal("0"):
-                    assert False, f"head.qty 음수: {head}"
+                    assert False, f"head.qty 음수: slot={slot} head={head}"
 
+            # 수수료 안분 (수량비례 = ratio_matched)
             ratio_matched = matched_qty_tot / sell_qty
             matched_funds = sell_gross_krw * ratio_matched
             matched_fee = paid_fee * ratio_matched
@@ -310,6 +373,7 @@ def run_fifo(
                     "realized_pnl": realized_pnl,
                     "matched_qty": matched_qty_tot,
                     "sell_uuid": order["uuid"],
+                    "slot": slot,
                 })
 
             if remaining_qty > Decimal("0"):
@@ -322,9 +386,10 @@ def run_fifo(
                     "unmatched_proceeds": unmatched_sell_net,
                     "unmatched_qty": unmatched_qty,
                     "sell_uuid": order["uuid"],
+                    "slot": slot,
                 })
 
-    return realized_lines, unmatched_lines
+    return realized_lines, unmatched_lines, unparseable_buys, unparseable_sells, queues_by_slot
 
 
 # ── 출력 ─────────────────────────────────────────────────────
@@ -378,7 +443,7 @@ def _print_realized_section(
 def _print_unmatched_section(
     unmatched_lines: list[dict],
     periods: list[str],
-    title: str = "[ 미매칭(윈도우 시작 이전 매수분, PnL 아님) ]",
+    title: str = "[ 미매칭(같은 슬롯 매수 큐 비어있음 — 윈도우 밖 또는 unparseable, PnL 아님) ]",
 ) -> None:
     """period 별 unmatched 섹션 출력."""
     print(title)
@@ -405,6 +470,70 @@ def _print_unmatched_section(
                 f"{k:<20} {count:>8} {_fmt_krw(total_proceeds):>18} {_fmt_btc(total_qty):>18}"
                 f"  [{period}]"
             )
+
+
+def _print_unparseable_section(
+    unparseable_buys: list[dict],
+    unparseable_sells: list[dict],
+) -> None:
+    """섹션 4: identifier 패턴 안 맞는 주문 출력."""
+    print("[ 매칭 불가 주문 (identifier 패턴 안 맞음, 수동/외부 주문 의심) ]")
+    if not unparseable_buys and not unparseable_sells:
+        print("  (매칭 불가 주문 없음)")
+        return
+
+    print(f"  BUY {len(unparseable_buys)}건:")
+    for entry in unparseable_buys:
+        t = entry["time_key"].isoformat(timespec="seconds")
+        print(
+            f"    - uuid={entry['uuid']}"
+            f" qty={_fmt_btc(entry['qty'])}"
+            f" funds={_fmt_krw(entry['executed_funds'])} KRW"
+            f" time={t}"
+        )
+    print(f"  SELL {len(unparseable_sells)}건:")
+    for entry in unparseable_sells:
+        t = entry["time_key"].isoformat(timespec="seconds")
+        print(
+            f"    - uuid={entry['uuid']}"
+            f" qty={_fmt_btc(entry['qty'])}"
+            f" funds={_fmt_krw(entry['executed_funds'])} KRW"
+            f" time={t}"
+        )
+
+
+def _print_remaining_buy_section(queues_by_slot: dict[int, list[dict]]) -> None:
+    """섹션 5: 슬롯별 잔여 BUY 큐 출력.
+
+    가중평균 unit_cost: total_cost = Σ qty × unit_cost, avg = total_cost / total_qty
+    슬롯 번호 오름차순 정렬.
+    """
+    print("[ 잔여 매수 (분석 윈도우 안 매수인데 매칭 SELL 없음 — 미실현 또는 매도 윈도우 밖) ]")
+
+    # 잔여가 있는 슬롯만 필터
+    remaining_slots = {
+        slot: entries
+        for slot, entries in queues_by_slot.items()
+        if entries
+    }
+
+    if not remaining_slots:
+        print("  (잔여 매수 없음)")
+        return
+
+    header = f"{'슬롯':>5} | {'잔여수량':>12} | {'평균 unit_cost':>16} | {'BUY 건수':>8}"
+    print(header)
+    print("-" * len(header))
+
+    for slot in sorted(remaining_slots.keys()):
+        entries = remaining_slots[slot]
+        total_qty = sum((e["qty"] for e in entries), Decimal("0"))
+        total_cost = sum((e["qty"] * e["unit_cost"] for e in entries), Decimal("0"))
+        avg_unit_cost = total_cost / total_qty if total_qty > Decimal("0") else Decimal("0")
+        count = len(entries)
+        print(
+            f"{slot:>5} | {_fmt_btc(total_qty):>12} | {_fmt_krw(avg_unit_cost):>16} | {count:>8}"
+        )
 
 
 def _print_anomaly_section() -> None:
@@ -490,6 +619,10 @@ def main(argv: list[str] | None = None) -> int:
         print("오류: API_KEY 또는 API_SECRET 이 설정되지 않았습니다.", file=sys.stderr)
         return 1
 
+    if not cfg.STATE_BOT_KEY:
+        print("오류: STATE_BOT_KEY 가 빈 문자열입니다. .env 또는 환경변수를 확인하세요.", file=sys.stderr)
+        return 1
+
     market = args.market
     period_arg = args.period
 
@@ -544,8 +677,9 @@ def main(argv: list[str] | None = None) -> int:
     # 3단계: time_key + uuid 기준 정렬
     sorted_orders = sorted(valid_orders, key=lambda o: (o["_time_key"], o["uuid"]))
 
-    # 4단계: FIFO 매칭
-    realized_lines, unmatched_lines = run_fifo(sorted_orders, api_key, api_secret)
+    # 4단계: 슬롯별 매칭
+    realized_lines, unmatched_lines, unparseable_buys, unparseable_sells, queues_by_slot = \
+        run_fifo(sorted_orders)
 
     # 5단계: 출력
     # period=all 이면 5개 단위 모두 출력, 아니면 해당 단위만
@@ -559,6 +693,10 @@ def main(argv: list[str] | None = None) -> int:
     _print_realized_section(realized_lines, periods_to_show)
     print()
     _print_unmatched_section(unmatched_lines, periods_to_show)
+    print()
+    _print_unparseable_section(unparseable_buys, unparseable_sells)
+    print()
+    _print_remaining_buy_section(queues_by_slot)
     print()
     _print_anomaly_section()
     print("=" * 80)

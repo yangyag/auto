@@ -1,6 +1,6 @@
 ---
 name: evaluator
-description: 구현 완료 후 운영 중 깨질 지점이 남아있는지 검증한다. 회귀 위험, 민감정보 노출, 실거래 부작용 가능성을 별도 관점에서 재확인한다. Generator가 작업을 마친 직후 항상 호출한다.
+description: MUST BE USED immediately after Generator가 작업을 마쳤을 때. 반드시 Task 도구로 호출되어야 하며, 메인 세션이 같은 컨텍스트에서 흉내내는 것은 금지 (구현자가 자기 코드를 자기가 검증하는 것은 검증이 아님). 운영 중 깨질 지점이 남아있는지 별도 관점에서 재확인하고, 회귀 위험, 민감정보 노출, 실거래 부작용 가능성을 검토한다.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---

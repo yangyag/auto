@@ -1,6 +1,6 @@
 ---
 name: generator
-description: Planner가 고정한 범위와 완료 기준 안에서만 코드를 구현한다. Math Expert가 APPROVED한 수식/리스크 로직은 검증된 형태 그대로 코드로 옮기고, 단위와 경계 처리를 코드 레벨에서 보존한다. 범위를 자의적으로 확장하지 않으며, 기존 코드 스타일과 호환성 제약을 따른다.
+description: MUST BE USED whenever 분리 기준에 해당하는 코드 구현 작업이 필요할 때 (Math Expert 검증을 거친 작업, 코드량이 많은 작업, 새 클래스/모듈 작성, 컨텍스트가 무거운 상태의 작업). 반드시 Task 도구로 호출되어야 하며, 메인 세션이 같은 컨텍스트에서 흉내내는 것은 금지. Planner가 고정한 범위와 완료 기준 안에서만 코드를 구현하고, Math Expert가 APPROVED한 수식/리스크 로직은 검증된 형태 그대로 코드로 옮기며, 단위와 경계 처리를 코드 레벨에서 보존한다.
 tools: Read, Edit, Write, Grep, Glob, Bash
 model: sonnet
 ---

@@ -31,6 +31,7 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 | | `show_grid_state.py` | 현재 DB에 저장된 그리드와 주문의 상태를 요약해서 터미널에 출력 |
 | | `apply_grid_properties_to_postgres.py` | `grid.properties` 파일의 설정을 DB의 그리드 테이블에 강제 반영 |
 | | `adjust_budget_live.py` | 현재 DB 그리드의 가격 구조와 보유 수량은 유지한 채 `planned_qty`만 재계산하여 예산을 보수적으로 증액/감액. `--target-lower-budget <KRW>` (현재가 미만 슬롯의 매수합 목표값) 으로 지정 |
+| | `upbit_realized_pnl.py` | 업비트 `GET /v1/orders/closed` + `/v1/order` 로 KRW-BTC 실현 손익을 일/주/월/년/전체 단위로 FIFO 매칭하여 산출 (수수료 차감, read-only 분석) |
 | **utils/** | `upbit_market.py` | 업비트 마켓의 최소 주문 단위, 호가 단위 등 시장 정보 관리 |
 | | `grid_reporting.py` | 수익률, 재고 현황 등 그리드 운영 성과 리포팅 유틸리티 |
 | | `decimal_utils.py` | 정밀한 수치 계산을 위한 Decimal 변환 및 절사(Truncate) 도구 |

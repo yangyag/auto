@@ -1,6 +1,6 @@
 ---
 name: math-expert
-description: 전략 로직, 수식, 예산 분배, TP/리스크 규칙, 트리거 조건의 수학적 정합성을 검증한다. 코드를 작성하기 전 Planner 단계에서 세운 계획에 포함된 모든 수치 로직을 검토하고, 문제가 발견되면 Planner로 되돌린다.
+description: MUST BE USED whenever 전략 로직, 수식, 예산 분배, TP/리스크 규칙, 트리거 조건의 수학적 정합성을 검증해야 할 때. 반드시 Task 도구로 호출되어야 하며, 메인 세션이 같은 컨텍스트에서 흉내내는 것은 금지. 코드 작성 전 Planner 단계에서 세운 계획에 포함된 모든 수치 로직을 검토하고, 문제가 발견되면 Planner로 되돌린다.
 tools: Read, Grep, Glob
 model: opus
 ---
