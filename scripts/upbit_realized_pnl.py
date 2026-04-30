@@ -252,8 +252,9 @@ def group_key(time_key: datetime, period: str) -> str:
     if period == "daily":
         return time_key.strftime("%Y-%m-%d")
     if period == "weekly":
-        iso_year, iso_week, _ = time_key.isocalendar()
-        return f"{iso_year}-W{iso_week:02d}"
+        week_start = (time_key - timedelta(days=time_key.weekday())).date()
+        week_end = week_start + timedelta(days=6)
+        return f"{week_start:%Y-%m-%d}~{week_end:%Y-%m-%d}"
     if period == "monthly":
         return time_key.strftime("%Y-%m")
     if period == "yearly":
