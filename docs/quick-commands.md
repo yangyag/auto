@@ -88,10 +88,10 @@ python3 scripts/show_grid_state.py
 
 ### 실현 손익 조회 (KRW-BTC, 업비트 API 기준)
 ```bash
-.venv/bin/python scripts/upbit_realized_pnl.py [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--period daily|weekly|monthly|yearly|all]
+./scripts/upbit_realized_pnl.py [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--period daily|weekly|monthly|yearly|all]
 ```
 
-기본 최근 90일, period=all (일/주/월/년/전체). 업비트 `GET /v1/orders/closed` 와 `/v1/order` 만 사용하는 read-only 분석. 매수/매도 FIFO 매칭으로 수수료 차감 순손익을 산출하며, 매칭되지 않는 매도(윈도우 시작 이전 매수분)는 별도 라인으로 분리.
+기본 최근 90일, period=all (일/주/월/년/전체). 업비트 `GET /v1/orders/closed` 와 `/v1/order` 만 사용하는 read-only 분석. 매수/매도 FIFO 매칭으로 수수료 차감 순손익을 산출하며, 매칭되지 않는 매도(윈도우 시작 이전 매수분)는 별도 라인으로 분리. 기간은 2자리 연도 형식으로 표시하며, 주간 기간은 `26-04-20 ~ 26-04-26` 처럼 출력한다.
 
 ## 6) 테스트
 

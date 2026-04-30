@@ -27,6 +27,7 @@ import re
 import sys
 import time
 import uuid
+import warnings
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -42,6 +43,18 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import config.settings as cfg
+
+try:
+    from jwt.warnings import InsecureKeyLengthWarning
+except ImportError:
+    InsecureKeyLengthWarning = Warning
+
+warnings.filterwarnings("ignore", category=InsecureKeyLengthWarning)
+warnings.filterwarnings(
+    "ignore",
+    message=r"The HMAC key is .* below the minimum recommended length of 64 bytes for SHA512\.",
+    category=Warning,
+)
 
 # ── 슬롯 identifier 파싱 ──────────────────────────────────────
 
@@ -250,15 +263,15 @@ def _to_decimal(val) -> Decimal:
 def group_key(time_key: datetime, period: str) -> str:
     """period 별 그룹 키 문자열 반환."""
     if period == "daily":
-        return time_key.strftime("%Y-%m-%d")
+        return time_key.strftime("%y-%m-%d")
     if period == "weekly":
         week_start = (time_key - timedelta(days=time_key.weekday())).date()
         week_end = week_start + timedelta(days=6)
-        return f"{week_start:%Y-%m-%d}~{week_end:%Y-%m-%d}"
+        return f"{week_start:%y-%m-%d} ~ {week_end:%y-%m-%d}"
     if period == "monthly":
-        return time_key.strftime("%Y-%m")
+        return time_key.strftime("%y-%m")
     if period == "yearly":
-        return time_key.strftime("%Y")
+        return time_key.strftime("%y")
     if period == "all":
         return "ALL"
     raise ValueError(f"알 수 없는 period: {period}")
@@ -414,7 +427,7 @@ def _print_realized_section(
 ) -> None:
     """period 별 realized 합계 섹션 출력."""
     print(title)
-    header = f"{'기간':<20} {'매도건수':>8} {'실현손익(KRW)':>18} {'매도수량(BTC)':>18}"
+    header = f"{'기간':<23} {'매도건수':>8} {'실현손익(KRW)':>18} {'매도수량(BTC)':>18}"
     print(header)
     print("-" * len(header))
 
@@ -427,7 +440,7 @@ def _print_realized_section(
 
         if not groups:
             k_all = group_key(datetime.now(KST), period) if period != "all" else "ALL"
-            print(f"{'(없음)':<20} {'0':>8} {'0':>18} {'0.00000000':>18}  [{period}]")
+            print(f"{'(없음)':<23} {'0':>8} {'0':>18} {'0.00000000':>18}  [{period}]")
             continue
 
         for k in sorted(groups.keys()):
@@ -436,7 +449,7 @@ def _print_realized_section(
             total_qty = sum((i["matched_qty"] for i in items), Decimal("0"))
             count = len(items)
             print(
-                f"{k:<20} {count:>8} {_fmt_krw(total_pnl):>18} {_fmt_btc(total_qty):>18}"
+                f"{k:<23} {count:>8} {_fmt_krw(total_pnl):>18} {_fmt_btc(total_qty):>18}"
                 f"  [{period}]"
             )
 
@@ -448,7 +461,7 @@ def _print_unmatched_section(
 ) -> None:
     """period 별 unmatched 섹션 출력."""
     print(title)
-    header = f"{'기간':<20} {'건수':>8} {'매도순대금(KRW)':>18} {'매도수량(BTC)':>18}"
+    header = f"{'기간':<23} {'건수':>8} {'매도순대금(KRW)':>18} {'매도수량(BTC)':>18}"
     print(header)
     print("-" * len(header))
 
@@ -459,7 +472,7 @@ def _print_unmatched_section(
             groups[k].append(line)
 
         if not groups:
-            print(f"{'(없음)':<20} {'0':>8} {'0':>18} {'0.00000000':>18}  [{period}]")
+            print(f"{'(없음)':<23} {'0':>8} {'0':>18} {'0.00000000':>18}  [{period}]")
             continue
 
         for k in sorted(groups.keys()):
@@ -468,7 +481,7 @@ def _print_unmatched_section(
             total_qty = sum((i["unmatched_qty"] for i in items), Decimal("0"))
             count = len(items)
             print(
-                f"{k:<20} {count:>8} {_fmt_krw(total_proceeds):>18} {_fmt_btc(total_qty):>18}"
+                f"{k:<23} {count:>8} {_fmt_krw(total_proceeds):>18} {_fmt_btc(total_qty):>18}"
                 f"  [{period}]"
             )
 
