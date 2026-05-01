@@ -202,6 +202,11 @@ tail -f logs/trading-$(date +%F).log
 - BTC 전량 시장가 매도
 - `grid.properties` 기준 DB 그리드 재반영
 - 상태 출력
-- `./run.sh`
+
+재시작은 자동으로 하지 않는다. 결과 확인 후 필요하면 직접 실행한다:
+
+```bash
+./run.sh
+```
 
 전량 시장가 매도 주문에는 reset 전용 identifier 가 붙으므로, 이후 `scripts/upbit_realized_pnl.py` 에서 옵션 없이 reset 청산 손익에 포함된다.

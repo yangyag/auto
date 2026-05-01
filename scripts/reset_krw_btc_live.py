@@ -30,7 +30,6 @@ DEFAULT_ORDER_POLL_SECONDS = 1.0
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python3 scripts/reset_krw_btc_live.py")
-    parser.add_argument("--tail-lines", type=int, default=50)
     parser.add_argument("--wait-timeout", type=int, default=DEFAULT_ORDER_WAIT_SECONDS)
     parser.add_argument("--poll-interval", type=float, default=DEFAULT_ORDER_POLL_SECONDS)
     return parser
@@ -173,20 +172,6 @@ def liquidate_btc_position(
     return order_id
 
 
-def print_latest_log_tail(*, lines: int) -> None:
-    log_dir = PROJECT_ROOT / cfg.LOG_DIR
-    log_files = sorted(log_dir.glob("trading-*.log"))
-    if not log_files:
-        print("로그 파일이 없습니다.")
-        return
-
-    latest_log = max(log_files, key=lambda path: path.stat().st_mtime)
-    print(f"=== latest log tail: {latest_log.name} ===")
-    content = latest_log.read_text(encoding="utf-8", errors="replace").splitlines()
-    for line in content[-max(lines, 1):]:
-        print(line)
-
-
 def validate_environment() -> None:
     if cfg.EXCHANGE_TYPE != "crypto":
         raise RuntimeError("이 운영 스크립트는 업비트 crypto 모드에서만 지원합니다.")
@@ -197,6 +182,7 @@ def validate_environment() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    os.chdir(PROJECT_ROOT)
     args = build_parser().parse_args(argv)
     validate_environment()
 
@@ -222,11 +208,7 @@ def main(argv: list[str] | None = None) -> int:
         [python_bin, "scripts/apply_grid_properties_to_postgres.py", "--force"]
     )
     run_project_command([python_bin, "scripts/show_grid_state.py"])
-    run_project_command(
-        [str(PROJECT_ROOT / "run.sh")],
-        env={**os.environ, "PYTHON_BIN": python_bin},
-    )
-    print_latest_log_tail(lines=args.tail_lines)
+    logger.info("리셋 완료. 봇 재시작은 필요 시 ./run.sh 로 직접 수행하세요.")
     return 0
 
 

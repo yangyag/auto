@@ -103,14 +103,15 @@ class ResetKrwBtcLiveScriptTest(unittest.TestCase):
         with patch.object(reset_script, "validate_environment"), \
              patch.object(reset_script, "build_exchange", return_value=exchange), \
              patch.object(reset_script, "build_pending_order_repository", return_value=repository), \
+             patch.object(reset_script.os, "chdir") as chdir, \
              patch.object(reset_script, "print_runtime_snapshot") as print_runtime_snapshot, \
              patch.object(reset_script, "run_project_command") as run_project_command, \
              patch.object(reset_script, "cancel_open_orders") as cancel_open_orders, \
-             patch.object(reset_script, "liquidate_btc_position") as liquidate_btc_position, \
-             patch.object(reset_script, "print_latest_log_tail") as print_latest_log_tail:
-            exit_code = reset_script.main(["--tail-lines", "20"])
+             patch.object(reset_script, "liquidate_btc_position") as liquidate_btc_position:
+            exit_code = reset_script.main([])
 
         self.assertEqual(exit_code, 0)
+        chdir.assert_called_once_with(reset_script.PROJECT_ROOT)
         print_runtime_snapshot.assert_called_once_with(exchange)
         cancel_open_orders.assert_called_once_with(
             exchange,
@@ -128,8 +129,4 @@ class ResetKrwBtcLiveScriptTest(unittest.TestCase):
             run_project_command.call_args_list[2].args[0],
             [reset_script.sys.executable, "scripts/show_grid_state.py"],
         )
-        self.assertEqual(
-            run_project_command.call_args_list[3].args[0],
-            [str(reset_script.PROJECT_ROOT / "run.sh")],
-        )
-        print_latest_log_tail.assert_called_once_with(lines=20)
+        self.assertEqual(len(run_project_command.call_args_list), 3)

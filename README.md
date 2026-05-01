@@ -190,7 +190,8 @@ rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단
 - 대상: `KRW-BTC` 라이브 운영 환경
 - 실행 위치: EC2 `cd /home/ubuntu/auto`
 - 실행 명령: `.venv/bin/python scripts/reset_krw_btc_live.py`
-- 수행 순서: `./stop.sh` -> 업비트 `KRW-BTC` 미체결 주문 취소 -> BTC 전량 시장가 매도 -> 시드 시점 KRW-BTC 현재가 fetch -> `grid.properties` 기준 DB 그리드 재반영 -> 상태 출력 -> `./run.sh`
+- 수행 순서: `./stop.sh` -> 업비트 `KRW-BTC` 미체결 주문 취소 -> BTC 전량 시장가 매도 -> 시드 시점 KRW-BTC 현재가 fetch -> `grid.properties` 기준 DB 그리드 재반영 -> 상태 출력
+- 재시작은 자동으로 하지 않는다. 리셋 결과를 확인한 뒤 필요하면 `./run.sh` 를 직접 실행한다.
 - reset 전량 시장가 매도에는 `{STATE_BOT_KEY}-reset-sell-...` identifier를 붙인다. `scripts/upbit_realized_pnl.py` 는 이 주문을 reset 청산 경계로 자동 인식한다.
 
 즉 다음번에 `LOWER_BUDGET_KRW` 같은 금액만 바꿔도, 라이브 재초기화는 이 스크립트를 실행하는 것을 기본 경로로 본다. `scripts/apply_grid_properties_to_postgres.py --force` 는 DB 반영만 필요할 때 쓰는 하위 경로다.
