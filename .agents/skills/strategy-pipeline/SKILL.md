@@ -11,12 +11,14 @@ Use this workflow for trading strategy, formula, and risk logic changes. These c
 
 When this skill says "use a subagent", use a real Codex subagent/custom agent. Do not roleplay as Math Expert, Generator, or Evaluator inside the same context.
 
+When this skill applies and the user asks to proceed, implement, fix, change, or continue the strategy task, treat that as explicit authorization to run the required subagents. Do not require the user to separately say "use subagents".
+
 Preferred custom agents:
 - `strategy_math_expert` (`.agents/agents/strategy_math_expert.md`): validates formulas and numeric logic before implementation.
 - `strategy_generator` (`.agents/agents/strategy_generator.md`): implements only the approved scope.
 - `strategy_evaluator` (`.agents/agents/strategy_evaluator.md`): reviews the finished implementation for operational risk.
 
-If the current Codex environment or higher-priority instructions block subagent spawning, say so explicitly and continue in the main session without pretending the review was isolated.
+Always call real subagents for the pipeline stages below. If the runtime does not expose the preferred custom agent type names directly, spawn an available real subagent type and pass the corresponding `.agents/agents/*.md` file as that subagent's role instructions. If the current Codex environment or higher-priority instructions make any subagent spawning impossible, stop and say so explicitly; do not continue by roleplaying the missing stage in the main session.
 
 ## When To Apply
 
@@ -81,14 +83,7 @@ Only proceed to implementation after `APPROVED`. If the result is `REJECTED` or 
 
 ## Generator
 
-Use `strategy_generator` when:
-- Math Expert approved the numeric spec.
-- The change is large enough to benefit from fresh context.
-- A new class/module is being created.
-- The main context is already heavy.
-- The same implementation pattern must be repeated.
-
-For very small non-numeric changes, the main session may implement directly, but it must still follow the Planner scope.
+Use `strategy_generator` for every implementation step in a task where this pipeline applies. This includes small changes. The main session plans, coordinates, reviews, and integrates; it does not implement strategy-pipeline changes directly.
 
 Send the Generator:
 - Planner scope and success criteria.
@@ -105,7 +100,7 @@ Generator constraints:
 
 ## Evaluator
 
-Use `strategy_evaluator` after implementation. The evaluator should inspect the changed files and relevant call paths as a fresh reviewer.
+Use `strategy_evaluator` after every implementation. The evaluator should inspect the changed files and relevant call paths as a fresh reviewer.
 
 Send the Evaluator:
 - Changed file list.
