@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -143,6 +144,10 @@ def liquidate_btc_position(
         quantity=quantity,
         symbol=cfg.SYMBOL,
         execution_type=OrderExecutionType.MARKET_SELL_BY_VOLUME,
+        identifier=(
+            f"{cfg.STATE_BOT_KEY}-reset-sell-"
+            f"{int(time.time() * 1000)}-{uuid.uuid4().hex[:12]}"
+        ),
     )
     order_id = exchange.place_order(order)
     if not order_id:

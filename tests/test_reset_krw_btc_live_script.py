@@ -60,11 +60,13 @@ class ResetKrwBtcLiveScriptTest(unittest.TestCase):
             ),
         ]
 
-        order_id = reset_script.liquidate_btc_position(
-            exchange,
-            timeout_seconds=5,
-            poll_interval=0.01,
-        )
+        with patch.object(reset_script.time, "time", return_value=1234.567), \
+             patch.object(reset_script.uuid, "uuid4", return_value=Mock(hex="abcdef1234567890")):
+            order_id = reset_script.liquidate_btc_position(
+                exchange,
+                timeout_seconds=5,
+                poll_interval=0.01,
+            )
 
         self.assertEqual(order_id, "sell-1")
         submitted_order = exchange.place_order.call_args.args[0]
@@ -75,6 +77,10 @@ class ResetKrwBtcLiveScriptTest(unittest.TestCase):
         )
         self.assertEqual(submitted_order.quantity, Decimal("0.025"))
         self.assertEqual(submitted_order.price, Decimal("100000000"))
+        self.assertEqual(
+            submitted_order.identifier,
+            f"{reset_script.cfg.STATE_BOT_KEY}-reset-sell-1234567-abcdef123456",
+        )
 
     def test_liquidate_btc_position_skips_when_notional_is_below_minimum(self):
         exchange = Mock()

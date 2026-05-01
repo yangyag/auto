@@ -12,9 +12,9 @@ Use this workflow for trading strategy, formula, and risk logic changes. These c
 When this skill says "use a subagent", use a real Codex subagent/custom agent. Do not roleplay as Math Expert, Generator, or Evaluator inside the same context.
 
 Preferred custom agents:
-- `strategy_math_expert`: validates formulas and numeric logic before implementation.
-- `strategy_generator`: implements only the approved scope.
-- `strategy_evaluator`: reviews the finished implementation for operational risk.
+- `strategy_math_expert` (`.agents/agents/strategy_math_expert.md`): validates formulas and numeric logic before implementation.
+- `strategy_generator` (`.agents/agents/strategy_generator.md`): implements only the approved scope.
+- `strategy_evaluator` (`.agents/agents/strategy_evaluator.md`): reviews the finished implementation for operational risk.
 
 If the current Codex environment or higher-priority instructions block subagent spawning, say so explicitly and continue in the main session without pretending the review was isolated.
 

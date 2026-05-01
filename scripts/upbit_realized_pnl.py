@@ -14,6 +14,7 @@ tie-break 로 SELL 이 먼저 처리될 가능성 (운영상 거의 불가능, �
 사용법:
     .venv/bin/python scripts/upbit_realized_pnl.py [--from YYYY-MM-DD] [--to YYYY-MM-DD]
         [--period daily|weekly|monthly|yearly|all] [--market KRW-BTC]
+        [--reset-sell-uuid UUID]
 
 기본값:
     --from  : 오늘 기준 90일 전
@@ -68,7 +69,12 @@ def _slot_pattern() -> re.Pattern:
     return re.compile(rf'^{re.escape(cfg.STATE_BOT_KEY)}-(buy|sell)-(\d+)-')
 
 
+def _reset_sell_pattern() -> re.Pattern:
+    return re.compile(rf'^{re.escape(cfg.STATE_BOT_KEY)}-reset-sell-')
+
+
 SLOT_PATTERN = _slot_pattern()
+RESET_SELL_PATTERN = _reset_sell_pattern()
 
 
 def extract_slot_index(identifier: str | None) -> int | None:
@@ -83,6 +89,16 @@ def extract_slot_index(identifier: str | None) -> int | None:
     if not m:
         return None
     return int(m.group(2))
+
+
+def is_reset_sell_order(order: dict, reset_sell_uuids: set[str]) -> bool:
+    """reset liquidation SELL 여부를 판정한다."""
+    if order.get("side") != "ask":
+        return False
+    if order.get("uuid") in reset_sell_uuids:
+        return True
+    identifier = order.get("identifier")
+    return bool(identifier and RESET_SELL_PATTERN.match(identifier))
 
 
 # ── 상수 ─────────────────────────────────────────────────────
@@ -281,7 +297,8 @@ def group_key(time_key: datetime, period: str) -> str:
 
 def run_fifo(
     sorted_orders: list[dict],
-) -> tuple[list[dict], list[dict], list[dict], list[dict], dict[int, list[dict]]]:
+    reset_sell_uuids: set[str] | None = None,
+) -> tuple[list[dict], list[dict], list[dict], list[dict], dict[int, list[dict]], list[dict]]:
     """슬롯 1:1 매칭 (글로벌 FIFO 가 아님).
 
     Math Expert APPROVED 산식. 슬롯별 큐로 분리하여 같은 슬롯의
@@ -295,22 +312,97 @@ def run_fifo(
         unparseable_buys  : identifier 패턴 안 맞는 BUY 주문 목록
         unparseable_sells : identifier 패턴 안 맞는 SELL 주문 목록
         queues_by_slot    : 슬롯별 잔여 BUY 큐 (매칭 후 남은 것)
+        reset_residuals   : reset boundary 로 제거된 pre-reset 잔여 BUY 목록
     """
+    reset_sell_uuids = reset_sell_uuids or set()
     queues_by_slot: dict[int, list[dict]] = {}
     realized_lines: list[dict] = []
     unmatched_lines: list[dict] = []
     unparseable_buys: list[dict] = []
     unparseable_sells: list[dict] = []
+    reset_residuals: list[dict] = []
 
     for order in sorted_orders:
-        slot = extract_slot_index(order.get("identifier"))
-
         exec_vol = _to_decimal(order["executed_volume"])
         exec_funds = _to_decimal(order["executed_funds"])
         paid_fee = _to_decimal(order["paid_fee"])
         time_key = order["_time_key"]
+        is_reset_sell = is_reset_sell_order(order, reset_sell_uuids)
+        slot = None if is_reset_sell else extract_slot_index(order.get("identifier"))
 
         if slot is None:
+            if is_reset_sell:
+                reset_sell_qty = exec_vol
+                sell_gross_krw = exec_funds
+
+                if sell_gross_krw == Decimal("0"):
+                    if paid_fee == Decimal("0"):
+                        warn_anomaly(
+                            order["uuid"], exec_vol, exec_funds,
+                            "reset sell_gross_krw=0 ∧ paid_fee=0 (체결 0건 의심)"
+                        )
+                        continue
+                    else:
+                        warn_anomaly(
+                            order["uuid"], exec_vol, exec_funds,
+                            "reset sell_gross_krw=0 이면서 paid_fee>0"
+                        )
+                        continue
+
+                pre_reset_entries = sorted(
+                    (
+                        entry
+                        for queue in queues_by_slot.values()
+                        for entry in queue
+                        if entry["qty"] > Decimal("0")
+                    ),
+                    key=lambda entry: (entry["time_key"], entry["buy_uuid"]),
+                )
+                remaining_qty = reset_sell_qty
+
+                for head in pre_reset_entries:
+                    if remaining_qty <= Decimal("0"):
+                        break
+                    take_qty = min(remaining_qty, head["qty"])
+                    matched_cost = take_qty * head["unit_cost"]
+                    ratio = take_qty / reset_sell_qty
+                    matched_net_proceeds = sell_gross_krw * ratio - paid_fee * ratio
+                    realized_pnl = matched_net_proceeds - matched_cost
+                    realized_lines.append({
+                        "time_key": time_key,
+                        "realized_pnl": realized_pnl,
+                        "matched_qty": take_qty,
+                        "sell_uuid": order["uuid"],
+                        "slot": head["slot"],
+                    })
+                    head["qty"] -= take_qty
+                    remaining_qty -= take_qty
+
+                if remaining_qty > Decimal("0"):
+                    ratio = remaining_qty / reset_sell_qty
+                    unmatched_proceeds = sell_gross_krw * ratio - paid_fee * ratio
+                    unmatched_lines.append({
+                        "time_key": time_key,
+                        "unmatched_proceeds": unmatched_proceeds,
+                        "unmatched_qty": remaining_qty,
+                        "sell_uuid": order["uuid"],
+                        "slot": None,
+                    })
+
+                for head in pre_reset_entries:
+                    if head["qty"] > Decimal("0"):
+                        reset_residuals.append({
+                            "time_key": time_key,
+                            "slot": head["slot"],
+                            "residual_qty": head["qty"],
+                            "residual_cost": head["qty"] * head["unit_cost"],
+                            "buy_uuid": head["buy_uuid"],
+                        })
+
+                for queue in queues_by_slot.values():
+                    queue.clear()
+                continue
+
             # identifier 패턴 안 맞음 (수동 주문, 외부 봇 등)
             entry = {
                 "uuid": order["uuid"],
@@ -334,6 +426,7 @@ def run_fifo(
                 "unit_cost": buy_unit_cost,
                 "buy_uuid": order["uuid"],
                 "time_key": time_key,
+                "slot": slot,
             })
 
         elif order["side"] == "ask":
@@ -403,7 +496,14 @@ def run_fifo(
                     "slot": slot,
                 })
 
-    return realized_lines, unmatched_lines, unparseable_buys, unparseable_sells, queues_by_slot
+    return (
+        realized_lines,
+        unmatched_lines,
+        unparseable_buys,
+        unparseable_sells,
+        queues_by_slot,
+        reset_residuals,
+    )
 
 
 # ── 출력 ─────────────────────────────────────────────────────
@@ -550,6 +650,24 @@ def _print_remaining_buy_section(queues_by_slot: dict[int, list[dict]]) -> None:
         )
 
 
+def _print_reset_residual_section(reset_residuals: list[dict]) -> None:
+    """reset boundary 로 future matching 에서 제외한 pre-reset 잔여 BUY 출력."""
+    print("[ reset 잔여 조정 (pre-reset 매수 잔량, PnL 아님) ]")
+    if not reset_residuals:
+        print("  (reset 잔여 조정 없음)")
+        return
+
+    header = f"{'시각':<25} | {'슬롯':>5} | {'잔여수량':>12} | {'cost basis':>16} | {'BUY uuid':<36}"
+    print(header)
+    print("-" * len(header))
+    for entry in reset_residuals:
+        t = entry["time_key"].isoformat(timespec="seconds")
+        print(
+            f"{t:<25} | {entry['slot']:>5} | {_fmt_btc(entry['residual_qty']):>12} | "
+            f"{_fmt_krw(entry['residual_cost']):>16} | {entry['buy_uuid']:<36}"
+        )
+
+
 def _print_anomaly_section() -> None:
     """이상치 경고 섹션 출력."""
     print("[ 이상치 경고 ]")
@@ -595,6 +713,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--market",
         default=DEFAULT_MARKET,
         help=f"업비트 마켓 코드 (기본: {DEFAULT_MARKET})",
+    )
+    parser.add_argument(
+        "--reset-sell-uuid",
+        action="append",
+        default=[],
+        help="과거 reset 전량 매도 주문 uuid (반복 지정 가능)",
     )
     return parser
 
@@ -692,8 +816,14 @@ def main(argv: list[str] | None = None) -> int:
     sorted_orders = sorted(valid_orders, key=lambda o: (o["_time_key"], o["uuid"]))
 
     # 4단계: 슬롯별 매칭
-    realized_lines, unmatched_lines, unparseable_buys, unparseable_sells, queues_by_slot = \
-        run_fifo(sorted_orders)
+    (
+        realized_lines,
+        unmatched_lines,
+        unparseable_buys,
+        unparseable_sells,
+        queues_by_slot,
+        reset_residuals,
+    ) = run_fifo(sorted_orders, set(args.reset_sell_uuid))
 
     # 5단계: 출력
     # period=all 이면 5개 단위 모두 출력, 아니면 해당 단위만
@@ -711,6 +841,8 @@ def main(argv: list[str] | None = None) -> int:
     _print_unparseable_section(unparseable_buys, unparseable_sells)
     print()
     _print_remaining_buy_section(queues_by_slot)
+    print()
+    _print_reset_residual_section(reset_residuals)
     print()
     _print_anomaly_section()
     print("=" * 80)
