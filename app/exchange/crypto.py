@@ -17,10 +17,10 @@ from urllib.parse import unquote, urlencode
 import jwt
 import requests
 
-import config.settings as cfg
-from core.models import Order, OrderExecutionType, OrderSide, OrderStatus
-from exchange.base import BaseExchange
-from exchange.upbit_ws import (
+import app.config.settings as cfg
+from app.core.models import Order, OrderExecutionType, OrderSide, OrderStatus
+from app.exchange.base import BaseExchange
+from app.exchange.upbit_ws import (
     UpbitAssetWebSocketCache,
     UpbitMinuteCandleWebSocketCache,
     UpbitOrderWebSocketCache,
@@ -28,8 +28,8 @@ from exchange.upbit_ws import (
     UpbitTickerPriceEvent,
     UpbitTickerWebSocketCache,
 )
-from utils.decimal_utils import DECIMAL_ZERO, format_decimal, to_decimal
-from utils.logger import get_logger
+from app.utils.decimal_utils import DECIMAL_ZERO, format_decimal, to_decimal
+from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

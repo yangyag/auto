@@ -1,10 +1,10 @@
 import unittest
 from decimal import Decimal
 
-from core.grid import GridState
-from core.grid_builder import build_cash_only_grid
-from core.grid_properties import GridPropertySpec, build_grid_rows_from_property_spec, build_target_sell_price
-from utils.decimal_utils import BTC_QUANTITY_STEP
+from app.core.grid import GridState
+from app.core.grid_builder import build_cash_only_grid
+from app.core.grid_properties import GridPropertySpec, build_grid_rows_from_property_spec, build_target_sell_price
+from app.utils.decimal_utils import BTC_QUANTITY_STEP
 
 
 class GridBuilderTest(unittest.TestCase):

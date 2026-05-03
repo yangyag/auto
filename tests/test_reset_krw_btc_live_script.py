@@ -3,8 +3,8 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
-from core.models import OrderExecutionType, OrderSide
-from core.models import OrderStatus
+from app.core.models import OrderExecutionType, OrderSide
+from app.core.models import OrderStatus
 import scripts.reset_krw_btc_live as reset_script
 
 

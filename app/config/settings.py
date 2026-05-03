@@ -28,7 +28,7 @@ def _load_env_file_without_dotenv(env_file: Path) -> None:
 
 def _load_project_env() -> None:
     """프로젝트 루트의 .env를 읽어 환경변수로 주입한다."""
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = Path(__file__).resolve().parents[2]
     env_file = project_root / ".env"
     if env_file.exists():
         if load_dotenv is not None:
@@ -67,8 +67,8 @@ def _env_positive_float(name: str, default: float) -> float:
 _load_project_env()
 
 # ── 거래소 선택 ──────────────────────────────────────────
-# "crypto" : 코인 거래소 (exchange/crypto.py) → 업비트
-# "stock"  : 주식 거래소 (exchange/stock.py)
+# "crypto" : 코인 거래소 (app/exchange/crypto.py) → 업비트
+# "stock"  : 주식 거래소 (app/exchange/stock.py)
 EXCHANGE_TYPE = "crypto"
 
 # ── 거래 대상 ────────────────────────────────────────────

@@ -3,9 +3,9 @@ KRW-BTC용 하단 매수합 기반 그리드 생성기
 """
 from decimal import Decimal
 
-from core.grid_properties import GridPropertySpec, build_grid_rows_from_property_spec
-from core.models import GridRow
-from utils.upbit_market import normalize_krw_price
+from app.core.grid_properties import GridPropertySpec, build_grid_rows_from_property_spec
+from app.core.models import GridRow
+from app.utils.upbit_market import normalize_krw_price
 
 
 def build_cash_only_grid(

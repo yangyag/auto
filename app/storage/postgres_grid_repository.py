@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from core.models import GridRow
-from storage.interfaces import GridSnapshot, GridStateRepository, RepositoryMetadata
-from storage.postgres_common import PostgresRepositoryMixin, sql
+from app.core.models import GridRow
+from app.storage.interfaces import GridSnapshot, GridStateRepository, RepositoryMetadata
+from app.storage.postgres_common import PostgresRepositoryMixin, sql
 
 
 def _copy_row(row: GridRow) -> GridRow:

@@ -43,7 +43,7 @@ import requests
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-import config.settings as cfg
+import app.config.settings as cfg
 
 try:
     from jwt.warnings import InsecureKeyLengthWarning

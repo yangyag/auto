@@ -48,12 +48,12 @@
 
 - 거래 자산: 가상화폐
 - 기준 거래소: 업비트
-- 현재 설정: `config/settings.py`의 `EXCHANGE_TYPE = "crypto"`
+- 현재 설정: `app/config/settings.py`의 `EXCHANGE_TYPE = "crypto"`
 - 현재 구현 중심 파일:
-  - `exchange/crypto.py`
-  - `exchange/upbit_ws.py`
-  - `main.py`
-  - `strategy/grid_strategy.py`
+  - `app/exchange/crypto.py`
+  - `app/exchange/upbit_ws.py`
+  - `app/main.py`
+  - `app/strategy/grid_strategy.py`
 
 ## API 큰 그림
 
@@ -151,17 +151,17 @@
 - 용도: 특정 페어의 현재가 스냅샷 조회
 - 예시 파라미터: `markets=KRW-BTC`
 - 현재 코드 연결:
-  - `exchange/crypto.py::get_current_price`
-  - `exchange/crypto.py::wait_for_ticker_price_event`
-  - `exchange/upbit_ws.py::UpbitTickerWebSocketCache`
-  - `main.py::run_price_event_loop_iteration`
+  - `app/exchange/crypto.py::get_current_price`
+  - `app/exchange/crypto.py::wait_for_ticker_price_event`
+  - `app/exchange/upbit_ws.py::UpbitTickerWebSocketCache`
+  - `app/main.py::run_price_event_loop_iteration`
 
 주의:
 
 - `UPBIT_WS_PUBLIC_ENABLED=true` 가 기본값이며, ticker 캐시와 메인 이벤트 루프가 public WebSocket ticker를 우선 사용한다.
 - `UPBIT_WS_EVENT_LOOP_ENABLED=true` 가 기본값이면 메인 루프는 새 ticker 이벤트를 기다렸다가 최신 가격으로 한 사이클을 실행한다.
 - 이벤트 기반 전략 평가는 `UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS=3` 기본값으로 최소 3초 간격 throttle을 적용한다.
-- WebSocket callback/thread 는 가격 이벤트 캐시만 갱신하고, 주문/DB/전략 상태 변경은 `main.py`의 단일 루프에서 직렬 처리한다.
+- WebSocket callback/thread 는 가격 이벤트 캐시만 갱신하고, 주문/DB/전략 상태 변경은 `app/main.py`의 단일 루프에서 직렬 처리한다.
 - WebSocket 의존성 누락, 시작 실패, 첫 tick 없음, 이벤트 timeout, stale tick 은 모두 기존 `PRICE_POLL_INTERVAL=5` REST ticker polling fallback 으로 처리한다.
 - 주문 가능 정보, 주문 테스트, 주문 생성/취소는 계속 REST를 사용한다. 주문 상태 조회는 `UPBIT_WS_ORDER_ENABLED=true`일 때 terminal `myOrder` 이벤트만 REST 생략에 사용할 수 있다.
 
@@ -172,10 +172,10 @@
 - 현재 프로젝트 사용값: `unit=15`
 - 인증: 불필요
 - 현재 코드 연결:
-  - `exchange/crypto.py::get_recent_minute_closes`
-  - `exchange/crypto.py::get_minute_candle_closes`
-  - `exchange/upbit_ws.py::UpbitMinuteCandleWebSocketCache`
-  - `main.py::fetch_breakout_guard_status`
+  - `app/exchange/crypto.py::get_recent_minute_closes`
+  - `app/exchange/crypto.py::get_minute_candle_closes`
+  - `app/exchange/upbit_ws.py::UpbitMinuteCandleWebSocketCache`
+  - `app/main.py::fetch_breakout_guard_status`
 
 핵심 메모:
 
@@ -194,9 +194,9 @@
 - 권한: `자산조회`
 - 용도: KRW 잔고와 보유 코인 잔고 확인
 - 현재 코드 연결:
-  - `exchange/crypto.py::get_balance`
-  - `exchange/crypto.py::get_holdings`
-  - `exchange/upbit_ws.py::UpbitAssetWebSocketCache`
+  - `app/exchange/crypto.py::get_balance`
+  - `app/exchange/crypto.py::get_holdings`
+  - `app/exchange/upbit_ws.py::UpbitAssetWebSocketCache`
   - `python3 main.py balance`
 
 주의:
@@ -329,9 +329,9 @@
 
 현재 코드 연결:
 
-- 조회는 `exchange/crypto.py::get_order_status`에서 사용한다.
-- terminal 주문 이벤트 캐시는 `exchange/upbit_ws.py::UpbitOrderWebSocketCache`에서 관리한다.
-- 취소는 `exchange/crypto.py::cancel_order`에서 사용한다.
+- 조회는 `app/exchange/crypto.py::get_order_status`에서 사용한다.
+- terminal 주문 이벤트 캐시는 `app/exchange/upbit_ws.py::UpbitOrderWebSocketCache`에서 관리한다.
+- 취소는 `app/exchange/crypto.py::cancel_order`에서 사용한다.
 
 주의:
 
@@ -473,7 +473,7 @@ BTC 현재가가 1억원 수준이면 **1,000원 단위**가 적용된다. 그�
 
 ## 향후 개선 후보
 
-- `exchange/crypto.py`에 `orders/chance` 연동 추가
+- `app/exchange/crypto.py`에 `orders/chance` 연동 추가
 - 실주문 전 `orders/test` 사전 검증 추가
 - `Remaining-Req` 파싱 및 throttling 추가
 - 미체결 주문 조회(`orders/open`)를 통한 재시작 복구 로직 보강

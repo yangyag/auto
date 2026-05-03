@@ -1,5 +1,5 @@
-from storage.factory import build_grid_repository, build_pending_order_repository
-from storage.interfaces import (
+from app.storage.factory import build_grid_repository, build_pending_order_repository
+from app.storage.interfaces import (
     GridSnapshot,
     GridStateRepository,
     PendingOrderRepository,

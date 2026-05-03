@@ -12,8 +12,8 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Callable, Optional
 
-from utils.decimal_utils import to_decimal
-from utils.logger import get_logger
+from app.utils.decimal_utils import to_decimal
+from app.utils.logger import get_logger
 
 try:
     import websocket

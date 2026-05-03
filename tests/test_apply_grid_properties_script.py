@@ -6,15 +6,15 @@ import unittest
 from decimal import Decimal
 from pathlib import Path
 
-from core.grid_properties import build_target_sell_price
-from storage.postgres_grid_repository import PostgresGridRepository
+from app.core.grid_properties import build_target_sell_price
+from app.storage.postgres_grid_repository import PostgresGridRepository
 from tests.postgres_test_utils import (
     PostgresIntegrationTestCase,
     apply_test_schema,
     drop_test_schema,
     postgres_test_config,
 )
-from utils.decimal_utils import format_decimal
+from app.utils.decimal_utils import format_decimal
 
 
 class ApplyGridPropertiesScriptTest(PostgresIntegrationTestCase):

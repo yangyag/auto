@@ -122,7 +122,7 @@ python3 -m unittest tests.test_show_grid_state_script -v
 ### 현재 상태 저장 backend 확인
 ```bash
 python3 - <<'PY'
-import config.settings as cfg
+import app.config.settings as cfg
 print(cfg.STATE_BOT_KEY)
 print(cfg.PGHOST, cfg.PGPORT, cfg.PGDATABASE, cfg.PGUSER, cfg.PGSCHEMA)
 PY
@@ -131,7 +131,7 @@ PY
 ### 현재가 WebSocket 이벤트 루프 설정 확인
 ```bash
 python3 - <<'PY'
-import config.settings as cfg
+import app.config.settings as cfg
 print("UPBIT_WS_PUBLIC_ENABLED=", cfg.UPBIT_WS_PUBLIC_ENABLED)
 print("UPBIT_WS_EVENT_LOOP_ENABLED=", cfg.UPBIT_WS_EVENT_LOOP_ENABLED)
 print("UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS=", cfg.UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS)

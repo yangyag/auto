@@ -1,9 +1,9 @@
 import unittest
 
-from storage.factory import build_grid_repository, build_pending_order_repository
-from storage.postgres_grid_repository import PostgresGridRepository
-from storage.postgres_order_repository import PostgresOrderRepository
-from storage.postgres_common import require_psycopg
+from app.storage.factory import build_grid_repository, build_pending_order_repository
+from app.storage.postgres_grid_repository import PostgresGridRepository
+from app.storage.postgres_order_repository import PostgresOrderRepository
+from app.storage.postgres_common import require_psycopg
 
 
 class StateFactoryTest(unittest.TestCase):

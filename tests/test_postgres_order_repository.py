@@ -1,9 +1,9 @@
 import unittest
 from decimal import Decimal
 
-from storage.postgres_common import psycopg
-from core.models import Order, OrderExecutionType, OrderSide
-from storage.postgres_order_repository import PostgresOrderRepository
+from app.storage.postgres_common import psycopg
+from app.core.models import Order, OrderExecutionType, OrderSide
+from app.storage.postgres_order_repository import PostgresOrderRepository
 from tests.postgres_test_utils import (
     PostgresIntegrationTestCase,
     apply_test_schema,

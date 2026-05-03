@@ -6,8 +6,8 @@ from decimal import Decimal
 from math import sqrt
 from typing import Iterable, Sequence
 
-from core.models import GridRow
-from utils.decimal_utils import DECIMAL_ZERO, to_decimal
+from app.core.models import GridRow
+from app.utils.decimal_utils import DECIMAL_ZERO, to_decimal
 
 DEFAULT_BREAKOUT_CANDLE_COUNT = 96
 DEFAULT_CANDLE_UNIT_MINUTES = 15

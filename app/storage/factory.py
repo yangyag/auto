@@ -1,6 +1,6 @@
-from storage.interfaces import GridStateRepository, PendingOrderRepository
-from storage.postgres_grid_repository import PostgresGridRepository
-from storage.postgres_order_repository import PostgresOrderRepository
+from app.storage.interfaces import GridStateRepository, PendingOrderRepository
+from app.storage.postgres_grid_repository import PostgresGridRepository
+from app.storage.postgres_order_repository import PostgresOrderRepository
 
 
 def build_grid_repository(config) -> GridStateRepository:

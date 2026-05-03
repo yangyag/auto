@@ -3,11 +3,11 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import Mock, patch
 
-import main
-from core.grid import GridState
-from core.models import GridRow, Order, OrderExecutionType, OrderSide, OrderStatus
-from strategy.breakout_guard import BreakoutGuardStatus, evaluate_breakout_guard
-from strategy.grid_strategy import GridStrategy
+import app.main as main
+from app.core.grid import GridState
+from app.core.models import GridRow, Order, OrderExecutionType, OrderSide, OrderStatus
+from app.strategy.breakout_guard import BreakoutGuardStatus, evaluate_breakout_guard
+from app.strategy.grid_strategy import GridStrategy
 
 
 class BreakoutGuardTest(unittest.TestCase):

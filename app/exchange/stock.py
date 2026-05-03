@@ -6,9 +6,9 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from core.models import Order, OrderStatus
-from exchange.base import BaseExchange
-from utils.logger import get_logger
+from app.core.models import Order, OrderStatus
+from app.exchange.base import BaseExchange
+from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

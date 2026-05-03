@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from utils.logger import DailyFileHandler, KSTFormatter
+from app.utils.logger import DailyFileHandler, KSTFormatter
 
 
 class DailyFileHandlerTest(unittest.TestCase):
@@ -149,7 +149,7 @@ class DailyFileHandlerTest(unittest.TestCase):
             logger = self._build_logger(handler)
 
             with patch(
-                "utils.logger.current_kst_datetime",
+                "app.utils.logger.current_kst_datetime",
                 return_value=datetime(2026, 4, 17, 0, 5, 0, tzinfo=timezone.utc),
             ):
                 logger.info("kst date trigger")

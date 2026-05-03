@@ -4,11 +4,11 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import Mock, patch
 
-import main
-from core.grid import GridState
-from core.models import GridRow, Order, OrderExecutionType, OrderSide, OrderStatus
-from storage.interfaces import GridSnapshot, RepositoryMetadata
-from strategy.grid_strategy import GridStrategy
+import app.main as main
+from app.core.grid import GridState
+from app.core.models import GridRow, Order, OrderExecutionType, OrderSide, OrderStatus
+from app.storage.interfaces import GridSnapshot, RepositoryMetadata
+from app.strategy.grid_strategy import GridStrategy
 
 
 class InMemoryGridRepository:

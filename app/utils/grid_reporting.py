@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Iterable
 
-from utils.decimal_utils import DECIMAL_ZERO
+from app.utils.decimal_utils import DECIMAL_ZERO
 
 
 @dataclass(frozen=True)

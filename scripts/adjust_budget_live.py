@@ -14,14 +14,14 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-import config.settings as cfg
-from core.grid_properties import GridPropertySpec, build_weighted_slot_budgets
-from core.models import OrderSide
-from storage.interfaces import GridSnapshot
-from storage.postgres_grid_repository import PostgresGridRepository
-from storage.postgres_order_repository import PostgresOrderRepository
-from utils.decimal_utils import BTC_QUANTITY_STEP, DECIMAL_ZERO, format_decimal, quantize_to_step
-from utils.upbit_market import MIN_KRW_ORDER_AMOUNT
+import app.config.settings as cfg
+from app.core.grid_properties import GridPropertySpec, build_weighted_slot_budgets
+from app.core.models import OrderSide
+from app.storage.interfaces import GridSnapshot
+from app.storage.postgres_grid_repository import PostgresGridRepository
+from app.storage.postgres_order_repository import PostgresOrderRepository
+from app.utils.decimal_utils import BTC_QUANTITY_STEP, DECIMAL_ZERO, format_decimal, quantize_to_step
+from app.utils.upbit_market import MIN_KRW_ORDER_AMOUNT
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,7 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def fetch_current_price(symbol: str) -> Decimal:
     """업비트 ticker REST 로 현재가 1회 조회. WS 캐시는 깨우지 않는다."""
-    from exchange.crypto import CryptoExchange
+    from app.exchange.crypto import CryptoExchange
 
     exchange = CryptoExchange(cfg.API_KEY or "", cfg.API_SECRET or "")
     try:

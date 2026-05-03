@@ -5,7 +5,7 @@ import unittest
 import uuid
 from pathlib import Path
 
-from storage.postgres_common import psycopg, require_psycopg
+from app.storage.postgres_common import psycopg, require_psycopg
 
 
 def _docker_postgres_password() -> str:

@@ -1,15 +1,15 @@
 """grid.properties 기반 그리드 스펙 로딩 및 슬롯 계산."""
 from __future__ import annotations
 
-import config.settings as cfg
+import app.config.settings as cfg
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_CEILING, ROUND_DOWN, ROUND_FLOOR, localcontext
 from math import exp, log
 from pathlib import Path
 
-from core.models import GridRow
-from utils.decimal_utils import BTC_QUANTITY_STEP, DECIMAL_ZERO, quantize_to_step, to_decimal
-from utils.upbit_market import MIN_KRW_ORDER_AMOUNT, normalize_krw_price
+from app.core.models import GridRow
+from app.utils.decimal_utils import BTC_QUANTITY_STEP, DECIMAL_ZERO, quantize_to_step, to_decimal
+from app.utils.upbit_market import MIN_KRW_ORDER_AMOUNT, normalize_krw_price
 
 DEFAULT_TP_MODEL = "k"
 DEFAULT_TP_K_BASE = Decimal("9.0")

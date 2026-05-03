@@ -1,9 +1,9 @@
 import unittest
 from decimal import Decimal
 
-import main
-from core.grid import GridState
-from core.models import GridRow
+import app.main as main
+from app.core.grid import GridState
+from app.core.models import GridRow
 
 
 class RuntimeStateGuardTest(unittest.TestCase):

@@ -3,11 +3,11 @@ from datetime import date
 from decimal import Decimal
 from unittest.mock import Mock, patch
 
-import main
-from core.models import Order, OrderSide
-from exchange.upbit_ws import UpbitTickerPriceEvent
-from storage.interfaces import RepositoryMetadata
-from strategy.breakout_guard import BreakoutGuardStatus
+import app.main as main
+from app.core.models import Order, OrderSide
+from app.exchange.upbit_ws import UpbitTickerPriceEvent
+from app.storage.interfaces import RepositoryMetadata
+from app.strategy.breakout_guard import BreakoutGuardStatus
 
 
 class FakePriceEventExchange:

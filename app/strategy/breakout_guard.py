@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Sequence
 
-from utils.decimal_utils import to_decimal
+from app.utils.decimal_utils import to_decimal
 
 
 @dataclass(frozen=True)

@@ -3,7 +3,7 @@
 """
 from decimal import Decimal, ROUND_DOWN
 
-from utils.decimal_utils import quantize_to_step, to_decimal
+from app.utils.decimal_utils import quantize_to_step, to_decimal
 
 MIN_KRW_ORDER_AMOUNT = Decimal("5000")
 
