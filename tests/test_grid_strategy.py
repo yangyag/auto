@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import Mock, patch
 
-import config.settings as settings
-from core.grid import GridState
-from core.models import GridRow, OrderExecutionType
-from strategy.grid_strategy import GridStrategy
+import app.config.settings as settings
+from app.core.grid import GridState
+from app.core.models import GridRow, OrderExecutionType
+from app.strategy.grid_strategy import GridStrategy
 
 
 class GridStrategyCrossingTest(unittest.TestCase):
@@ -405,7 +405,7 @@ class GridStrategyCrossingTest(unittest.TestCase):
             GRID_TP_MODEL="k",
             GRID_TP_K_BASE=Decimal("9.0"),
             GRID_TP_K_FLOOR=Decimal("7.0"),
-        ), patch("core.grid.datetime", fixed_datetime):
+        ), patch("app.core.grid.datetime", fixed_datetime):
             buy_orders, sell_orders = strategy.evaluate(Decimal("109"))
 
         self.assertEqual(buy_orders, [])
@@ -449,7 +449,7 @@ class GridStrategyCrossingTest(unittest.TestCase):
             GRID_TP_MODEL="k",
             GRID_TP_K_BASE=Decimal("9.0"),
             GRID_TP_K_FLOOR=Decimal("7.0"),
-        ), patch("core.grid.datetime", fixed_datetime):
+        ), patch("app.core.grid.datetime", fixed_datetime):
             buy_orders, sell_orders = strategy.evaluate(Decimal("106"))
 
         self.assertEqual(buy_orders, [])
@@ -759,7 +759,7 @@ class GridStrategyStalePreviousPriceGuardTest(unittest.TestCase):
             )
         iterator = iter(sequence)
         return patch(
-            "strategy.grid_strategy.time.monotonic",
+            "app.strategy.grid_strategy.time.monotonic",
             side_effect=lambda: next(iterator),
         )
 
@@ -790,7 +790,7 @@ class GridStrategyStalePreviousPriceGuardTest(unittest.TestCase):
 
         with self._patch_monotonic([0.0, float(threshold) + 1.0]):
             strategy.evaluate(Decimal("105"))
-            with self.assertLogs("strategy.grid_strategy", level="INFO") as captured:
+            with self.assertLogs("app.strategy.grid_strategy", level="INFO") as captured:
                 buy_orders, sell_orders = strategy.evaluate(Decimal("100"))
 
         self.assertEqual(buy_orders, [])

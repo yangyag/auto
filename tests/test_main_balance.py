@@ -5,10 +5,10 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from unittest.mock import Mock, patch
 
-import main
-from core.models import Order, OrderExecutionType, OrderSide
-from exchange.crypto import UpbitAPIError
-from storage.interfaces import GridSnapshot, RepositoryMetadata
+import app.main as main
+from app.core.models import Order, OrderExecutionType, OrderSide
+from app.exchange.crypto import UpbitAPIError
+from app.storage.interfaces import GridSnapshot, RepositoryMetadata
 
 
 class BalanceCommandTest(unittest.TestCase):
@@ -101,7 +101,7 @@ class BalanceCommandTest(unittest.TestCase):
              patch.object(main.cfg, "SYMBOL", "KRW-BTC"), \
              patch.object(main.cfg, "API_KEY", "access"), \
              patch.object(main.cfg, "API_SECRET", "secret"), \
-             patch("main.build_exchange", return_value=exchange):
+             patch("app.main.build_exchange", return_value=exchange):
             stdout = io.StringIO()
             with redirect_stdout(stdout):
                 result = main.run_balance_check()
@@ -131,7 +131,7 @@ class BalanceCommandTest(unittest.TestCase):
              patch.object(main.cfg, "SYMBOL", "KRW-BTC"), \
              patch.object(main.cfg, "API_KEY", "access"), \
              patch.object(main.cfg, "API_SECRET", "secret"), \
-             patch("main.build_exchange", return_value=exchange):
+             patch("app.main.build_exchange", return_value=exchange):
             stdout = io.StringIO()
             with redirect_stdout(stdout):
                 result = main.run_balance_check()
@@ -141,7 +141,7 @@ class BalanceCommandTest(unittest.TestCase):
         self.assertIn("허용 목록", stdout.getvalue())
 
     def test_main_dispatches_balance_command(self):
-        with patch("main.run_balance_check", return_value=0) as run_balance_check:
+        with patch("app.main.run_balance_check", return_value=0) as run_balance_check:
             result = main.main(["balance"])
 
         self.assertEqual(result, 0)
@@ -170,8 +170,8 @@ class BalanceCommandTest(unittest.TestCase):
              patch.object(main.cfg, "GRID_TP_K_BASE", Decimal("9.0")), \
              patch.object(main.cfg, "GRID_TP_K_FLOOR", Decimal("7.0")), \
              patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", Decimal("2000000")), \
-             patch("main.build_exchange", return_value=exchange), \
-             patch("main.build_grid_repository", return_value=repository):
+             patch("app.main.build_exchange", return_value=exchange), \
+             patch("app.main.build_grid_repository", return_value=repository):
             stdout = io.StringIO()
             with redirect_stdout(stdout):
                 result = main.run_grid_init(
@@ -219,8 +219,8 @@ class BalanceCommandTest(unittest.TestCase):
              patch.object(main.cfg, "GRID_TP_K_BASE", Decimal("9.0")), \
              patch.object(main.cfg, "GRID_TP_K_FLOOR", Decimal("7.0")), \
              patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", Decimal("2000000")), \
-             patch("main.build_exchange", return_value=exchange), \
-             patch("main.build_grid_repository", return_value=repository):
+             patch("app.main.build_exchange", return_value=exchange), \
+             patch("app.main.build_grid_repository", return_value=repository):
             stdout = io.StringIO()
             with redirect_stdout(stdout):
                 result = main.run_grid_init(

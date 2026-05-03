@@ -13,6 +13,9 @@
 - 그리드 반영: `scripts/apply_grid_properties_to_postgres.py`
 - 봇 실행/종료: `./run.sh`, `./stop.sh`
 
+루트 업무 폴더는 `app/`, `scripts/`, `db/`, `docs/`, `tests/`로 정리되어 있다.
+운영 구현은 `app/` 아래에 있고, 기존 명령 호환을 위해 루트 `main.py`와 `scripts/` 경로는 유지한다.
+
 ## 1. 준비물
 
 필수:
@@ -90,7 +93,7 @@ PGSCHEMA=auto_trading
 ```
 
 주의:
-- `config/settings.py`는 프로젝트 루트 `.env`를 읽는다.
+- `app/config/settings.py`는 프로젝트 루트 `.env`를 읽는다.
 - 현재가 루프는 기본적으로 public ticker WebSocket 이벤트 기반으로 동작한다.
 - WebSocket 장애, 이벤트 없음, 의존성 누락 시 기존 5초 REST polling 으로 fallback 한다.
 - 같은 서버에 `/home/ubuntu/llm.env` 가 있어도 이 저장소 설정 파일이 아니다.
@@ -123,7 +126,7 @@ from pathlib import Path
 
 import psycopg
 
-import config.settings as cfg
+import app.config.settings as cfg
 
 schema = cfg.PGSCHEMA
 migrations_dir = Path("db/migrations")
@@ -163,7 +166,7 @@ TP_K_FLOOR=7.0
 - `grid.properties`는 `GRID_COUNT` 또는 `GRID_STEP_PCT` 중 정확히 하나만 둔다.
 - `main.py init-grid`는 슬롯 개수 기반이다.
 - `LOWER_BUDGET_KRW` 는 시드 시점 현재가 미만 슬롯의 매수합 목표값이며, 시스템이 가중치 비율로 implicit 총 예산을 역산해 상단/중단/하단 가중치로 배분한다.
-- `config/settings.py`의 `GRID_TP_K_BASE` 와 `grid.properties`의 `TP_K_BASE` 는 맞춰 두는 것이 안전하다.
+- `app/config/settings.py`의 `GRID_TP_K_BASE` 와 `grid.properties`의 `TP_K_BASE` 는 맞춰 두는 것이 안전하다.
 
 ## 9. 비파괴 검증
 

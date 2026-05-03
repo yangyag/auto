@@ -4,10 +4,10 @@ from decimal import Decimal
 from unittest.mock import patch
 import io
 
-from core.models import GridRow, Order, OrderSide
-from storage.interfaces import GridSnapshot
-from storage.postgres_grid_repository import PostgresGridRepository
-from storage.postgres_order_repository import PostgresOrderRepository
+from app.core.models import GridRow, Order, OrderSide
+from app.storage.interfaces import GridSnapshot
+from app.storage.postgres_grid_repository import PostgresGridRepository
+from app.storage.postgres_order_repository import PostgresOrderRepository
 from scripts.adjust_budget_live import main
 from tests.postgres_test_utils import (
     PostgresIntegrationTestCase,
@@ -15,7 +15,7 @@ from tests.postgres_test_utils import (
     drop_test_schema,
     postgres_test_config,
 )
-from utils.decimal_utils import BTC_QUANTITY_STEP, quantize_to_step
+from app.utils.decimal_utils import BTC_QUANTITY_STEP, quantize_to_step
 
 
 class TestAdjustBudgetLiveScript(PostgresIntegrationTestCase):
@@ -88,13 +88,13 @@ class TestAdjustBudgetLiveScript(PostgresIntegrationTestCase):
         full_args = args + ["--bot-key", self.config.STATE_BOT_KEY]
         with patch("sys.stdout", new=output), patch("sys.stdin", io.StringIO("y\n")):
             try:
-                with patch("config.settings.PGHOST", self.config.PGHOST), \
-                     patch("config.settings.PGPORT", self.config.PGPORT), \
-                     patch("config.settings.PGDATABASE", self.config.PGDATABASE), \
-                     patch("config.settings.PGUSER", self.config.PGUSER), \
-                     patch("config.settings.PGPASSWORD", self.config.PGPASSWORD), \
-                     patch("config.settings.PGSCHEMA", self.config.PGSCHEMA), \
-                     patch("config.settings.STATE_BOT_KEY", self.config.STATE_BOT_KEY), \
+                with patch("app.config.settings.PGHOST", self.config.PGHOST), \
+                     patch("app.config.settings.PGPORT", self.config.PGPORT), \
+                     patch("app.config.settings.PGDATABASE", self.config.PGDATABASE), \
+                     patch("app.config.settings.PGUSER", self.config.PGUSER), \
+                     patch("app.config.settings.PGPASSWORD", self.config.PGPASSWORD), \
+                     patch("app.config.settings.PGSCHEMA", self.config.PGSCHEMA), \
+                     patch("app.config.settings.STATE_BOT_KEY", self.config.STATE_BOT_KEY), \
                      patch("scripts.adjust_budget_live.fetch_current_price", return_value=current_price):
                     exit_code = main(full_args)
             except SystemExit as e:

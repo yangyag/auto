@@ -11,13 +11,14 @@ class SettingsEnvLoadingTest(unittest.TestCase):
 
     def test_settings_loads_upbit_credentials_from_project_root_env_file(self):
         project_root = Path(__file__).resolve().parents[1]
-        settings_source = (project_root / "config" / "settings.py").read_text(encoding="utf-8")
+        settings_source = (project_root / "app" / "config" / "settings.py").read_text(encoding="utf-8")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
-            (tmp_path / "config").mkdir()
-            (tmp_path / "config" / "__init__.py").write_text("", encoding="utf-8")
-            (tmp_path / "config" / "settings.py").write_text(settings_source, encoding="utf-8")
+            (tmp_path / "app" / "config").mkdir(parents=True)
+            (tmp_path / "app" / "__init__.py").write_text("", encoding="utf-8")
+            (tmp_path / "app" / "config" / "__init__.py").write_text("", encoding="utf-8")
+            (tmp_path / "app" / "config" / "settings.py").write_text(settings_source, encoding="utf-8")
             (tmp_path / ".env").write_text(
                 "UPBIT_ACCESS_KEY=test-access\nUPBIT_SECRET_KEY=test-secret\n",
                 encoding="utf-8",
@@ -35,7 +36,7 @@ class SettingsEnvLoadingTest(unittest.TestCase):
                         """
                         import sys
                         sys.path.insert(0, r'__TMPDIR__')
-                        import config.settings as settings
+                        import app.config.settings as settings
                         print(settings.API_KEY)
                         print(settings.API_SECRET)
                         """.replace("__TMPDIR__", str(r"__TMPDIR__"))
@@ -53,13 +54,14 @@ class SettingsEnvLoadingTest(unittest.TestCase):
 
     def test_settings_loads_postgres_state_settings_from_env_file(self):
         project_root = Path(__file__).resolve().parents[1]
-        settings_source = (project_root / "config" / "settings.py").read_text(encoding="utf-8")
+        settings_source = (project_root / "app" / "config" / "settings.py").read_text(encoding="utf-8")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
-            (tmp_path / "config").mkdir()
-            (tmp_path / "config" / "__init__.py").write_text("", encoding="utf-8")
-            (tmp_path / "config" / "settings.py").write_text(settings_source, encoding="utf-8")
+            (tmp_path / "app" / "config").mkdir(parents=True)
+            (tmp_path / "app" / "__init__.py").write_text("", encoding="utf-8")
+            (tmp_path / "app" / "config" / "__init__.py").write_text("", encoding="utf-8")
+            (tmp_path / "app" / "config" / "settings.py").write_text(settings_source, encoding="utf-8")
             (tmp_path / ".env").write_text(
                 "STATE_BOT_KEY=env-bot\nPGHOST=db.example\nPGPORT=5433\nPGDATABASE=grid\nPGUSER=bot\nPGPASSWORD=secret\nPGSCHEMA=custom_schema\n",
                 encoding="utf-8",
@@ -82,7 +84,7 @@ class SettingsEnvLoadingTest(unittest.TestCase):
                         """
                         import sys
                         sys.path.insert(0, r'__TMPDIR__')
-                        import config.settings as settings
+                        import app.config.settings as settings
                         print(settings.STATE_BOT_KEY)
                         print(settings.PGHOST)
                         print(settings.PGPORT)
@@ -108,13 +110,14 @@ class SettingsEnvLoadingTest(unittest.TestCase):
 
     def test_settings_loads_upbit_websocket_settings_from_env_file(self):
         project_root = Path(__file__).resolve().parents[1]
-        settings_source = (project_root / "config" / "settings.py").read_text(encoding="utf-8")
+        settings_source = (project_root / "app" / "config" / "settings.py").read_text(encoding="utf-8")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
-            (tmp_path / "config").mkdir()
-            (tmp_path / "config" / "__init__.py").write_text("", encoding="utf-8")
-            (tmp_path / "config" / "settings.py").write_text(settings_source, encoding="utf-8")
+            (tmp_path / "app" / "config").mkdir(parents=True)
+            (tmp_path / "app" / "__init__.py").write_text("", encoding="utf-8")
+            (tmp_path / "app" / "config" / "__init__.py").write_text("", encoding="utf-8")
+            (tmp_path / "app" / "config" / "settings.py").write_text(settings_source, encoding="utf-8")
             (tmp_path / ".env").write_text(
                 "UPBIT_WS_PUBLIC_ENABLED=true\n"
                 "UPBIT_WS_PRICE_MAX_AGE_SECONDS=3.5\n"
@@ -149,7 +152,7 @@ class SettingsEnvLoadingTest(unittest.TestCase):
                         """
                         import sys
                         sys.path.insert(0, r'__TMPDIR__')
-                        import config.settings as settings
+                        import app.config.settings as settings
                         print(settings.UPBIT_WS_PUBLIC_ENABLED)
                         print(settings.UPBIT_WS_PRICE_MAX_AGE_SECONDS)
                         print(settings.UPBIT_WS_EVENT_LOOP_ENABLED)
@@ -178,13 +181,14 @@ class SettingsEnvLoadingTest(unittest.TestCase):
 
     def test_settings_defaults_enable_public_ticker_event_loop(self):
         project_root = Path(__file__).resolve().parents[1]
-        settings_source = (project_root / "config" / "settings.py").read_text(encoding="utf-8")
+        settings_source = (project_root / "app" / "config" / "settings.py").read_text(encoding="utf-8")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
-            (tmp_path / "config").mkdir()
-            (tmp_path / "config" / "__init__.py").write_text("", encoding="utf-8")
-            (tmp_path / "config" / "settings.py").write_text(settings_source, encoding="utf-8")
+            (tmp_path / "app" / "config").mkdir(parents=True)
+            (tmp_path / "app" / "__init__.py").write_text("", encoding="utf-8")
+            (tmp_path / "app" / "config" / "__init__.py").write_text("", encoding="utf-8")
+            (tmp_path / "app" / "config" / "settings.py").write_text(settings_source, encoding="utf-8")
 
             env = os.environ.copy()
             env.pop("UPBIT_WS_PUBLIC_ENABLED", None)
@@ -199,7 +203,7 @@ class SettingsEnvLoadingTest(unittest.TestCase):
                         """
                         import sys
                         sys.path.insert(0, r'__TMPDIR__')
-                        import config.settings as settings
+                        import app.config.settings as settings
                         print(settings.UPBIT_WS_PUBLIC_ENABLED)
                         print(settings.UPBIT_WS_EVENT_LOOP_ENABLED)
                         print(settings.UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS)

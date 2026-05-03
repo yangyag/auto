@@ -1,8 +1,8 @@
 import unittest
 from decimal import Decimal
 
-from core.models import GridRow
-from strategy.recenter_preview import evaluate_recenter_preview
+from app.core.models import GridRow
+from app.strategy.recenter_preview import evaluate_recenter_preview
 
 
 class RecenterPreviewTest(unittest.TestCase):

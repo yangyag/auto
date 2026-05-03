@@ -1,8 +1,8 @@
 import unittest
 from decimal import Decimal
 
-from core.models import GridRow
-from utils.grid_reporting import planned_buy_budget, summarize_planned_buy_budget
+from app.core.models import GridRow
+from app.utils.grid_reporting import planned_buy_budget, summarize_planned_buy_budget
 
 
 class GridReportingTest(unittest.TestCase):

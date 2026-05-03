@@ -7,7 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from core.models import Order, OrderStatus
+from app.core.models import Order, OrderStatus
 
 
 class BaseExchange(ABC):

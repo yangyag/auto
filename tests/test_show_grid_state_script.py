@@ -7,9 +7,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import scripts.show_grid_state as show_grid_state
-from core.grid_properties import build_sell_price_from_k
-from core.models import GridRow
-from storage.interfaces import GridSnapshot, RepositoryMetadata
+from app.core.grid_properties import build_sell_price_from_k
+from app.core.models import GridRow
+from app.storage.interfaces import GridSnapshot, RepositoryMetadata
 
 
 class ShowGridStateScriptTest(unittest.TestCase):

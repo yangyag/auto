@@ -3,11 +3,11 @@
 이 문서는 전략 동작에 쓰이는 수식과 판정 조건만 코드 기준으로 정리한다. GitHub Markdown 수식 렌더링 호환성을 위해 수식 안에는 긴 설정 키 문자열을 직접 넣지 않고, 아래 기호로 치환한다.
 
 기준 구현:
-- `strategy/grid_strategy.py`
-- `core/grid.py`
-- `core/grid_properties.py`
-- `strategy/breakout_guard.py`
-- `main.py`
+- `app/strategy/grid_strategy.py`
+- `app/core/grid.py`
+- `app/core/grid_properties.py`
+- `app/strategy/breakout_guard.py`
+- `app/main.py`
 
 ## 기호
 
@@ -459,7 +459,7 @@ $$
 
 가드가 활성화되면 신규 BUY 후보는 제거하고 SELL 후보는 유지한다.
 
-캔들 조회 실패, 캔들 부족, invalid band 같은 입력 실패는 `main.py`의 failure policy에서 fail-open/fail-close로 처리한다.
+캔들 조회 실패, 캔들 부족, invalid band 같은 입력 실패는 `app/main.py`의 failure policy에서 fail-open/fail-close로 처리한다.
 
 ## 매수 필요 KRW 추정
 

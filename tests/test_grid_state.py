@@ -3,9 +3,9 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import patch
 
-from core.grid import GridState
-from core.models import GridRow
-from strategy.recenter_preview import evaluate_recenter_preview
+from app.core.grid import GridState
+from app.core.models import GridRow
+from app.strategy.recenter_preview import evaluate_recenter_preview
 
 
 class GridStateInventoryMathTest(unittest.TestCase):
@@ -251,7 +251,7 @@ class GridStatePhase6MetadataTest(unittest.TestCase):
         original_buy_prices = [row.buy_price for row in state.rows]
 
         try:
-            with patch("core.grid.cfg.MAX_OPERATING_BUDGET_KRW", Decimal("2")):
+            with patch("app.core.grid.cfg.MAX_OPERATING_BUDGET_KRW", Decimal("2")):
                 preview = state.build_recenter_preview(
                     current_price=Decimal("115"),
                     breakout_duration=timedelta(hours=12),

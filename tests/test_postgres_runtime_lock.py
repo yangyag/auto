@@ -1,6 +1,6 @@
 import unittest
 
-from storage.postgres_common import PostgresRuntimeLock
+from app.storage.postgres_common import PostgresRuntimeLock
 from tests.postgres_test_utils import (
     PostgresIntegrationTestCase,
     apply_test_schema,

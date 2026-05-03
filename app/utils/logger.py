@@ -141,7 +141,7 @@ class DailyFileHandler(logging.Handler):
 
 
 def get_logger(name: str) -> logging.Logger:
-    from config.settings import LOG_DIR, LOG_FILE, LOG_LEVEL, LOG_RETENTION_DAYS
+    from app.config.settings import LOG_DIR, LOG_FILE, LOG_LEVEL, LOG_RETENTION_DAYS
 
     logger = logging.getLogger(name)
     if logger.handlers:

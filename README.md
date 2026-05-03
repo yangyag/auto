@@ -6,24 +6,27 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 
 ## 파일 구성 및 역할
 
-이 시스템은 기능별로 모듈화되어 있으며, 각 폴더의 주요 `.py` 파일 역할은 다음과 같다.
+루트의 업무 폴더는 `app/`, `scripts/`, `db/`, `docs/`, `tests/`로 제한한다.
+운영 코드는 `app/` 패키지 아래에 모여 있고, 기존 운영 명령 호환을 위해 루트 `main.py`와 `scripts/` 경로는 유지한다.
+각 폴더의 주요 `.py` 파일 역할은 다음과 같다.
 
 | 분류 | 파일 | 역할 설명 |
 | :--- | :--- | :--- |
-| **Root** | `main.py` | 프로그램 진입점. CLI 커맨드(run, init-grid 등) 처리 및 WebSocket 이벤트 기반 메인 루프 실행 |
-| **core/** | `grid.py` | 그리드 슬롯의 상태(`GridState`) 관리 및 업데이트 로직 |
+| **Root** | `main.py` | 기존 `python3 main.py ...` 명령을 유지하는 호환 진입점 |
+| **app/** | `main.py` | 프로그램 진입점 구현. CLI 커맨드(run, init-grid 등) 처리 및 WebSocket 이벤트 기반 메인 루프 실행 |
+| **app/core/** | `grid.py` | 그리드 슬롯의 상태(`GridState`) 관리 및 업데이트 로직 |
 | | `grid_builder.py` | 설정된 속성값에 따라 신규 그리드 슬롯(`GridRow`)을 생성 및 분배 |
 | | `grid_properties.py` | 그리드 범위, 예산 가중치 등 그리드 명세(`GridPropertySpec`) 정의 |
 | | `models.py` | 그리드 행, 주문 정보, 주문 상태 등 공용 데이터 모델 및 Enum 정의 |
-| **strategy/** | `grid_strategy.py` | 매수/매도 진입 판정, 재고 게이트 적용 등 핵심 트레이딩 전략 로직 |
+| **app/strategy/** | `grid_strategy.py` | 매수/매도 진입 판정, 재고 게이트 적용 등 핵심 트레이딩 전략 로직 |
 | | `breakout_guard.py` | 캔들 데이터를 분석하여 급등락 시 신규 매수를 차단하는 가드 로직 |
 | | `recenter_preview.py` | 현재가를 기준으로 그리드 재배치(Recenter) 시뮬레이션 및 결과 계산 |
-| **storage/** | `postgres_grid_repository.py` | PostgreSQL을 이용한 그리드 상태(슬롯별 수량, 가격 등)의 영속성 관리 |
+| **app/storage/** | `postgres_grid_repository.py` | PostgreSQL을 이용한 그리드 상태(슬롯별 수량, 가격 등)의 영속성 관리 |
 | | `postgres_order_repository.py` | 체결 대기 중인 주문(Pending Orders)의 DB CRUD 처리 |
 | | `factory.py` | 설정에 따라 적절한 저장소(Repository) 인스턴스를 생성하는 팩토리 |
 | | `interfaces.py` | 저장소 계층의 일관성을 위한 추상 인터페이스 정의 |
 | | `postgres_common.py` | DB 연결 설정 및 트랜잭션 관리를 위한 공통 유틸리티 |
-| **exchange/** | `crypto.py` | 업비트(Upbit) REST API와 선택적 WebSocket 캐시를 연동하여 실제 주문 제출 및 상태 조회 구현 |
+| **app/exchange/** | `crypto.py` | 업비트(Upbit) REST API와 선택적 WebSocket 캐시를 연동하여 실제 주문 제출 및 상태 조회 구현 |
 | | `upbit_ws.py` | 업비트 WebSocket ticker/candle/myAsset/myOrder 캐시와 현재가 이벤트 대기 기능 |
 | | `base.py` | 거래소 연동을 위한 공통 추상 클래스(`BaseExchange`) 정의 |
 | | `stock.py` | 주식 거래소 연동용 stub. `EXCHANGE_TYPE=stock` 일 때 로드되는 `BaseExchange` 구현 뼈대이며 현재는 `NotImplementedError` 만 던진다 (KIS API 등 실 연동 시 교체 예정) |
@@ -32,11 +35,11 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 | | `apply_grid_properties_to_postgres.py` | `grid.properties` 파일의 설정을 DB의 그리드 테이블에 강제 반영 |
 | | `adjust_budget_live.py` | 현재 DB 그리드의 가격 구조와 보유 수량은 유지한 채 `planned_qty`만 재계산하여 예산을 보수적으로 증액/감액. `--target-lower-budget <KRW>` (현재가 미만 슬롯의 매수합 목표값) 으로 지정 |
 | | `upbit_realized_pnl.py` | 업비트 `GET /v1/orders/closed` + `/v1/order` 로 KRW-BTC 실현 손익을 일/주/월/년/전체 단위로 FIFO 매칭하여 산출 (수수료 차감, read-only 분석). reset 청산 매도는 자동 인식하며, 과거 reset 주문은 `--reset-sell-uuid`로 지정 가능 |
-| **utils/** | `upbit_market.py` | 업비트 마켓의 최소 주문 단위, 호가 단위 등 시장 정보 관리 |
+| **app/utils/** | `upbit_market.py` | 업비트 마켓의 최소 주문 단위, 호가 단위 등 시장 정보 관리 |
 | | `grid_reporting.py` | 수익률, 재고 현황 등 그리드 운영 성과 리포팅 유틸리티 |
 | | `decimal_utils.py` | 정밀한 수치 계산을 위한 Decimal 변환 및 절사(Truncate) 도구 |
 | | `logger.py` | KST 기준 로그 포맷팅 및 파일/콘솔 로깅 설정 |
-| **config/** | `settings.py` | `.env` 환경 변수 로드 및 시스템 전역 설정 값 관리 |
+| **app/config/** | `settings.py` | `.env` 환경 변수 로드 및 시스템 전역 설정 값 관리 |
 
 ## 전략 개요
 
@@ -110,7 +113,7 @@ inventory-target gate 도 함께 적용된다. 현재 보유 재고 원가가 �
 - `UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS=3`: ticker 이벤트가 더 자주 와도 전략 평가는 최소 3초 간격으로 제한한다.
 - `PRICE_POLL_INTERVAL=5`: WebSocket 의존성 누락, 시작 실패, 연결 오류, 이벤트 없음, stale tick 상황에서 REST 현재가 조회 fallback 주기로 사용한다.
 
-WebSocket callback/thread 는 가격 이벤트만 메모리 캐시에 저장한다. pending 주문, 그리드 상태, DB 저장, 주문 제출은 모두 `main.py`의 단일 실행 경로에서 직렬로 처리한다. 따라서 이벤트 폭주가 있어도 주문 판단은 backlog를 순차 처리하지 않고 최신 가격으로 coalesce 된다.
+WebSocket callback/thread 는 가격 이벤트만 메모리 캐시에 저장한다. pending 주문, 그리드 상태, DB 저장, 주문 제출은 모두 `app/main.py`의 단일 실행 경로에서 직렬로 처리한다. 따라서 이벤트 폭주가 있어도 주문 판단은 backlog를 순차 처리하지 않고 최신 가격으로 coalesce 된다.
 
 > **쉽게 말하면**: WS 가 1초에 수십 틱을 쏟아내도 봇이 **각 틱마다 주문 판단을 반복하지 않는다.** 캐시에는 "가장 최근 가격" 하나만 덮어쓰고, 전략 평가는 최소 3초 간격에 한 번씩 최신가 기준으로만 실행한다. 이벤트가 쌓여 밀리거나 옛 가격으로 뒤늦게 판단할 일이 없다.
 

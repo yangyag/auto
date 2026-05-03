@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
-from core.models import GridRow, Order
+from app.core.models import GridRow, Order
 
 
 @dataclass(frozen=True)

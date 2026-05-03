@@ -2,9 +2,9 @@ import unittest
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from core.models import GridRow
-from storage.interfaces import GridSnapshot
-from storage.postgres_grid_repository import PostgresGridRepository
+from app.core.models import GridRow
+from app.storage.interfaces import GridSnapshot
+from app.storage.postgres_grid_repository import PostgresGridRepository
 from tests.postgres_test_utils import (
     PostgresIntegrationTestCase,
     apply_test_schema,

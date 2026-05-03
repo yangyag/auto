@@ -7,10 +7,10 @@ from unittest.mock import Mock, patch
 
 import requests
 
-from core.models import Order, OrderExecutionType, OrderSide
-from exchange.crypto import CryptoExchange, UpbitAPIError
-import exchange.upbit_ws as upbit_ws
-from exchange.upbit_ws import (
+from app.core.models import Order, OrderExecutionType, OrderSide
+from app.exchange.crypto import CryptoExchange, UpbitAPIError
+import app.exchange.upbit_ws as upbit_ws
+from app.exchange.upbit_ws import (
     UPBIT_PRIVATE_WS_URL,
     UpbitAssetWebSocketCache,
     UpbitMinuteCandleWebSocketCache,
@@ -1458,7 +1458,7 @@ class CryptoExchangeBalanceTest(unittest.TestCase):
             self._success_response({"ok": True}),
         ]
 
-        with patch("exchange.crypto.requests.request", side_effect=responses) as request:
+        with patch("app.exchange.crypto.requests.request", side_effect=responses) as request:
             result = self.exchange._request("GET", "/v1/test")
 
         self.assertEqual(result, {"ok": True})
@@ -1470,7 +1470,7 @@ class CryptoExchangeBalanceTest(unittest.TestCase):
             self._success_response({"ok": True}),
         ]
 
-        with patch("exchange.crypto.requests.request", side_effect=responses) as request:
+        with patch("app.exchange.crypto.requests.request", side_effect=responses) as request:
             result = self.exchange._request("GET", "/v1/test")
 
         self.assertEqual(result, {"ok": True})
@@ -1489,7 +1489,7 @@ class CryptoExchangeBalanceTest(unittest.TestCase):
                 {"Authorization": "Bearer retry-1"},
                 {"Authorization": "Bearer retry-2"},
             ],
-        ) as auth_header, patch("exchange.crypto.requests.request", side_effect=responses) as request:
+        ) as auth_header, patch("app.exchange.crypto.requests.request", side_effect=responses) as request:
             result = self.exchange._request(
                 "GET",
                 "/v1/orders/chance",
@@ -1505,7 +1505,7 @@ class CryptoExchangeBalanceTest(unittest.TestCase):
     def test_request_does_not_retry_long_418_block(self):
         response = self._http_error_response(418, error_message="blocked for 10 seconds")
 
-        with patch("exchange.crypto.requests.request", side_effect=[response]) as request:
+        with patch("app.exchange.crypto.requests.request", side_effect=[response]) as request:
             with self.assertRaises(UpbitAPIError):
                 self.exchange._request("GET", "/v1/test")
 
@@ -1514,7 +1514,7 @@ class CryptoExchangeBalanceTest(unittest.TestCase):
     def test_request_does_not_retry_418_when_retry_after_is_missing(self):
         response = self._http_error_response(418, error_message="temporarily blocked")
 
-        with patch("exchange.crypto.requests.request", side_effect=[response]) as request:
+        with patch("app.exchange.crypto.requests.request", side_effect=[response]) as request:
             with self.assertRaises(UpbitAPIError):
                 self.exchange._request("GET", "/v1/test")
 

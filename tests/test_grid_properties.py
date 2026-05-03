@@ -3,8 +3,8 @@ import unittest
 from decimal import Decimal, localcontext
 from pathlib import Path
 
-import config.settings as cfg
-from core.grid_properties import (
+import app.config.settings as cfg
+from app.core.grid_properties import (
     GridPropertySpec,
     build_grid_rows_from_property_spec,
     build_target_sell_price,

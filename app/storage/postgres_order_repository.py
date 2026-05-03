@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from core.models import Order, OrderExecutionType, OrderSide
-from storage.interfaces import PendingOrderRepository
-from storage.postgres_common import PostgresRepositoryMixin, sql
+from app.core.models import Order, OrderExecutionType, OrderSide
+from app.storage.interfaces import PendingOrderRepository
+from app.storage.postgres_common import PostgresRepositoryMixin, sql
 
 
 class PostgresOrderRepository(PendingOrderRepository, PostgresRepositoryMixin):

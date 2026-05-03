@@ -1,10 +1,10 @@
 import unittest
 from decimal import Decimal
 
-from core.grid import GridState
-from core.models import GridRow
-from main import GridStateRuntime, refresh_grid_state_if_changed
-from storage.interfaces import GridSnapshot, RepositoryMetadata
+from app.core.grid import GridState
+from app.core.models import GridRow
+from app.main import GridStateRuntime, refresh_grid_state_if_changed
+from app.storage.interfaces import GridSnapshot, RepositoryMetadata
 
 
 INITIAL_SNAPSHOT = GridSnapshot(
