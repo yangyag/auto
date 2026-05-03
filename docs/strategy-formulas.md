@@ -21,8 +21,8 @@
 - $U$: 그리드 상단 가격
 - $N$: 슬롯 수
 - $I$: 가격 구간 수
-- $\operatorname{normalize\_price}(x)$: 업비트 KRW 호가 단위 정규화
-- $\operatorname{floor\_step}(x, s)$: 지정 step $s$ 단위 내림
+- $\mathrm{normalize\_price}(x)$: 업비트 KRW 호가 단위 정규화
+- $\mathrm{floor\_step}(x, s)$: 지정 step $s$ 단위 내림
 
 ## 그리드 슬롯 수
 
@@ -62,7 +62,7 @@ $$
 
 $$
 I
-= \underset{j \in \mathcal{I}_{\mathrm{candidate}}}{\operatorname{argmin}}
+= \underset{j \in \mathcal{I}_{\mathrm{candidate}}}{\mathrm{argmin}}
   \left| \frac{\Delta_{\log}}{j} - \delta_{\log} \right|
 $$
 
@@ -89,7 +89,7 @@ B_0 = U
 $$
 
 $$
-B_i = \operatorname{normalize\_price}\left(\frac{U}{g^i}\right),
+B_i = \mathrm{normalize\_price}\left(\frac{U}{g^i}\right),
 \quad 0 < i < N - 1
 $$
 
@@ -112,7 +112,7 @@ S_i^{\mathrm{raw}} = B_i \cdot e^{\ell k_{\mathrm{effective}}}
 $$
 
 $$
-S_i = \operatorname{normalize\_price}\left(S_i^{\mathrm{raw}}\right)
+S_i = \mathrm{normalize\_price}\left(S_i^{\mathrm{raw}}\right)
 $$
 
 검증 조건:
@@ -172,7 +172,7 @@ $$
 
 $$
 Q_i
-= \operatorname{floor\_step}
+= \mathrm{floor\_step}
   \left(\frac{B_{\mathrm{slot}, i}}{B_i},\ 0.00000001\ \mathrm{BTC}\right)
 $$
 
@@ -249,7 +249,7 @@ $$
 
 $$
 A_{\mathrm{spend}}
-= \operatorname{floor\_step}(B_i Q_i,\ 1\ \mathrm{KRW})
+= \mathrm{floor\_step}(B_i Q_i,\ 1\ \mathrm{KRW})
 $$
 
 ## 활성 매수 윈도우
@@ -274,9 +274,9 @@ $$
 
 $$
 \mathcal{A}
-= \operatorname{first}_{n_{\le}}(\mathcal{B}_{\le})
+= \mathrm{first}_{n_{\le}}(\mathcal{B}_{\le})
   \cup
-  \operatorname{first}_{n_{>}}(\mathcal{B}_{>})
+  \mathrm{first}_{n_{>}}(\mathcal{B}_{>})
 $$
 
 여기서:
@@ -320,7 +320,7 @@ z_{\mathrm{raw}}
 $$
 
 $$
-z = \operatorname{clamp}(z_{\mathrm{raw}}, 0, 1)
+z = \mathrm{clamp}(z_{\mathrm{raw}}, 0, 1)
 $$
 
 목표 재고 비율:
@@ -332,7 +332,7 @@ $$
 
 $$
 q_{\mathrm{target}}(z)
-= \operatorname{clamp}(q_{\mathrm{target}}(z), q_{\min}, q_{\max})
+= \mathrm{clamp}(q_{\mathrm{target}}(z), q_{\min}, q_{\max})
 $$
 
 통과 조건:
@@ -342,7 +342,7 @@ $$
 $$
 
 $$
-\operatorname{gate\_passed}
+\mathrm{gate\_passed}
 = \left(q_{\mathrm{current}} < \theta\right)
 $$
 
@@ -356,7 +356,7 @@ t_{\mathrm{elapsed}}
 $$
 
 $$
-\operatorname{skip\_new\_buys}
+\mathrm{skip\_new\_buys}
 = \left(t_{\mathrm{elapsed}} > \texttt{STALE\_PREVIOUS\_PRICE\_THRESHOLD\_SECONDS}\right)
 $$
 
@@ -425,7 +425,7 @@ $$
 
 $$
 \widetilde{S}_i
-= \operatorname{normalize\_price}
+= \mathrm{normalize\_price}
   \left(B_i \cdot e^{g_{\mathrm{compressed}}}\right)
 $$
 
@@ -448,22 +448,22 @@ Age TP는 `k` 모델로 생성된 그리드이고 holding 슬롯에 `filled_at`�
 상단 이탈:
 
 $$
-\operatorname{outside\_upper}
+\mathrm{outside\_upper}
 = \bigwedge_{j=1}^{M} (C_j > U)
 $$
 
 하단 이탈:
 
 $$
-\operatorname{outside\_lower}
+\mathrm{outside\_lower}
 = \bigwedge_{j=1}^{M} (C_j < L)
 $$
 
 가드 활성:
 
 $$
-\operatorname{breakout\_guard\_active}
-= \operatorname{outside\_upper} \lor \operatorname{outside\_lower}
+\mathrm{breakout\_guard\_active}
+= \mathrm{outside\_upper} \lor \mathrm{outside\_lower}
 $$
 
 가드가 활성화되면 신규 BUY 후보는 제거하고 SELL 후보는 유지한다.
@@ -517,7 +517,7 @@ $$
 
 $$
 Q_i^{\mathrm{new}}
-= \operatorname{floor\_step}
+= \mathrm{floor\_step}
   \left(\frac{B_{\mathrm{slot}, i}}{B_i},\ 0.00000001\ \mathrm{BTC}\right)
 $$
 
