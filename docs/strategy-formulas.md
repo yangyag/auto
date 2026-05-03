@@ -207,9 +207,7 @@ $$
 총 배정 금액:
 
 $$
-B_{\mathrm{allocated}} =
-\sum_{i \in \mathcal{H}} B_i H_i
-+ \sum_{i \in \mathcal{E}} B_i Q_i
+B_{\mathrm{allocated}} = \sum_{i \in \mathcal{H}} B_i H_i + \sum_{i \in \mathcal{E}} B_i Q_i
 $$
 
 여기서 $\mathcal{H}$는 holding 슬롯 집합, $\mathcal{E}$는 empty 슬롯 집합이다.
@@ -482,9 +480,7 @@ $$
 수수료와 버퍼를 포함한 필요 금액:
 
 $$
-A_{\mathrm{estimated}} =
-A_{\mathrm{required}}(1 + f_{\mathrm{upbit}})
-+ A_{\mathrm{buffer}}
+A_{\mathrm{estimated}} = A_{\mathrm{required}}(1 + f_{\mathrm{upbit}}) + A_{\mathrm{buffer}}
 $$
 
 잔고 통과 조건:
