@@ -119,20 +119,21 @@ docker run -d \
 
 ```bash
 .venv/bin/python - <<'PY'
-import os
 from pathlib import Path
 
 import psycopg
 
-schema = os.getenv("PGSCHEMA", "auto_trading")
+import config.settings as cfg
+
+schema = cfg.PGSCHEMA
 migrations_dir = Path("db/migrations")
 
 with psycopg.connect(
-    host=os.getenv("PGHOST", "127.0.0.1"),
-    port=int(os.getenv("PGPORT", "5432")),
-    dbname=os.getenv("PGDATABASE", "yangyag"),
-    user=os.getenv("PGUSER", "yangyag"),
-    password=os.getenv("PGPASSWORD", ""),
+    host=cfg.PGHOST,
+    port=cfg.PGPORT,
+    dbname=cfg.PGDATABASE,
+    user=cfg.PGUSER,
+    password=cfg.PGPASSWORD,
     autocommit=True,
 ) as conn:
     with conn.cursor() as cur:

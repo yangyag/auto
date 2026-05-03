@@ -49,6 +49,8 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 - BUY 체결이 확정되면 해당 슬롯의 TP 지정가 SELL 주문을 즉시 제출하고, 이미 열린 SELL pending 주문이 있으면 같은 슬롯에 중복 매도를 만들지 않는다.
 - 매도 기준은 저장된 `sell_price` 하나로 고정되지 않고, 보유 기간에 따라 압축되는 `effective_sell_price`를 사용할 수 있다.
 
+수학적 판정 조건과 계산식은 [docs/strategy-formulas.md](docs/strategy-formulas.md)에 별도로 정리했다.
+
 > **쉽게 말하면**: "가격이 닿았다고 무조건 사지 않는다" 가 핵심. 세 가지 필터가 더 붙어 있다 —  
 > ① **활성 윈도우**: 현재가에서 너무 멀리 떨어진 슬롯은 스킵 (극단에 쌓지 않음)  
 > ② **inventory-target gate**: 지금 재고가 이미 많으면 추가 매수 안 함 (과매수 방지)  
@@ -66,7 +68,7 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 - 보유 슬롯은 가능하면 항상 대응하는 TP SELL pending 주문을 하나씩 갖는 구조를 기본으로 한다.
 
 ## 매수 로직
-빈 슬롯의 기본 매수 조건은 `previous_price > buy_price >= current_price` 다. 첫 가격 스냅샷에서는 신규 매수를 만들지 않고, 이후 전략 평가 사이클부터 하락 교차한 empty 슬롯만 매수 후보가 된다.
+빈 슬롯은 직전 평가 가격에서 현재가로 내려오며 매수선을 하락 교차했을 때 매수 후보가 된다. 첫 가격 스냅샷에서는 신규 매수를 만들지 않고, 이후 전략 평가 사이클부터 하락 교차한 empty 슬롯만 매수 후보가 된다. 정확한 불등식은 [Strategy Formulas](docs/strategy-formulas.md#매수-교차-조건)에 정리되어 있다.
 
 > **쉽게 말하면**: 단순히 "현재가 < 매수가" 가 아니라 **"방금 그 매수가 선을 가로지르며 내려왔다"** 를 요구한다. 예) 매수가 1억인 슬롯 — 직전 가격 1억 50만, 지금 9,999만 → 라인을 지나쳤으니 매수 후보 ✅. 직전 가격도 이미 9,500만이었다면 이미 아래라 후보 ❌.
 
@@ -78,19 +80,9 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 
 > **쉽게 말하면**: 현재가 근처 슬롯들만 매수 대상. 멀리 있는 슬롯은 그 가격에 진짜 도달한 뒤에 다뤄진다 (먼 곳으로 미리 채우지 않는다).
 
-inventory-target gate 도 함께 적용된다.
-- `q_current = Σ(buy_price * held_qty) / MAX_OPERATING_BUDGET_KRW`
-- `z = (ln(P) - ln(L)) / (ln(U) - ln(L))`
-- `q_target(z) = q_min + (q_max - q_min) * (1 - z)^gamma`
-- 허용 조건은 `q_current < q_target(z) - epsilon`
+inventory-target gate 도 함께 적용된다. 현재 보유 재고 원가가 현재 밴드 위치에서 허용되는 목표 재고 비율보다 낮을 때만 신규 매수를 허용한다. `q_current`, `z`, `q_target` 계산식과 통과 조건은 [Strategy Formulas](docs/strategy-formulas.md#inventory-target-gate)에 정리되어 있다.
 
-> **쉽게 말하면** (각 기호 해석):
-> - `q_current` = 지금까지 예산의 몇 % 를 BTC 에 실었는가. `0` = 전부 KRW 현금, `1` = 예산 한도까지 전부 BTC.
-> - `z` = 현재가(P) 가 그리드의 바닥(L)~천장(U) 사이에서 **어디쯤 있는지** (로그 스케일). `0` = 바닥, `1` = 천장.
-> - `q_target(z)` = 지금 위치에서 **허용되는 최대 재고 비율**. 바닥에 가까울수록 많이, 천장에 가까울수록 적게. `gamma` 는 이 곡선이 얼마나 가파르게 휘는지를 조절.
-> - 허용 조건: 지금 실은 재고(`q_current`) 가 목표 한도(`q_target`) 보다 **낮아야만** 새 매수가 나간다.
->
-> 한마디로: **가격이 바닥 쪽이면 공격적으로 더 사고, 천장 쪽이면 수비적으로 덜 산다** 를 수식화한 것. 같은 가격에 매수 라인이 닿아도 "이미 많이 실렸으면 쉰다".
+> **쉽게 말하면**: 가격이 바닥 쪽이면 공격적으로 더 사고, 천장 쪽이면 수비적으로 덜 산다. 같은 가격에 매수 라인이 닿아도 이미 많이 실렸으면 쉰다.
 
 즉 매수는 "가격이 닿았는가"만이 아니라 "지금 구간에서 이 정도 재고를 더 들고 가도 되는가"를 함께 본다.
 
@@ -101,10 +93,10 @@ inventory-target gate 도 함께 적용된다.
 ## 상승 재진입 옵션
 상승 구간의 단일 슬롯 상향 돌파 매수는 옵션 기능이다.
 
-- 조건은 `previous_price < buy_price <= current_price`
-- 정확히 `1`개 empty 슬롯 상향 돌파일 때만 후보가 된다
+- 직전 가격에서 현재가로 올라오며 정확히 `1`개 empty 슬롯의 매수선을 상향 교차할 때만 후보가 된다
 - 업비트 `ord_type=price` 시장가 예산매수를 쓴다
 - `UPWARD_BUY_ENABLED=True` 일 때 켜지고, 기본값은 `ON` 이다
+- 정확한 판정식은 [Strategy Formulas](docs/strategy-formulas.md#상승-재진입-조건)에 정리되어 있다.
 
 기본 경로는 이 기능을 켜 둔 상승 재진입 경로다.
 
@@ -127,12 +119,9 @@ BUY 체결이 확인되면 해당 슬롯의 `effective_sell_price` 기준 지정
 
 `effective_sell_price` 기본값은 저장된 `sell_price`지만, `k` 기반 holding 슬롯은 `filled_at` 경과 시간에 따라 더 낮아질 수 있다.
 
-Age TP 압축 규칙:
-- 48시간 이후: `k - 0.5`
-- 7일 이후: `k - 1.0`
-- 최저치는 `k_floor`
+Age TP 압축 규칙과 `effective_sell_price` 계산식은 [Strategy Formulas](docs/strategy-formulas.md#age-tp-압축)에 정리되어 있다.
 
-> **쉽게 말하면**: `k` 는 "**매수가 대비 몇 % 위에서 팔까**" 의 목표 수익폭이다. 기본 `k=9.0` = +9% 에 팔겠다는 뜻. 그런데 그 가격에 도달하지 못하고 오래 들고 있으면 점점 양보한다 — 이틀 지나면 +8.5%, 일주일 지나면 +8% 로 내려간다. `k_floor=7.0` (+7%) 이 최저 한계. "안 팔리고 쥐고만 있지 말자" 는 취지.
+> **쉽게 말하면**: `k` 는 고정 퍼센트가 아니라 그리드 로그 간격 기준의 TP 폭이다. 그 가격에 도달하지 못하고 오래 들고 있으면 점점 낮은 TP 폭을 허용하되, `k_floor` 밑으로는 내리지 않는다. "안 팔리고 쥐고만 있지 말자" 는 취지다.
 
 중요한 점:
 - 압축은 런타임 매도 판정에서만 적용된다.
@@ -177,11 +166,11 @@ rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단
 ## 그리드 생성 경로
 - `main.py init-grid`는 슬롯 개수 기반이다.
 - `grid.properties`는 `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `LOWER_BUDGET_KRW`와 `GRID_COUNT` 또는 `GRID_STEP_PCT` 중 정확히 하나를 받는다.
-- 시드 시점 KRW-BTC 현재가를 ticker REST 로 1회 조회한 뒤, `buy_price < 현재가` 인 슬롯의 매수합이 `LOWER_BUDGET_KRW` 가 되도록 implicit 총 예산을 가중치 비율로 역산한다 (`target_total = LOWER_BUDGET_KRW / lower_ratio`).
-- 역산된 총 예산을 상단/중단/하단 `0.7x / 1.0x / 1.3x` 가중치로 정규화 배분한다.
-- 각 슬롯 `planned_qty`는 `slot_budget / buy_price` 기준 소수 BTC 단위 내림으로 계산한다.
+- 시드 시점 KRW-BTC 현재가를 ticker REST 로 1회 조회한 뒤, 현재가 미만 슬롯의 매수합이 `LOWER_BUDGET_KRW` 가 되도록 implicit 총 예산을 역산한다.
+- 역산된 총 예산을 상단/중단/하단 가중치로 정규화 배분하고, 슬롯별 `planned_qty`를 BTC 수량 step 기준으로 내림 계산한다.
+- 슬롯 수, 가격 사다리, 예산 역산, 수량 양자화 공식은 [Strategy Formulas](docs/strategy-formulas.md#그리드-슬롯-수)에 정리되어 있다.
 
-> **쉽게 말하면**: 사용자가 "현재가 밑의 그리드를 다 매수하는 데 필요한 KRW" 만 지정하면, 시스템이 가중치 비율로 보고 위쪽까지 채우는 데 필요한 총 예산을 역산해 슬롯별로 분배한다. 상단(비싼 구간)은 0.7배로 적게, 하단(싼 구간)은 1.3배로 많이. 바닥에 떨어졌을 때 더 많이 담을 수 있도록 자금을 아래쪽으로 기울여두는 구조다. 현재가가 최상단 buy_price 보다 높으면 모든 슬롯이 "하단" 으로 잡혀 `LOWER_BUDGET_KRW` 가 곧 총 예산이 된다.
+> **쉽게 말하면**: 사용자가 "현재가 밑의 그리드를 다 매수하는 데 필요한 KRW" 만 지정하면, 시스템이 가중치 비율로 보고 위쪽까지 채우는 데 필요한 총 예산을 역산해 슬롯별로 분배한다. 비싼 구간은 적게, 싼 구간은 많이 담을 수 있도록 자금을 아래쪽으로 기울여두는 구조다. 현재가가 최상단 buy_price 보다 높으면 모든 슬롯이 "하단" 으로 잡혀 `LOWER_BUDGET_KRW` 가 곧 총 예산이 된다.
 
 `GRID_COUNT`는 슬롯 수를 직접 고정할 때 쓰고, `GRID_STEP_PCT`는 기존 슬롯 간격을 비율로 그대로 복원할 때 쓴다.
 
@@ -201,7 +190,7 @@ rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단
 - 목적: 현재 DB의 `buy_price` ladder, `held_qty`, `sell_price`, `filled_at` 는 유지하고 `planned_qty`만 새 하단 매수합 목표 기준으로 다시 계산
 - 적용 범위: 빈 슬롯은 즉시 새 `planned_qty`가 반영되고, 보유 슬롯은 현재 보유 수량을 유지한 채 다음 복원 시점부터 새 `planned_qty` 의미를 사용
 - 입력 옵션:
-  - `--target-lower-budget <KRW>` (필수): 업비트 ticker REST 로 현재가 1회 조회 후, `buy_price < 현재가` 인 슬롯들의 매수합(= Σ `buy_price × planned_qty`, held_qty 무관)이 지정 금액이 되도록 가중치 비율로 총 예산을 역산. `build_weighted_slot_budgets` 가 총 예산에 단순 비례하므로 정확히 역산되지만, BTC 수량 양자화(`ROUND_DOWN`)로 양자화 후 실제 하단 합은 목표보다 살짝 작다(편향 단방향, 슬롯당 최대 ~1 BTC step × buy_price). 현재가가 최상단 `buy_price` 보다 높아 모든 슬롯이 "하단" 으로 잡히는 엣지케이스에서는 경고를 출력한다.
+  - `--target-lower-budget <KRW>` (필수): 업비트 ticker REST 로 현재가 1회 조회 후, 현재가 미만 슬롯들의 매수합이 지정 금액이 되도록 가중치 비율로 총 예산을 역산한다. BTC 수량 양자화 때문에 실제 하단 합은 목표보다 살짝 작을 수 있다. 세부 공식은 [Strategy Formulas](docs/strategy-formulas.md#라이브-예산-조정)에 정리되어 있다.
 - 안전장치: DB ladder 연속성/내림차순 검증, open BUY 주문 차단(확정 전후 2회), BTC 수량 step 내림, 업비트 최소 주문 금액 검사, `역산된 총 예산 < current_inventory_cost` 경고와 `--force` 요구, 사용자 `y/n` 확정 후에만 DB 저장.
 - 권장 절차: `./stop.sh` -> open BUY 없음 확인 -> `.venv/bin/python scripts/adjust_budget_live.py --target-lower-budget <KRW>` -> `./run.sh`
 - 주의: 이 스크립트는 soft adjust 경로다. 이미 보유한 물량을 즉시 줄이지 않으므로, 역산된 총 예산이 현재 인벤토리 원가보다 작아도 실제 예산 회수는 매도 이후에 완료된다.
@@ -220,4 +209,5 @@ rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단
 - `UPBIT_WS_CANDLE_ENABLED`, `UPBIT_WS_ASSET_ENABLED`, `UPBIT_WS_ORDER_ENABLED`: 캔들/자산/주문 상태 WebSocket 캐시 사용 여부를 제어한다. 주문 생성과 취소는 계속 REST만 사용한다. `UPBIT_WS_ORDER_ENABLED=true` 여도 주문 상태의 terminal 판정은 반드시 `GET /v1/order` REST 재조회 기준이며, WS myOrder 캐시는 관측/힌트 용도다.
 
 ## 참고 문서
+- [docs/strategy-formulas.md](docs/strategy-formulas.md)
 - [docs/UPBIT_API_REFERENCE.md](docs/UPBIT_API_REFERENCE.md)
