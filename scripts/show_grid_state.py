@@ -20,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _format_row_line(index: int, buy_price, held_qty, sell_price, planned_qty, planned_buy_krw, extras: str = "") -> str:
-    status = "holding" if held_qty > DECIMAL_ZERO else "empty"
+    status = "보유중" if held_qty > DECIMAL_ZERO else "비어있음"
     line = (
         f"{index:>3}) "
         f"buy={format_decimal(buy_price):>16} "
@@ -51,16 +51,16 @@ def _print_snapshot(snapshot) -> None:
     total_inventory = sum((row.held_qty for row in snapshot.rows), DECIMAL_ZERO)
     budget_summary = summarize_planned_buy_budget(snapshot.rows)
     print("상태: 성공")
-    print("backend: postgres")
-    print(f"source: {_source_label()}")
+    print("백엔드: postgres")
+    print(f"소스: {_source_label()}")
     if snapshot.symbol:
-        print(f"symbol: {snapshot.symbol}")
-    print(f"rows: {len(snapshot.rows)}")
-    print(f"total_inventory: {format_decimal(total_inventory)}")
-    print(f"planned_buy_budget_total: {format_decimal(budget_summary.total)}")
-    print(f"top_slot_planned_buy_budget: {format_decimal(budget_summary.top_slot)}")
-    print(f"bottom_slot_planned_buy_budget: {format_decimal(budget_summary.bottom_slot)}")
-    print("slot | buy | held | sell | planned | planned_krw | status")
+        print(f"심볼: {snapshot.symbol}")
+    print(f"행 수: {len(snapshot.rows)}")
+    print(f"총 보유량: {format_decimal(total_inventory)}")
+    print(f"계획 매수 예산 합계: {format_decimal(budget_summary.total)}")
+    print(f"상단 슬롯 계획 매수 예산: {format_decimal(budget_summary.top_slot)}")
+    print(f"하단 슬롯 계획 매수 예산: {format_decimal(budget_summary.bottom_slot)}")
+    print("슬롯 | 매수가 | 보유량 | 매도가 | 계획량 | 계획_원화 | 상태")
     for row in snapshot.rows:
         extras: list[str] = []
         if row.is_holding and row.filled_at is not None:
@@ -106,11 +106,11 @@ def _print_snapshot(snapshot) -> None:
             proposed_lower = _preview_field(recenter_preview, "proposed_lower_price")
         if proposed_upper is None:
             proposed_upper = _preview_field(recenter_preview, "proposed_upper_price")
-        print(f"recenter_preview: {_preview_field(recenter_preview, 'status')}")
-        print(f"recenter_can_apply: {'yes' if _preview_field(recenter_preview, 'can_apply') else 'no'}")
-        print(f"recenter_blockers: {', '.join(blockers) if blockers else '-'}")
+        print(f"리센터 미리보기: {_preview_field(recenter_preview, 'status')}")
+        print(f"리센터 적용 가능: {'예' if _preview_field(recenter_preview, 'can_apply') else '아니오'}")
+        print(f"리센터 차단 항목: {', '.join(blockers) if blockers else '-'}")
         print(
-            "recenter_proposed_band: "
+            "리센터 제안 밴드: "
             f"{format_decimal(proposed_lower) if proposed_lower is not None else '-'} -> "
             f"{format_decimal(proposed_upper) if proposed_upper is not None else '-'}"
         )
