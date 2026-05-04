@@ -18,6 +18,7 @@ from app.core.models import Order, OrderExecutionType, OrderSide
 from app.exchange.crypto import UpbitAPIError
 from app.main import build_exchange
 from app.storage.factory import build_pending_order_repository
+from app.storage.postgres_common import PostgresRuntimeLock
 from app.utils.decimal_utils import DECIMAL_ZERO, format_decimal
 from app.utils.upbit_market import MIN_KRW_ORDER_AMOUNT
 from app.utils.logger import get_logger
@@ -186,30 +187,46 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     validate_environment()
 
-    exchange = build_exchange()
-    pending_order_repository = build_pending_order_repository(cfg)
+    lock = PostgresRuntimeLock(
+        host=cfg.PGHOST,
+        port=cfg.PGPORT,
+        dbname=cfg.PGDATABASE,
+        user=cfg.PGUSER,
+        password=cfg.PGPASSWORD,
+        schema=cfg.PGSCHEMA,
+        bot_key=cfg.STATE_BOT_KEY,
+    )
+    if not lock.acquire():
+        logger.error("락 점유 실패: 봇이 실행 중이거나 기존 스크립트 실행 중")
+        sys.exit(1)
 
-    print_runtime_snapshot(exchange)
-    run_project_command([str(PROJECT_ROOT / "stop.sh")])
-    cancel_open_orders(
-        exchange,
-        pending_order_repository,
-        timeout_seconds=args.wait_timeout,
-        poll_interval=args.poll_interval,
-    )
-    liquidate_btc_position(
-        exchange,
-        timeout_seconds=args.wait_timeout,
-        poll_interval=args.poll_interval,
-    )
+    try:
+        exchange = build_exchange()
+        pending_order_repository = build_pending_order_repository(cfg)
 
-    python_bin = sys.executable
-    run_project_command(
-        [python_bin, "scripts/apply_grid_properties_to_postgres.py", "--force"]
-    )
-    run_project_command([python_bin, "scripts/show_grid_state.py"])
-    logger.info("리셋 완료. 봇 재시작은 필요 시 ./run.sh 로 직접 수행하세요.")
-    return 0
+        print_runtime_snapshot(exchange)
+        run_project_command([str(PROJECT_ROOT / "stop.sh")])
+        cancel_open_orders(
+            exchange,
+            pending_order_repository,
+            timeout_seconds=args.wait_timeout,
+            poll_interval=args.poll_interval,
+        )
+        liquidate_btc_position(
+            exchange,
+            timeout_seconds=args.wait_timeout,
+            poll_interval=args.poll_interval,
+        )
+
+        python_bin = sys.executable
+        run_project_command(
+            [python_bin, "scripts/apply_grid_properties_to_postgres.py", "--force"]
+        )
+        run_project_command([python_bin, "scripts/show_grid_state.py"])
+        logger.info("리셋 완료. 봇 재시작은 필요 시 ./run.sh 로 직접 수행하세요.")
+        return 0
+    finally:
+        lock.release()
 
 
 if __name__ == "__main__":

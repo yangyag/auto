@@ -626,7 +626,8 @@ class GridStrategyCrossingTest(unittest.TestCase):
         self.assertEqual(buy_orders, [])
         self.assertEqual(sell_orders, [])
 
-    def test_large_upward_move_ignores_pending_slots_when_counting_actionable_buys_if_explicitly_enabled(self):
+    def test_large_upward_move_skips_buy_when_multiple_whole_grid_slots_crossed_even_if_one_is_pending(self):
+        # 전체 그리드 기준 burst guard: 슬롯 2가 pending이라도 전체 그리드에서 2개가 교차하면 skip
         rows = [
             GridRow(
                 index=1,
@@ -657,8 +658,7 @@ class GridStrategyCrossingTest(unittest.TestCase):
                 pending_slot_indexes={2},
             )
 
-        self.assertEqual([order.slot_index for order in buy_orders], [1])
-        self.assertEqual(buy_orders[0].execution_type, OrderExecutionType.MARKET_BUY_BY_PRICE)
+        self.assertEqual(buy_orders, [])
         self.assertEqual(sell_orders, [])
 
     def test_active_window_still_excludes_pending_slots_from_downward_buys(self):
@@ -743,6 +743,116 @@ class GridStrategyCrossingTest(unittest.TestCase):
         strategy.grid.current_inventory_ratio.assert_called()
         strategy.grid.target_inventory_ratio.assert_called()
         strategy.grid.band_position_z.assert_called()
+
+    def test_burst_guard_skips_when_two_whole_grid_slots_cross_even_if_active_window_has_only_one(self):
+        # F1(a): 전체 그리드 2개 슬롯 동시 상향 돌파, active window에는 1개만 포함 → skip
+        rows = [
+            GridRow(
+                index=1,
+                buy_price=Decimal("110"),
+                held_qty=Decimal("0"),
+                sell_price=Decimal("120"),
+                planned_qty=Decimal("1"),
+            ),
+            GridRow(
+                index=2,
+                buy_price=Decimal("100"),
+                held_qty=Decimal("0"),
+                sell_price=Decimal("110"),
+                planned_qty=Decimal("1"),
+            ),
+        ]
+        strategy = self._build_strategy(rows)
+        self._set_inventory_gate(
+            strategy,
+            current_ratio=Decimal("0.00"),
+            target_ratio=Decimal("0.53"),
+        )
+
+        with self._phase01_settings(up_buy_enabled=True), self._phase04_settings(below_current_slots=1):
+            strategy.evaluate(Decimal("95"))
+            buy_orders, sell_orders = strategy.evaluate(Decimal("115"))
+
+        self.assertEqual(buy_orders, [])
+        self.assertEqual(sell_orders, [])
+
+    def test_burst_guard_allows_buy_when_only_one_whole_grid_slot_crosses_and_is_active(self):
+        # F1(b): 전체 그리드 1개 슬롯 상향 돌파, active window 포함 → 매수
+        # prev=95, current=105: slot 2 (buy=100) only crosses; slot 1 (buy=110) not crossed
+        # active window: above_current_reentry_slots=1 → slot 2 (nearest above prev=95) is active
+        rows = [
+            GridRow(
+                index=1,
+                buy_price=Decimal("110"),
+                held_qty=Decimal("0"),
+                sell_price=Decimal("120"),
+                planned_qty=Decimal("1"),
+            ),
+            GridRow(
+                index=2,
+                buy_price=Decimal("100"),
+                held_qty=Decimal("0"),
+                sell_price=Decimal("110"),
+                planned_qty=Decimal("1"),
+            ),
+        ]
+        strategy = self._build_strategy(rows)
+        self._set_inventory_gate(
+            strategy,
+            current_ratio=Decimal("0.00"),
+            target_ratio=Decimal("0.53"),
+        )
+
+        with self._phase01_settings(up_buy_enabled=True), self._phase04_settings(
+            below_current_slots=0, above_current_reentry_slots=1
+        ):
+            strategy.evaluate(Decimal("95"))
+            buy_orders, sell_orders = strategy.evaluate(Decimal("105"))
+
+        self.assertEqual(len(buy_orders), 1)
+        self.assertEqual(buy_orders[0].slot_index, 2)
+        self.assertEqual(buy_orders[0].execution_type, OrderExecutionType.MARKET_BUY_BY_PRICE)
+        self.assertEqual(sell_orders, [])
+
+    def test_burst_guard_skips_when_gap_up_crosses_multiple_slots_all_outside_active_window(self):
+        # F1(c): 갭상승 N개, 전부 비-active → skip (전체 그리드 기준 burst guard가 먼저 판단)
+        rows = [
+            GridRow(
+                index=1,
+                buy_price=Decimal("110"),
+                held_qty=Decimal("0"),
+                sell_price=Decimal("120"),
+                planned_qty=Decimal("1"),
+            ),
+            GridRow(
+                index=2,
+                buy_price=Decimal("100"),
+                held_qty=Decimal("0"),
+                sell_price=Decimal("110"),
+                planned_qty=Decimal("1"),
+            ),
+            GridRow(
+                index=3,
+                buy_price=Decimal("90"),
+                held_qty=Decimal("0"),
+                sell_price=Decimal("100"),
+                planned_qty=Decimal("1"),
+            ),
+        ]
+        strategy = self._build_strategy(rows)
+        self._set_inventory_gate(
+            strategy,
+            current_ratio=Decimal("0.00"),
+            target_ratio=Decimal("0.53"),
+        )
+
+        with self._phase01_settings(up_buy_enabled=True), self._phase04_settings(below_current_slots=0):
+            strategy.evaluate(Decimal("80"))
+            # prev=80, current=115: all 3 slots cross → burst guard fires → skip
+            buy_orders, sell_orders = strategy.evaluate(Decimal("115"))
+
+        self.assertEqual(buy_orders, [])
+        self.assertEqual(sell_orders, [])
 
 
 class GridStrategyStalePreviousPriceGuardTest(unittest.TestCase):

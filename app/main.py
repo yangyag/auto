@@ -541,6 +541,15 @@ def check_risk(orders, exchange: BaseExchange, grid_state: GridState) -> list:
                 )
                 continue
             balance -= estimated_required  # 동일 루프 내 다음 주문 잔고 선반영
+        elif order.side == OrderSide.SELL:
+            sell_total = order.price * order.quantity
+            if sell_total < MIN_KRW_ORDER_AMOUNT:
+                logger.warning(
+                    f"[BLOCK] 슬롯 {order.slot_index} SELL 최소 주문 금액 미달 "
+                    f"(price={format_decimal(order.price)}, qty={order.quantity}, "
+                    f"total={format_decimal(sell_total)} < {MIN_KRW_ORDER_AMOUNT})"
+                )
+                continue
 
         approved.append(order)
 
@@ -891,6 +900,25 @@ def run_price_event_loop_iteration(
     return result
 
 
+def cancel_unknown_exchange_orders(
+    exchange,
+    pending_order_repository: PendingOrderRepository,
+    symbol: str,
+) -> None:
+    exchange_order_ids = set(exchange.get_open_order_ids(symbol))
+    db_order_ids = {
+        order.order_id
+        for order in pending_order_repository.list_open()
+        if order.order_id is not None
+    }
+    unknown_ids = exchange_order_ids - db_order_ids
+    for order_id in unknown_ids:
+        logger.warning(f"거래소 주문 DB 누락 → 취소 시도: uuid={order_id}")
+        if not exchange.cancel_order(order_id):
+            raise RuntimeError(f"DB 누락 거래소 주문 취소 실패: {order_id}")
+        logger.warning(f"거래소 주문 DB 누락 취소 완료: uuid={order_id}")
+
+
 def run():
     logger.info("=== 그리드 자동매매 시작 ===")
 
@@ -909,6 +937,7 @@ def run():
         current_order_day = datetime.now(tz=KST).date()
         daily_order_count = 0
         pending_order_repository = build_pending_order_repository(cfg)
+        cancel_unknown_exchange_orders(exchange, pending_order_repository, cfg.SYMBOL)
         pending_orders = {
             order.order_id: order
             for order in pending_order_repository.list_open()

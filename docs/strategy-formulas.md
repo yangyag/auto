@@ -243,7 +243,7 @@ $$
 
 추가 조건:
 - `UPWARD_BUY_ENABLED`가 true다.
-- 정확히 1개 empty 슬롯만 상향 교차한다.
+- 전체 그리드 기준 burst guard: active/pending 필터 적용 전, 전체 그리드에서 교차하는 empty 슬롯이 정확히 1개다.
 - 슬롯 $i$에 pending BUY가 없다.
 - 슬롯 $i$가 active buy window 안에 있다.
 - inventory target gate를 통과한다.
@@ -254,6 +254,8 @@ $$
 $$
 A_{\mathrm{spend}} = F_{\mathrm{step}}(B_i Q_i,\ 1\ \mathrm{KRW})
 $$
+
+사전 검증은 `app/main.py`의 `check_risk`가 `MIN_KRW_ORDER_AMOUNT`로 흡수한다 (`app/core/models.py`의 `Order.required_krw`가 시장가 매수 시 `spend_amount` 반환).
 
 ## 활성 매수 윈도우
 

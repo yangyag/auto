@@ -101,6 +101,7 @@ class ResetKrwBtcLiveScriptTest(unittest.TestCase):
         repository = Mock()
 
         with patch.object(reset_script, "validate_environment"), \
+             patch.object(reset_script, "PostgresRuntimeLock") as mock_lock_cls, \
              patch.object(reset_script, "build_exchange", return_value=exchange), \
              patch.object(reset_script, "build_pending_order_repository", return_value=repository), \
              patch.object(reset_script.os, "chdir") as chdir, \
@@ -108,6 +109,7 @@ class ResetKrwBtcLiveScriptTest(unittest.TestCase):
              patch.object(reset_script, "run_project_command") as run_project_command, \
              patch.object(reset_script, "cancel_open_orders") as cancel_open_orders, \
              patch.object(reset_script, "liquidate_btc_position") as liquidate_btc_position:
+            mock_lock_cls.return_value.acquire.return_value = True
             exit_code = reset_script.main([])
 
         self.assertEqual(exit_code, 0)

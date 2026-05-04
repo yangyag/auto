@@ -141,22 +141,29 @@ class GridStrategy:
         if current_price <= previous_price:
             return None, projected_inventory_krw
 
-        crossed_up_rows = [
+        # 전체 그리드 기준 burst guard: pending/active 필터 이전에 교차 슬롯 수 확인
+        all_crossed_rows = [
             row for row in self.grid.rows
             if row.is_empty
-            and row.index not in pending_slot_indexes
-            and (active_slot_indexes is None or row.index in active_slot_indexes)
             and previous_price < row.buy_price <= current_price
         ]
-        if not crossed_up_rows:
+        if not all_crossed_rows:
             return None, projected_inventory_krw
 
-        if len(crossed_up_rows) > 1:
-            skipped_slots = ", ".join(str(row.index) for row in crossed_up_rows)
+        if len(all_crossed_rows) > 1:
+            skipped_slots = ", ".join(str(row.index) for row in all_crossed_rows)
             logger.info(
                 f"급등 상승 매수 스킵(다중 상향 돌파) → {previous_price} -> {current_price} / "
                 f"slots={skipped_slots}"
             )
+            return None, projected_inventory_krw
+
+        crossed_up_rows = [
+            row for row in all_crossed_rows
+            if row.index not in pending_slot_indexes
+            and (active_slot_indexes is None or row.index in active_slot_indexes)
+        ]
+        if not crossed_up_rows:
             return None, projected_inventory_krw
 
         current_row = crossed_up_rows[0]

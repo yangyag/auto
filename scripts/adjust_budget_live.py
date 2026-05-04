@@ -18,6 +18,7 @@ import app.config.settings as cfg
 from app.core.grid_properties import GridPropertySpec, build_weighted_slot_budgets
 from app.core.models import OrderSide
 from app.storage.interfaces import GridSnapshot
+from app.storage.postgres_common import PostgresRuntimeLock
 from app.storage.postgres_grid_repository import PostgresGridRepository
 from app.storage.postgres_order_repository import PostgresOrderRepository
 from app.utils.decimal_utils import BTC_QUANTITY_STEP, DECIMAL_ZERO, format_decimal, quantize_to_step
@@ -146,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
         print("에러: --target-lower-budget 은 0보다 커야 합니다.")
         return 1
 
-    grid_repo = PostgresGridRepository(
+    lock = PostgresRuntimeLock(
         host=cfg.PGHOST,
         port=cfg.PGPORT,
         dbname=cfg.PGDATABASE,
@@ -155,122 +156,138 @@ def main(argv: list[str] | None = None) -> int:
         schema=cfg.PGSCHEMA,
         bot_key=bot_key,
     )
-    order_repo = PostgresOrderRepository(
-        host=cfg.PGHOST,
-        port=cfg.PGPORT,
-        dbname=cfg.PGDATABASE,
-        user=cfg.PGUSER,
-        password=cfg.PGPASSWORD,
-        schema=cfg.PGSCHEMA,
-        bot_key=bot_key,
-    )
-
-    if not grid_repo.exists():
-        print(f"에러: DB에 bot_key='{bot_key}' 인 그리드 상태가 없습니다.")
-        return 1
-
-    snapshot = grid_repo.load()
-    if not snapshot.rows:
-        print("에러: 로드된 그리드 슬롯이 없습니다.")
-        return 1
-
-    open_buys = list_open_buys(order_repo)
-    if open_buys:
-        print(f"에러: 현재 열려 있는 BUY 주문이 {len(open_buys)}개 있습니다.")
-        print("예산 조정 전에 모든 BUY 주문을 취소하고 봇을 중지해야 합니다.")
-        for o in open_buys:
-            print(f"  - Slot {o.slot_index}: {o.order_id}")
-        return 1
+    if not lock.acquire():
+        print("락 점유 실패: 봇이 실행 중이거나 기존 스크립트 실행 중", file=sys.stderr)
+        sys.exit(1)
 
     try:
-        validate_snapshot_rows(snapshot)
-    except ValueError as exc:
-        print(exc)
-        return 1
-
-    try:
-        current_price = fetch_current_price(snapshot.symbol or cfg.SYMBOL)
-    except Exception as exc:
-        print(f"에러: 현재가 조회 실패: {exc}")
-        return 1
-    if current_price <= DECIMAL_ZERO:
-        print(f"에러: 현재가가 0 이하입니다: {current_price}")
-        return 1
-
-    current_inventory_cost = sum((r.buy_price * r.held_qty for r in snapshot.rows), DECIMAL_ZERO)
-    current_planned_buy_budget = sum(
-        (r.buy_price * r.planned_qty for r in snapshot.rows if r.is_empty),
-        DECIMAL_ZERO,
-    )
-
-    try:
-        updated_rows, new_planned_buy_budget, lower_indices, lower_ratio, target_total_budget = build_updated_rows(
-            snapshot, target_lower_budget, current_price,
+        grid_repo = PostgresGridRepository(
+            host=cfg.PGHOST,
+            port=cfg.PGPORT,
+            dbname=cfg.PGDATABASE,
+            user=cfg.PGUSER,
+            password=cfg.PGPASSWORD,
+            schema=cfg.PGSCHEMA,
+            bot_key=bot_key,
         )
-    except ValueError as exc:
-        print(exc)
-        return 1
-
-    actual_lower_total = compute_lower_actual_total(updated_rows, lower_indices)
-
-    print("=" * 60)
-    print(f" 그리드 예산 조정 리포트 (Bot: {bot_key})")
-    print("-" * 60)
-    print(f" 0. 현재가(KRW-BTC): {format_decimal(current_price)} KRW")
-    print(f"    하단 슬롯 수: {len(lower_indices)} / {len(snapshot.rows)}")
-    print(f"    하단 가중치 비율: {format_decimal(lower_ratio)}")
-    print(f"    목표 하단 매수합: {format_decimal(target_lower_budget)} KRW")
-    print(f"    양자화 후 실제 하단 매수합: {format_decimal(actual_lower_total)} KRW")
-    print(f"    역산된 implicit total budget: {format_decimal(target_total_budget)} KRW")
-    if len(lower_indices) == len(snapshot.rows):
-        print(
-            "    [경고] 현재가가 최상단 buy_price 보다 높아 모든 슬롯이 '하단'으로 잡혔습니다. "
-            "이 경우 --target-lower-budget 가 곧 총 예산이 됩니다."
+        order_repo = PostgresOrderRepository(
+            host=cfg.PGHOST,
+            port=cfg.PGPORT,
+            dbname=cfg.PGDATABASE,
+            user=cfg.PGUSER,
+            password=cfg.PGPASSWORD,
+            schema=cfg.PGSCHEMA,
+            bot_key=bot_key,
         )
-    print(f" 1. 현재 인벤토리 가치: {format_decimal(current_inventory_cost)} KRW")
-    print(f" 2. 적용 전 매수 대기 예산: {format_decimal(current_planned_buy_budget)} KRW")
-    print(f" 3. 적용 후 매수 대기 예산: {format_decimal(new_planned_buy_budget)} KRW")
-    print("-" * 60)
 
-    if target_total_budget < current_inventory_cost:
-        print(" [경고] 역산된 총 예산이 현재 보유 중인 인벤토리 가치보다 작습니다!")
-        print(" 이 조정은 '빈 슬롯'의 매수 금액만 줄일 뿐, 이미 보유한 물량을 매도하지는 않습니다.")
-        print(" 실제 예산 회수는 현재 보유 물량이 매도된 후에나 완료됩니다.")
-        if not args.force:
-            print("-" * 60)
-            print(" 강제 진행하려면 --force 옵션을 사용하세요.")
+        if not grid_repo.exists():
+            print(f"에러: DB에 bot_key='{bot_key}' 인 그리드 상태가 없습니다.")
             return 1
 
-    print(" DB 업데이트를 진행하시겠습니까? (y/n): ", end="")
-    confirm = input().strip().lower()
-    if confirm != 'y':
-        print("중단되었습니다.")
-        return 0
+            snapshot = grid_repo.load()
+        if not snapshot.rows:
+            print("에러: 로드된 그리드 슬롯이 없습니다.")
+            return 1
 
-    open_buys = list_open_buys(order_repo)
-    if open_buys:
-        print("에러: 확인 이후 새로운 BUY 주문이 감지되었습니다.")
-        print("봇을 중지하고 미체결 BUY 주문을 정리한 뒤 다시 시도하세요.")
-        for order in open_buys:
-            print(f"  - Slot {order.slot_index}: {order.order_id}")
-        return 1
+        open_buys = list_open_buys(order_repo)
+        if open_buys:
+            print(f"에러: 현재 열려 있는 BUY 주문이 {len(open_buys)}개 있습니다.")
+            print("예산 조정 전에 모든 BUY 주문을 취소하고 봇을 중지해야 합니다.")
+            for o in open_buys:
+                print(f"  - Slot {o.slot_index}: {o.order_id}")
+            return 1
 
-    try:
-        new_snapshot = GridSnapshot(
-            symbol=snapshot.symbol,
-            rows=tuple(updated_rows),
-            metadata=snapshot.metadata,
+        try:
+            validate_snapshot_rows(snapshot)
+        except ValueError as exc:
+            print(exc)
+            return 1
+
+        try:
+            current_price = fetch_current_price(snapshot.symbol or cfg.SYMBOL)
+        except Exception as exc:
+            print(f"에러: 현재가 조회 실패: {exc}")
+            return 1
+        if current_price <= DECIMAL_ZERO:
+            print(f"에러: 현재가가 0 이하입니다: {current_price}")
+            return 1
+
+        current_inventory_cost = sum((r.buy_price * r.held_qty for r in snapshot.rows), DECIMAL_ZERO)
+        current_planned_buy_budget = sum(
+            (r.buy_price * r.planned_qty for r in snapshot.rows if r.is_empty),
+            DECIMAL_ZERO,
         )
-        grid_repo.save(new_snapshot)
-    except Exception as e:
-        print(f"에러: DB 저장 실패: {e}")
-        return 1
 
-    print("-" * 60)
-    print("상태: 성공")
-    print("DB의 planned_qty가 성공적으로 업데이트되었습니다.")
-    print("=" * 60)
-    return 0
+        try:
+            updated_rows, new_planned_buy_budget, lower_indices, lower_ratio, target_total_budget = build_updated_rows(
+                snapshot, target_lower_budget, current_price,
+            )
+        except ValueError as exc:
+            print(exc)
+            return 1
+
+        actual_lower_total = compute_lower_actual_total(updated_rows, lower_indices)
+
+        print("=" * 60)
+        print(f" 그리드 예산 조정 리포트 (Bot: {bot_key})")
+        print("-" * 60)
+        print(f" 0. 현재가(KRW-BTC): {format_decimal(current_price)} KRW")
+        print(f"    하단 슬롯 수: {len(lower_indices)} / {len(snapshot.rows)}")
+        print(f"    하단 가중치 비율: {format_decimal(lower_ratio)}")
+        print(f"    목표 하단 매수합: {format_decimal(target_lower_budget)} KRW")
+        print(f"    양자화 후 실제 하단 매수합: {format_decimal(actual_lower_total)} KRW")
+        print(f"    역산된 implicit total budget: {format_decimal(target_total_budget)} KRW")
+        if len(lower_indices) == len(snapshot.rows):
+            print(
+                "    [경고] 현재가가 최상단 buy_price 보다 높아 모든 슬롯이 '하단'으로 잡혔습니다. "
+                "이 경우 --target-lower-budget 가 곧 총 예산이 됩니다."
+            )
+        print(f" 1. 현재 인벤토리 가치: {format_decimal(current_inventory_cost)} KRW")
+        print(f" 2. 적용 전 매수 대기 예산: {format_decimal(current_planned_buy_budget)} KRW")
+        print(f" 3. 적용 후 매수 대기 예산: {format_decimal(new_planned_buy_budget)} KRW")
+        print("-" * 60)
+
+        if target_total_budget < current_inventory_cost:
+            print(" [경고] 역산된 총 예산이 현재 보유 중인 인벤토리 가치보다 작습니다!")
+            print(" 이 조정은 '빈 슬롯'의 매수 금액만 줄일 뿐, 이미 보유한 물량을 매도하지는 않습니다.")
+            print(" 실제 예산 회수는 현재 보유 물량이 매도된 후에나 완료됩니다.")
+            if not args.force:
+                print("-" * 60)
+                print(" 강제 진행하려면 --force 옵션을 사용하세요.")
+                return 1
+
+        print(" DB 업데이트를 진행하시겠습니까? (y/n): ", end="")
+        confirm = input().strip().lower()
+        if confirm != 'y':
+            print("중단되었습니다.")
+            return 0
+
+        open_buys = list_open_buys(order_repo)
+        if open_buys:
+            print("에러: 확인 이후 새로운 BUY 주문이 감지되었습니다.")
+            print("봇을 중지하고 미체결 BUY 주문을 정리한 뒤 다시 시도하세요.")
+            for order in open_buys:
+                print(f"  - Slot {order.slot_index}: {order.order_id}")
+            return 1
+
+        try:
+            new_snapshot = GridSnapshot(
+                symbol=snapshot.symbol,
+                rows=tuple(updated_rows),
+                metadata=snapshot.metadata,
+            )
+            grid_repo.save(new_snapshot)
+        except Exception as e:
+            print(f"에러: DB 저장 실패: {e}")
+            return 1
+
+        print("-" * 60)
+        print("상태: 성공")
+        print("DB의 planned_qty가 성공적으로 업데이트되었습니다.")
+        print("=" * 60)
+        return 0
+    finally:
+        lock.release()
 
 
 if __name__ == "__main__":

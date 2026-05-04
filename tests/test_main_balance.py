@@ -235,3 +235,80 @@ class BalanceCommandTest(unittest.TestCase):
         repository.save.assert_not_called()
         self.assertIn("기존 PostgreSQL 그리드 스냅샷이 있습니다", stdout.getvalue())
         self.assertIn("상태: 실패", stdout.getvalue())
+
+
+class CheckRiskSellGuardTest(unittest.TestCase):
+
+    def _make_grid_state(self):
+        grid_state = Mock()
+        grid_state.total_allocated_budget = Decimal("0")
+        return grid_state
+
+    def _make_exchange(self, balance=Decimal("1000000")):
+        exchange = Mock()
+        exchange.get_balance.return_value = balance
+        return exchange
+
+    def test_check_risk_blocks_sell_order_below_min_krw(self):
+        # F2(a): sell_total < MIN_KRW_ORDER_AMOUNT → 차단
+        # price=4000, qty=1 → total=4000 < 5000
+        sell_order = Order(
+            slot_index=3,
+            side=OrderSide.SELL,
+            price=Decimal("4000"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+        )
+
+        with patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", None), \
+             patch.object(main.cfg, "MIN_BALANCE_RESERVE", Decimal("0")):
+            approved = main.check_risk([sell_order], self._make_exchange(), self._make_grid_state())
+
+        self.assertEqual(approved, [])
+
+    def test_check_risk_passes_sell_order_above_min_krw(self):
+        # F2(b): sell_total >= MIN_KRW_ORDER_AMOUNT → 통과
+        # price=6000, qty=1 → total=6000 >= 5000
+        sell_order = Order(
+            slot_index=4,
+            side=OrderSide.SELL,
+            price=Decimal("6000"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+        )
+
+        with patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", None), \
+             patch.object(main.cfg, "MIN_BALANCE_RESERVE", Decimal("0")):
+            approved = main.check_risk([sell_order], self._make_exchange(), self._make_grid_state())
+
+        self.assertEqual(approved, [sell_order])
+
+    def test_check_risk_buy_guard_still_works_with_sell_guard_present(self):
+        # F2(c): BUY 가드 회귀 X — 잔고 부족 BUY는 차단, 정상 SELL은 통과
+        sell_order = Order(
+            slot_index=1,
+            side=OrderSide.SELL,
+            price=Decimal("10000"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+        )
+        buy_order = Order(
+            slot_index=2,
+            side=OrderSide.BUY,
+            price=Decimal("10000"),
+            quantity=Decimal("1"),
+            symbol="KRW-BTC",
+            execution_type=OrderExecutionType.MARKET_BUY_BY_PRICE,
+            spend_amount=Decimal("10000"),
+        )
+
+        with patch.object(main.cfg, "MAX_TOTAL_BUDGET_KRW", None), \
+             patch.object(main.cfg, "MIN_BALANCE_RESERVE", Decimal("0")):
+            # balance=0 → BUY blocked, SELL passes
+            approved = main.check_risk(
+                [sell_order, buy_order],
+                self._make_exchange(balance=Decimal("0")),
+                self._make_grid_state(),
+            )
+
+        self.assertEqual(approved, [sell_order])

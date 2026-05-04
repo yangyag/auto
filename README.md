@@ -110,7 +110,7 @@ inventory-target gate 도 함께 적용된다. 현재 보유 재고 원가가 �
 
 - `UPBIT_WS_PUBLIC_ENABLED=True`: public ticker WebSocket 캐시를 켠다.
 - `UPBIT_WS_EVENT_LOOP_ENABLED=True`: 메인 루프가 새 ticker 이벤트를 기다렸다가 전략 평가 사이클을 실행한다.
-- `UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS=3`: ticker 이벤트가 더 자주 와도 전략 평가는 최소 3초 간격으로 제한한다.
+- `UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS=3`: ticker 이벤트가 더 자주 와도 전략 평가는 최소 3초 간격으로 제한한다. throttle 후 wait 발생 시 한 cycle은 최대 약 2배 더 늦을 수 있다.
 - `PRICE_POLL_INTERVAL=5`: WebSocket 의존성 누락, 시작 실패, 연결 오류, 이벤트 없음, stale tick 상황에서 REST 현재가 조회 fallback 주기로 사용한다.
 
 WebSocket callback/thread 는 가격 이벤트만 메모리 캐시에 저장한다. pending 주문, 그리드 상태, DB 저장, 주문 제출은 모두 `app/main.py`의 단일 실행 경로에서 직렬로 처리한다. 따라서 이벤트 폭주가 있어도 주문 판단은 backlog를 순차 처리하지 않고 최신 가격으로 coalesce 된다.

@@ -20,6 +20,7 @@ from app.core.grid_properties import (
     resolve_total_budget_from_lower,
 )
 from app.storage.interfaces import GridSnapshot, RepositoryMetadata
+from app.storage.postgres_common import PostgresRuntimeLock
 from app.storage.postgres_grid_repository import PostgresGridRepository
 from app.utils.decimal_utils import DECIMAL_ZERO, format_decimal
 from app.utils.grid_reporting import summarize_planned_buy_budget
@@ -60,49 +61,8 @@ def fetch_current_price(symbol: str) -> Decimal:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    spec = load_grid_property_spec(args.properties_file)
 
-    if args.current_price is not None:
-        current_price = Decimal(args.current_price)
-    else:
-        try:
-            current_price = fetch_current_price(args.symbol)
-        except Exception as exc:
-            print("상태: 실패")
-            print(f"사유: 현재가 조회 실패: {exc}")
-            return 1
-    if current_price <= DECIMAL_ZERO:
-        print("상태: 실패")
-        print(f"사유: 현재가가 0 이하입니다: {current_price}")
-        return 1
-
-    try:
-        rows = build_grid_rows_from_property_spec(spec, current_price=current_price)
-        raw_weights = _compute_raw_weights(spec.grid_count)
-        buy_prices_desc = _compute_buy_prices_desc(
-            min_buy_price=normalize_krw_price(spec.min_buy_price),
-            max_buy_price=normalize_krw_price(spec.max_buy_price),
-            grid_count=spec.grid_count,
-        )
-        target_total_budget, lower_indices, lower_ratio = resolve_total_budget_from_lower(
-            raw_weights=raw_weights,
-            buy_prices_desc=buy_prices_desc,
-            current_price=current_price,
-            lower_budget_krw=spec.lower_budget_krw,
-        )
-    except ValueError as exc:
-        print("상태: 실패")
-        print(f"사유: {exc}")
-        return 1
-
-    budget_summary = summarize_planned_buy_budget(rows)
-    resolved_tp_model = normalize_tp_model(spec.tp_model)
-    actual_lower_total = sum(
-        (rows[i].buy_price * rows[i].planned_qty for i in lower_indices),
-        DECIMAL_ZERO,
-    )
-
-    repository = PostgresGridRepository(
+    lock = PostgresRuntimeLock(
         host=args.host,
         port=args.port,
         dbname=args.dbname,
@@ -111,43 +71,101 @@ def main(argv: list[str] | None = None) -> int:
         schema=args.schema,
         bot_key=args.bot_key,
     )
-    if repository.exists() and not args.force:
-        print("상태: 실패")
-        print("사유: 동일 bot_key 상태가 이미 존재합니다. 덮어쓰려면 --force 를 사용하세요.")
-        return 1
+    if not lock.acquire():
+        print("락 점유 실패: 봇이 실행 중이거나 기존 스크립트 실행 중", file=sys.stderr)
+        sys.exit(1)
 
-    saved = repository.save(
-        GridSnapshot(
-            symbol=args.symbol,
-            rows=tuple(rows),
-            metadata=RepositoryMetadata(),
+    try:
+        spec = load_grid_property_spec(args.properties_file)
+
+        if args.current_price is not None:
+            current_price = Decimal(args.current_price)
+        else:
+            try:
+                current_price = fetch_current_price(args.symbol)
+            except Exception as exc:
+                print("상태: 실패")
+                print(f"사유: 현재가 조회 실패: {exc}")
+                return 1
+        if current_price <= DECIMAL_ZERO:
+            print("상태: 실패")
+            print(f"사유: 현재가가 0 이하입니다: {current_price}")
+            return 1
+
+        try:
+            rows = build_grid_rows_from_property_spec(spec, current_price=current_price)
+            raw_weights = _compute_raw_weights(spec.grid_count)
+            buy_prices_desc = _compute_buy_prices_desc(
+                min_buy_price=normalize_krw_price(spec.min_buy_price),
+                max_buy_price=normalize_krw_price(spec.max_buy_price),
+                grid_count=spec.grid_count,
+            )
+            target_total_budget, lower_indices, lower_ratio = resolve_total_budget_from_lower(
+                raw_weights=raw_weights,
+                buy_prices_desc=buy_prices_desc,
+                current_price=current_price,
+                lower_budget_krw=spec.lower_budget_krw,
+            )
+        except ValueError as exc:
+            print("상태: 실패")
+            print(f"사유: {exc}")
+            return 1
+
+        budget_summary = summarize_planned_buy_budget(rows)
+        resolved_tp_model = normalize_tp_model(spec.tp_model)
+        actual_lower_total = sum(
+            (rows[i].buy_price * rows[i].planned_qty for i in lower_indices),
+            DECIMAL_ZERO,
         )
-    )
-    print("상태: 성공")
-    print(f"bot_key: {args.bot_key}")
-    print(f"symbol: {args.symbol}")
-    print(f"rows: {len(rows)}")
-    print(f"tp_model: {resolved_tp_model}")
-    print(f"tp_k_base: {spec.tp_k_base or cfg.GRID_TP_K_BASE}")
-    print(f"tp_k_floor: {spec.tp_k_floor or cfg.GRID_TP_K_FLOOR}")
-    print(f"current_price: {format_decimal(current_price)}")
-    print(f"top_buy_price: {rows[0].buy_price}")
-    print(f"bottom_buy_price: {rows[-1].buy_price}")
-    print(f"lower_slot_count: {len(lower_indices)} / {len(rows)}")
-    print(f"lower_ratio: {format_decimal(lower_ratio)}")
-    print(f"target_lower_budget: {format_decimal(spec.lower_budget_krw)}")
-    print(f"actual_lower_budget: {format_decimal(actual_lower_total)}")
-    print(f"implicit_total_budget: {format_decimal(target_total_budget)}")
-    print(f"planned_buy_budget_total: {format_decimal(budget_summary.total)}")
-    print(f"top_slot_planned_buy_budget: {format_decimal(budget_summary.top_slot)}")
-    print(f"bottom_slot_planned_buy_budget: {format_decimal(budget_summary.bottom_slot)}")
-    print(f"version: {saved.metadata.version}")
-    if len(lower_indices) == len(rows):
-        print(
-            "[경고] 현재가가 최상단 buy_price 보다 높아 모든 슬롯이 '하단'으로 잡혔습니다. "
-            "이 경우 LOWER_BUDGET_KRW 가 곧 총 예산이 됩니다."
+
+        repository = PostgresGridRepository(
+            host=args.host,
+            port=args.port,
+            dbname=args.dbname,
+            user=args.user,
+            password=args.password,
+            schema=args.schema,
+            bot_key=args.bot_key,
         )
-    return 0
+        if repository.exists() and not args.force:
+            print("상태: 실패")
+            print("사유: 동일 bot_key 상태가 이미 존재합니다. 덮어쓰려면 --force 를 사용하세요.")
+            return 1
+
+        saved = repository.save(
+            GridSnapshot(
+                symbol=args.symbol,
+                rows=tuple(rows),
+                metadata=RepositoryMetadata(),
+            )
+        )
+        print("상태: 성공")
+        print(f"bot_key: {args.bot_key}")
+        print(f"symbol: {args.symbol}")
+        print(f"rows: {len(rows)}")
+        print(f"tp_model: {resolved_tp_model}")
+        print(f"tp_k_base: {spec.tp_k_base or cfg.GRID_TP_K_BASE}")
+        print(f"tp_k_floor: {spec.tp_k_floor or cfg.GRID_TP_K_FLOOR}")
+        print(f"current_price: {format_decimal(current_price)}")
+        print(f"top_buy_price: {rows[0].buy_price}")
+        print(f"bottom_buy_price: {rows[-1].buy_price}")
+        print(f"lower_slot_count: {len(lower_indices)} / {len(rows)}")
+        print(f"lower_ratio: {format_decimal(lower_ratio)}")
+        print(f"target_lower_budget: {format_decimal(spec.lower_budget_krw)}")
+        print(f"actual_lower_budget: {format_decimal(actual_lower_total)}")
+        print(f"implicit_total_budget: {format_decimal(target_total_budget)}")
+        print(f"planned_buy_budget_total: {format_decimal(budget_summary.total)}")
+        print(f"top_slot_planned_buy_budget: {format_decimal(budget_summary.top_slot)}")
+        print(f"bottom_slot_planned_buy_budget: {format_decimal(budget_summary.bottom_slot)}")
+        print(f"version: {saved.metadata.version}")
+        if len(lower_indices) == len(rows):
+            print(
+                "[경고] 현재가가 최상단 buy_price 보다 높아 모든 슬롯이 '하단'으로 잡혔습니다. "
+                "이 경우 LOWER_BUDGET_KRW 가 곧 총 예산이 됩니다."
+            )
+        return 0
+    finally:
+        lock.release()
 
 
 if __name__ == "__main__":
