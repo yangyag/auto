@@ -19,7 +19,8 @@ cd /home/yangyag/auto
 
 ### 실행 중인지 확인
 ```bash
-ps -eo pid,args | grep '[p]ython3 /home/yangyag/auto/main.py'
+test -f .auto-trading.pid && cat .auto-trading.pid || true
+ps -eo pid,args | grep '[p]ython.*/home/yangyag/auto/main.py'
 ```
 
 ## 2) 로그 보기
@@ -91,7 +92,7 @@ python3 scripts/show_grid_state.py
 ./scripts/upbit_realized_pnl.py [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--period daily|weekly|monthly|yearly|all] [--reset-sell-uuid UUID]
 ```
 
-기본 최근 90일, period=all (일/주/월/년/전체). 업비트 `GET /v1/orders/closed` 와 `/v1/order` 만 사용하는 read-only 분석. 매수/매도 FIFO 매칭으로 수수료 차감 순손익을 산출하며, 매칭되지 않는 매도(윈도우 시작 이전 매수분)는 별도 라인으로 분리. 기간은 2자리 연도 형식으로 표시하며, 주간 기간은 `26-04-20 ~ 26-04-26` 처럼 출력한다.
+기본 최근 90일, period=all (일/주/월/년/전체). 업비트 `GET /v1/orders/closed` 와 `/v1/order` 만 사용하는 read-only 분석. 봇 주문 `identifier`의 슬롯 번호를 기준으로 같은 슬롯 안에서만 BUY/SELL을 FIFO 매칭해 수수료 차감 순손익을 산출한다. 글로벌 FIFO가 아니며, 매칭되지 않는 매도(윈도우 시작 이전 매수분, identifier 패턴 불일치 등)는 별도 라인으로 분리한다. 기간은 2자리 연도 형식으로 표시하며, 주간 기간은 `26-04-20 ~ 26-04-26` 처럼 출력한다.
 
 `reset_krw_btc_live.py` 로 발생한 reset 전량 시장가 매도는 `{STATE_BOT_KEY}-reset-sell-...` identifier 로 자동 인식된다. 코드 반영 전 발생한 과거 reset 매도처럼 identifier 가 없는 청산 주문은 `--reset-sell-uuid <UUID>` 를 반복 지정해서 reset 청산 경계로 포함한다.
 
@@ -168,7 +169,7 @@ TP_K_FLOOR=7.0
 - `MIN_BUY_PRICE`, `MAX_BUY_PRICE`는 업비트 호가 단위에 맞는 값으로 넣어야 한다.
 - 안 맞으면 스크립트가 에러를 낸다.
 
-## 9) 제일 자주 쓸 명령 3개
+## 9) 제일 자주 쓸 명령 4개
 
 ### 그리드 반영
 ```bash

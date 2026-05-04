@@ -192,7 +192,7 @@ $$
 
 추가 조건:
 - 슬롯 $i$가 empty 상태다.
-- 슬롯 $i$에 pending BUY가 없다.
+- 슬롯 $i$에 pending 주문이 없다.
 - 슬롯 $i$가 active buy window 안에 있다.
 - inventory target gate를 통과한다.
 - breakout guard가 비활성이다.
@@ -214,7 +214,7 @@ $$
 추가 조건:
 - `UPWARD_BUY_ENABLED`가 true다.
 - 전체 그리드 기준 burst guard: active/pending 필터 적용 전, 전체 그리드에서 교차하는 empty 슬롯이 정확히 1개다.
-- 슬롯 $i$에 pending BUY가 없다.
+- 슬롯 $i$에 pending 주문이 없다.
 - 슬롯 $i$가 active buy window 안에 있다.
 - inventory target gate를 통과한다.
 - breakout guard가 비활성이다.

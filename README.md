@@ -1,19 +1,20 @@
 # auto
 
-Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-BTC`와 PostgreSQL 상태 저장소를 전제로 하며, 가격의 절대값이 아니라 전략 평가 사이클 사이에서 `buy_price`와 `sell_price`를 어떻게 교차했는지로 매수와 매도를 판단한다. 기본 현재가 루프는 업비트 public `ticker` WebSocket 이벤트를 기다리되, 전략 평가는 최소 3초 간격으로만 실행한다. WebSocket을 사용할 수 없거나 이벤트가 없으면 기존 5초 REST polling 으로 fallback 한다. 주문이 접수됐다고 바로 상태를 바꾸지 않고, 업비트 재조회 결과가 `done`으로 확인될 때만 그리드 상태를 갱신한다. BUY 체결이 확인되면 해당 슬롯의 TP 지정가 SELL 주문을 즉시 생성해 pending 으로 관리한다.
+Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-BTC`와 PostgreSQL 상태 저장소를 전제로 하며, 매수는 전략 평가 사이클 사이에서 `buy_price`를 어떻게 교차했는지로 판단하고, 매도는 보유 슬롯의 `effective_sell_price` 도달 여부로 판단한다. 기본 현재가 루프는 업비트 public `ticker` WebSocket 이벤트를 기다리되, 전략 평가는 최소 3초 간격으로만 실행한다. WebSocket을 사용할 수 없거나 이벤트가 없으면 기존 5초 REST polling 으로 fallback 한다. 주문이 접수됐다고 바로 상태를 바꾸지 않고, 업비트 재조회 결과가 `done`으로 확인될 때만 그리드 상태를 갱신한다. BUY 체결이 확인되면 해당 슬롯의 TP 지정가 SELL 주문을 즉시 생성해 pending 으로 관리한다.
 
-> **쉽게 말하면**: 그리드(여러 가격대 슬롯) 를 설정해두고 — **"가격이 매수 라인을 지나쳐 내려가면 사고, 매도 라인을 지나쳐 올라가면 판다"**. 핵심은 "지금 가격이 얼마냐" 가 아니라 "직전 체크 시점과 비교해서 어느 라인을 **건너갔냐**" 다. 그래야 같은 슬롯을 여러 번 체결하거나 가격 변동을 놓치는 일이 없다.
+> **쉽게 말하면**: 그리드(여러 가격대 슬롯) 를 설정해두고 — **"가격이 매수 라인을 지나쳐 내려가면 사고, 보유 슬롯의 목표 매도 가격 이상이면 판다"**. 매수 쪽 핵심은 "지금 가격이 얼마냐" 가 아니라 "직전 체크 시점과 비교해서 어느 라인을 **건너갔냐**" 다. 그래야 같은 슬롯을 여러 번 체결하거나 가격 변동을 놓치는 일이 없다.
 
 ## 파일 구성 및 역할
 
 루트의 업무 폴더는 `app/`, `scripts/`, `db/`, `docs/`, `tests/`로 제한한다.
-운영 코드는 `app/` 패키지 아래에 모여 있고, 기존 운영 명령 호환을 위해 루트 `main.py`와 `scripts/` 경로는 유지한다.
+운영 코드는 `app/` 패키지 아래에 모여 있고, 기존 운영 명령 호환을 위해 루트 `main.py`, 루트 호환 alias 모듈, `scripts/` 경로는 유지한다.
 각 폴더의 주요 `.py` 파일 역할은 다음과 같다.
 
 | 분류 | 파일 | 역할 설명 |
 | :--- | :--- | :--- |
 | **Root** | `main.py` | 기존 `python3 main.py ...` 명령을 유지하는 호환 진입점 |
-| **app/** | `main.py` | 프로그램 진입점 구현. CLI 커맨드(run, init-grid 등) 처리 및 WebSocket 이벤트 기반 메인 루프 실행 |
+| | `core.py`, `strategy.py`, `exchange.py`, `storage.py`, `config.py`, `utils.py` | 예전 루트 패키지 import 경로를 `app/` 하위 패키지로 연결하는 호환 alias |
+| **app/** | `main.py` | 프로그램 진입점 구현. 인자 없는 실행은 봇 루프, CLI subcommand는 `balance`, `init-grid` 처리 |
 | **app/core/** | `grid.py` | 그리드 슬롯의 상태(`GridState`) 관리 및 업데이트 로직 |
 | | `grid_builder.py` | 설정된 속성값에 따라 신규 그리드 슬롯(`GridRow`)을 생성 및 분배 |
 | | `grid_properties.py` | 그리드 범위, 예산 가중치 등 그리드 명세(`GridPropertySpec`) 정의 |
@@ -30,11 +31,11 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 | | `upbit_ws.py` | 업비트 WebSocket ticker/candle/myAsset/myOrder 캐시와 현재가 이벤트 대기 기능 |
 | | `base.py` | 거래소 연동을 위한 공통 추상 클래스(`BaseExchange`) 정의 |
 | | `stock.py` | 주식 거래소 연동용 stub. `EXCHANGE_TYPE=stock` 일 때 로드되는 `BaseExchange` 구현 뼈대이며 현재는 `NotImplementedError` 만 던진다 (KIS API 등 실 연동 시 교체 예정) |
-| **scripts/** | `reset_krw_btc_live.py` | 운영 중인 그리드를 초기화하고 자산을 정리하여 재시작하는 운영 스크립트 |
+| **scripts/** | `reset_krw_btc_live.py` | 운영 중인 그리드와 자산을 정리하고 새 그리드를 반영하는 운영 스크립트. 봇 재시작은 자동으로 하지 않는다 |
 | | `show_grid_state.py` | 현재 DB에 저장된 그리드와 주문의 상태를 요약해서 터미널에 출력 |
 | | `apply_grid_properties_to_postgres.py` | `grid.properties` 파일의 설정을 DB의 그리드 테이블에 강제 반영 |
 | | `adjust_budget_live.py` | 현재 DB 그리드의 가격 구조와 보유 수량은 유지한 채 `planned_qty`만 재계산하여 예산을 보수적으로 증액/감액. `--target-budget` (절대 총액) 으로 지정 |
-| | `upbit_realized_pnl.py` | 업비트 `GET /v1/orders/closed` + `/v1/order` 로 KRW-BTC 실현 손익을 일/주/월/년/전체 단위로 FIFO 매칭하여 산출 (수수료 차감, read-only 분석). reset 청산 매도는 자동 인식하며, 과거 reset 주문은 `--reset-sell-uuid`로 지정 가능 |
+| | `upbit_realized_pnl.py` | 업비트 `GET /v1/orders/closed` + `/v1/order` 로 KRW-BTC 실현 손익을 일/주/월/년/전체 단위로 산출. 봇 주문 identifier의 슬롯 번호를 기준으로 같은 슬롯 안에서만 FIFO 매칭한다 (수수료 차감, read-only 분석). reset 청산 매도는 자동 인식하며, 과거 reset 주문은 `--reset-sell-uuid`로 지정 가능 |
 | **app/utils/** | `upbit_market.py` | 업비트 마켓의 최소 주문 단위, 호가 단위 등 시장 정보 관리 |
 | | `grid_reporting.py` | 수익률, 재고 현황 등 그리드 운영 성과 리포팅 유틸리티 |
 | | `decimal_utils.py` | 정밀한 수치 계산을 위한 Decimal 변환 및 절사(Truncate) 도구 |
@@ -43,7 +44,7 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 
 ## 전략 개요
 
-> **한 줄 요약**: 가격대를 여러 슬롯으로 촘촘히 나눠두고, 가격이 어떤 슬롯의 매수가를 **아래로 지나치면 산다** / **위로 지나치면 판다**. 매수/매도 차익을 슬롯마다 누적한다.
+> **한 줄 요약**: 가격대를 여러 슬롯으로 촘촘히 나눠두고, 가격이 어떤 빈 슬롯의 매수가를 **아래로 지나치면 사고**, 보유 슬롯은 목표 매도 가격 이상이면 판다. 매수/매도 차익을 슬롯마다 누적한다.
 
 - 그리드는 빈 슬롯과 보유 슬롯의 집합으로 운영된다.
 - 빈 슬롯은 하락 교차에서 매수 후보가 되고, 보유 슬롯은 목표 매도 가격 이상에서 매도 후보가 된다.
@@ -78,7 +79,7 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 가격 조건만 맞는다고 바로 사지 않는다.
 - 활성 윈도우는 `previous_price` 기준으로 계산한다.
 - 기본값은 현재가 아래 최근접 `48` 슬롯과 위쪽 재진입 후보 `8` 슬롯이다.
-- pending BUY 슬롯은 활성 윈도우 안에 있어도 신규 매수 제출 대상에서 제외된다.
+- 같은 슬롯에 pending 주문이 있으면 활성 윈도우 안에 있어도 신규 매수 제출 대상에서 제외된다.
 - 구현은 더 먼 empty 슬롯으로 backfill 하지 않는 보수적 계약이다.
 
 > **쉽게 말하면**: 현재가 근처 슬롯들만 매수 대상. 멀리 있는 슬롯은 그 가격에 진짜 도달한 뒤에 다뤄진다 (먼 곳으로 미리 채우지 않는다).
@@ -139,7 +140,7 @@ Age TP 압축 규칙과 `effective_sell_price` 계산식은 [Strategy Formulas](
 
 캔들 조회 실패 시 기본값은 `BREAKOUT_GUARD_FAIL_OPEN=False` 이다. 즉 데이터가 불안정하면 신규 매수를 막는 fail-close 쪽으로 동작한다.
 
-> **쉽게 말하면**: 가격이 그리드 밴드를 **확실히 벗어나서 추세 이탈 중이면 신규 매수 중단**, 이미 보유한 건 계속 팔기는 허용. 예) 15분 캔들 3개가 연속으로 그리드 천장 위에서 마감 → "그리드가 따라잡기엔 너무 튀었다" → 매수 멈춤. 캔들 데이터를 아예 못 가져오는 경우도 **매수를 막는 쪽 (fail-close)** 이 기본값 — "잘 모르면 안 사는 게 안전" 원칙.
+> **쉽게 말하면**: 가격이 그리드 밴드를 **확실히 벗어나서 추세 이탈 중이면 신규 매수 중단**, 이미 보유한 건 계속 팔기는 허용. 예) 기본값 기준 15분 캔들 4개가 연속으로 그리드 천장 위에서 마감 → "그리드가 따라잡기엔 너무 튀었다" → 매수 멈춤. 캔들 데이터를 아예 못 가져오는 경우도 **매수를 막는 쪽 (fail-close)** 이 기본값 — "잘 모르면 안 사는 게 안전" 원칙.
 
 ## 주문 제출과 상태 반영
 주문 제출 경로는 아래 순서다.
@@ -155,16 +156,18 @@ Age TP 압축 규칙과 `effective_sell_price` 계산식은 [Strategy Formulas](
 >
 > 즉 실주문 보내기 전에 **두 번 먼저 체크** 하는 구조. 엉뚱한 주문으로 실패/블록당하지 않으려는 보수적 경로다.
 
-실주문 body 에만 `identifier` 를 넣고, `orders/test` body 에는 넣지 않는다. 주문 생성 성공은 체결 완료와 다르다. 상태 저장소는 업비트 `GET /v1/order` 재조회 결과가 `done`일 때만 갱신한다. `wait` 와 `watch` 상태 주문은 pending 으로 유지한다.
+실주문 body 에만 `identifier` 를 넣고, `orders/test` body 에는 넣지 않는다. 주문 생성 성공은 체결 완료와 다르다. 상태 저장소는 업비트 `GET /v1/order` 재조회 결과가 `done`일 때만 갱신한다. `wait` 와 `watch` 상태 주문은 pending 으로 유지한다. `cancel` 이더라도 `executed_volume > 0` 인 경우는 부분 체결로 별도 반영한다.
 
-> **쉽게 말하면**: "주문 넣었다 = 체결됐다" 가 아니다. 주문은 접수만 됐을 뿐. 실제로 `GET /v1/order` 로 다시 조회해서 **업비트가 "done" 이라고 답할 때만** 그리드 상태를 "보유" 로 바꾼다. 타임아웃이나 네트워크 에러처럼 결과가 애매하면 **절대 자동 재시도하지 않고** pending 으로 남겨, 다음 주기에 reconciliation 으로 정리한다 (중복 매수 방지).
+> **쉽게 말하면**: "주문 넣었다 = 체결됐다" 가 아니다. 주문은 접수만 됐을 뿐. 실제로 `GET /v1/order` 로 다시 조회해서 **업비트가 "done" 이라고 답할 때만** 그리드 상태를 "보유" 로 바꾼다. `wait`/`watch` 주문은 pending 으로 남겨 다음 주기에 reconciliation 으로 정리한다. 단, 실주문 `POST /v1/orders` 호출 자체가 타임아웃/네트워크 오류로 실패해 `uuid`를 받지 못한 경우 현재 구현은 pending 주문으로 저장하지 못하고 실패로 기록한다.
 
 체결/취소 처리 규칙:
 - BUY 체결 확인 후 슬롯을 holding 으로 반영하고 즉시 TP SELL pending 주문을 생성한다.
 - `cancelled` 이면서 `executed_volume > 0` 인 BUY는 부분 체결로 보고 holding 반영 후 TP SELL을 생성한다.
 - `cancelled` 이면서 `executed_volume > 0` 인 SELL은 부분 매도로 보고 남은 `held_qty`를 유지한 뒤 잔여 수량 기준 TP SELL을 다시 건다.
 
-rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단에 대한 bounded backoff 로만 다룬다. `POST /v1/orders` timeout 또는 network 오류처럼 체결 여부가 모호한 경우는 자동 재시도하지 않는다.
+rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단에 대한 bounded backoff 로만 다룬다. `POST /v1/orders` timeout 또는 network 오류처럼 체결 여부가 모호한 경우는 자동 재시도하지 않는다. 이 경우 `uuid`가 없으므로 pending reconciliation 대상에도 자동 등록되지 않는다.
+
+봇 시작 시에는 거래소에 열려 있지만 DB의 pending 주문 저장소에는 없는 `KRW-BTC` 미체결 주문을 조회해 취소한다. DB를 기준으로 관리하지 않는 외부/수동 주문과 섞여 중복 상태가 생기는 것을 막기 위한 부팅 가드다.
 
 ## 그리드 생성 경로
 - `main.py init-grid`는 슬롯 개수 기반이다.
@@ -181,7 +184,8 @@ rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단
 - 대상: `KRW-BTC` 라이브 운영 환경
 - 실행 위치: EC2 `cd /home/ubuntu/auto`
 - 실행 명령: `.venv/bin/python scripts/reset_krw_btc_live.py`
-- 수행 순서: `./stop.sh` -> 업비트 `KRW-BTC` 미체결 주문 취소 -> BTC 전량 시장가 매도 -> `grid.properties` 기준 DB 그리드 재반영 -> 상태 출력 -> `./run.sh`
+- 수행 순서: `./stop.sh` -> 업비트 `KRW-BTC` 미체결 주문 취소 -> BTC 전량 시장가 매도 -> `grid.properties` 기준 DB 그리드 재반영 -> 상태 출력
+- 재시작은 자동으로 하지 않는다. 결과 확인 후 필요하면 직접 `./run.sh` 를 실행한다.
 - reset 전량 시장가 매도에는 `{STATE_BOT_KEY}-reset-sell-...` identifier를 붙인다. `scripts/upbit_realized_pnl.py` 는 이 주문을 reset 청산 경계로 자동 인식한다.
 
 즉 다음번에 `TOTAL_BUDGET_KRW` 같은 금액만 바꿔도, 라이브 재초기화는 이 스크립트를 실행하는 것을 기본 경로로 본다. `scripts/apply_grid_properties_to_postgres.py --force` 는 DB 반영만 필요할 때 쓰는 하위 경로다.
@@ -210,5 +214,8 @@ rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단
 - `UPBIT_WS_CANDLE_ENABLED`, `UPBIT_WS_ASSET_ENABLED`, `UPBIT_WS_ORDER_ENABLED`: 캔들/자산/주문 상태 WebSocket 캐시 사용 여부를 제어한다. 주문 생성과 취소는 계속 REST만 사용한다. `UPBIT_WS_ORDER_ENABLED=true` 여도 주문 상태의 terminal 판정은 반드시 `GET /v1/order` REST 재조회 기준이며, WS myOrder 캐시는 관측/힌트 용도다.
 
 ## 참고 문서
+- [docs/setup.md](docs/setup.md)
+- [docs/operations.md](docs/operations.md)
+- [docs/quick-commands.md](docs/quick-commands.md)
 - [docs/strategy-formulas.md](docs/strategy-formulas.md)
 - [docs/UPBIT_API_REFERENCE.md](docs/UPBIT_API_REFERENCE.md)
