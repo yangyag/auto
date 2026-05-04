@@ -63,21 +63,21 @@ class ShowGridStateScriptTest(unittest.TestCase):
         output = buffer.getvalue()
         self.assertEqual(exit_code, 0)
         self.assertIn("상태: 성공", output)
-        self.assertIn("backend: postgres", output)
-        self.assertIn("source: postgres:auto_trading/krw-btc-live", output)
-        self.assertIn("symbol: KRW-BTC", output)
-        self.assertIn("rows: 2", output)
-        self.assertIn("total_inventory: 0.25", output)
-        self.assertIn("planned_buy_budget_total: 145", output)
-        self.assertIn("top_slot_planned_buy_budget: 100", output)
-        self.assertIn("bottom_slot_planned_buy_budget: 45", output)
-        self.assertIn("slot | buy | held | sell | planned | planned_krw | status", output)
+        self.assertIn("백엔드: postgres", output)
+        self.assertIn("소스: postgres:auto_trading/krw-btc-live", output)
+        self.assertIn("심볼: KRW-BTC", output)
+        self.assertIn("행 수: 2", output)
+        self.assertIn("총 보유량: 0.25", output)
+        self.assertIn("계획 매수 예산 합계: 145", output)
+        self.assertIn("상단 슬롯 계획 매수 예산: 100", output)
+        self.assertIn("하단 슬롯 계획 매수 예산: 45", output)
+        self.assertIn("슬롯 | 매수가 | 보유량 | 매도가 | 계획량 | 계획_원화 | 상태", output)
         self.assertIn(
-            "1) buy=             100 held=               0 sell=             105 planned=               1 planned_krw=             100 status=empty",
+            "1) buy=             100 held=               0 sell=             105 planned=               1 planned_krw=             100 status=비어있음",
             output,
         )
         self.assertIn(
-            "2) buy=              90 held=            0.25 sell=            94.5 planned=             0.5 planned_krw=              45 status=holding",
+            "2) buy=              90 held=            0.25 sell=            94.5 planned=             0.5 planned_krw=              45 status=보유중",
             output,
         )
 
@@ -105,16 +105,16 @@ class ShowGridStateScriptTest(unittest.TestCase):
 
         output = buffer.getvalue()
         self.assertEqual(exit_code, 0)
-        self.assertIn("backend: postgres", output)
-        self.assertIn("source: postgres:auto_trading/krw-btc-live", output)
-        self.assertIn("symbol: KRW-BTC", output)
-        self.assertIn("rows: 1", output)
-        self.assertIn("total_inventory: 0.1", output)
-        self.assertIn("planned_buy_budget_total: 100", output)
-        self.assertIn("top_slot_planned_buy_budget: 100", output)
-        self.assertIn("bottom_slot_planned_buy_budget: 100", output)
+        self.assertIn("백엔드: postgres", output)
+        self.assertIn("소스: postgres:auto_trading/krw-btc-live", output)
+        self.assertIn("심볼: KRW-BTC", output)
+        self.assertIn("행 수: 1", output)
+        self.assertIn("총 보유량: 0.1", output)
+        self.assertIn("계획 매수 예산 합계: 100", output)
+        self.assertIn("상단 슬롯 계획 매수 예산: 100", output)
+        self.assertIn("하단 슬롯 계획 매수 예산: 100", output)
         self.assertIn(
-            "1) buy=             100 held=             0.1 sell=             105 planned=               1 planned_krw=             100 status=holding",
+            "1) buy=             100 held=             0.1 sell=             105 planned=               1 planned_krw=             100 status=보유중",
             output,
         )
 
@@ -236,13 +236,13 @@ class ShowGridStateScriptTest(unittest.TestCase):
 
         output = buffer.getvalue()
         self.assertEqual(exit_code, 0)
-        self.assertIn("recenter_preview: blocked", output)
-        self.assertIn("recenter_can_apply: no", output)
+        self.assertIn("리센터 미리보기: blocked", output)
+        self.assertIn("리센터 적용 가능: 아니오", output)
         self.assertIn(
-            "recenter_blockers: breakout_duration_below_24h, open_buy_orders_present",
+            "리센터 차단 항목: breakout_duration_below_24h, open_buy_orders_present",
             output,
         )
-        self.assertIn("recenter_proposed_band: 95 -> 135", output)
+        self.assertIn("리센터 제안 밴드: 95 -> 135", output)
 
 
 if __name__ == "__main__":
