@@ -33,7 +33,7 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 | **scripts/** | `reset_krw_btc_live.py` | 운영 중인 그리드를 초기화하고 자산을 정리하여 재시작하는 운영 스크립트 |
 | | `show_grid_state.py` | 현재 DB에 저장된 그리드와 주문의 상태를 요약해서 터미널에 출력 |
 | | `apply_grid_properties_to_postgres.py` | `grid.properties` 파일의 설정을 DB의 그리드 테이블에 강제 반영 |
-| | `adjust_budget_live.py` | 현재 DB 그리드의 가격 구조와 보유 수량은 유지한 채 `planned_qty`만 재계산하여 예산을 보수적으로 증액/감액. `--target-lower-budget <KRW>` (현재가 미만 슬롯의 매수합 목표값) 으로 지정 |
+| | `adjust_budget_live.py` | 현재 DB 그리드의 가격 구조와 보유 수량은 유지한 채 `planned_qty`만 재계산하여 예산을 보수적으로 증액/감액. `--target-budget` (절대 총액) 으로 지정 |
 | | `upbit_realized_pnl.py` | 업비트 `GET /v1/orders/closed` + `/v1/order` 로 KRW-BTC 실현 손익을 일/주/월/년/전체 단위로 FIFO 매칭하여 산출 (수수료 차감, read-only 분석). reset 청산 매도는 자동 인식하며, 과거 reset 주문은 `--reset-sell-uuid`로 지정 가능 |
 | **app/utils/** | `upbit_market.py` | 업비트 마켓의 최소 주문 단위, 호가 단위 등 시장 정보 관리 |
 | | `grid_reporting.py` | 수익률, 재고 현황 등 그리드 운영 성과 리포팅 유틸리티 |
@@ -168,12 +168,11 @@ rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단
 
 ## 그리드 생성 경로
 - `main.py init-grid`는 슬롯 개수 기반이다.
-- `grid.properties`는 `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `LOWER_BUDGET_KRW`와 `GRID_COUNT` 또는 `GRID_STEP_PCT` 중 정확히 하나를 받는다.
-- 시드 시점 KRW-BTC 현재가를 ticker REST 로 1회 조회한 뒤, 현재가 미만 슬롯의 매수합이 `LOWER_BUDGET_KRW` 가 되도록 implicit 총 예산을 역산한다.
-- 역산된 총 예산을 상단/중단/하단 가중치로 정규화 배분하고, 슬롯별 `planned_qty`를 BTC 수량 step 기준으로 내림 계산한다.
-- 슬롯 수, 가격 사다리, 예산 역산, 수량 양자화 공식은 [Strategy Formulas](docs/strategy-formulas.md#그리드-슬롯-수)에 정리되어 있다.
+- `grid.properties`는 `MIN_BUY_PRICE`, `MAX_BUY_PRICE`, `TOTAL_BUDGET_KRW`와 `GRID_COUNT` 또는 `GRID_STEP_PCT` 중 정확히 하나를 받는다.
+- `TOTAL_BUDGET_KRW`를 상단/중단/하단 `0.7x / 1.0x / 1.3x` 가중치로 정규화 배분한다.
+- 각 슬롯 `planned_qty`는 `slot_budget / buy_price` 기준 소수 BTC 단위 내림으로 계산한다.
 
-> **쉽게 말하면**: 사용자가 "현재가 밑의 그리드를 다 매수하는 데 필요한 KRW" 만 지정하면, 시스템이 가중치 비율로 보고 위쪽까지 채우는 데 필요한 총 예산을 역산해 슬롯별로 분배한다. 비싼 구간은 적게, 싼 구간은 많이 담을 수 있도록 자금을 아래쪽으로 기울여두는 구조다. 현재가가 최상단 buy_price 보다 높으면 모든 슬롯이 "하단" 으로 잡혀 `LOWER_BUDGET_KRW` 가 곧 총 예산이 된다.
+> **쉽게 말하면**: 같은 총예산을 슬롯에 **균등 배분하지 않는다**. 상단(비싼 구간)은 0.7배로 적게, 하단(싼 구간)은 1.3배로 많이 분배한다. 바닥에 떨어졌을 때 더 많이 담을 수 있도록 자금을 아래쪽으로 기울여두는 구조.
 
 `GRID_COUNT`는 슬롯 수를 직접 고정할 때 쓰고, `GRID_STEP_PCT`는 기존 슬롯 간격을 비율로 그대로 복원할 때 쓴다.
 
@@ -182,25 +181,24 @@ rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단
 - 대상: `KRW-BTC` 라이브 운영 환경
 - 실행 위치: EC2 `cd /home/ubuntu/auto`
 - 실행 명령: `.venv/bin/python scripts/reset_krw_btc_live.py`
-- 수행 순서: `./stop.sh` -> 업비트 `KRW-BTC` 미체결 주문 취소 -> BTC 전량 시장가 매도 -> 시드 시점 KRW-BTC 현재가 fetch -> `grid.properties` 기준 DB 그리드 재반영 -> 상태 출력
-- 재시작은 자동으로 하지 않는다. 리셋 결과를 확인한 뒤 필요하면 `./run.sh` 를 직접 실행한다.
+- 수행 순서: `./stop.sh` -> 업비트 `KRW-BTC` 미체결 주문 취소 -> BTC 전량 시장가 매도 -> `grid.properties` 기준 DB 그리드 재반영 -> 상태 출력 -> `./run.sh`
 - reset 전량 시장가 매도에는 `{STATE_BOT_KEY}-reset-sell-...` identifier를 붙인다. `scripts/upbit_realized_pnl.py` 는 이 주문을 reset 청산 경계로 자동 인식한다.
 
-즉 다음번에 `LOWER_BUDGET_KRW` 같은 금액만 바꿔도, 라이브 재초기화는 이 스크립트를 실행하는 것을 기본 경로로 본다. `scripts/apply_grid_properties_to_postgres.py --force` 는 DB 반영만 필요할 때 쓰는 하위 경로다.
+즉 다음번에 `TOTAL_BUDGET_KRW` 같은 금액만 바꿔도, 라이브 재초기화는 이 스크립트를 실행하는 것을 기본 경로로 본다. `scripts/apply_grid_properties_to_postgres.py --force` 는 DB 반영만 필요할 때 쓰는 하위 경로다.
 
 보유 물량을 청산하지 않고 빈 슬롯의 매수 대기 금액만 보수적으로 조정하려면 `scripts/adjust_budget_live.py` 를 쓴다.
 
-- 목적: 현재 DB의 `buy_price` ladder, `held_qty`, `sell_price`, `filled_at` 는 유지하고 `planned_qty`만 새 하단 매수합 목표 기준으로 다시 계산
+- 목적: 현재 DB의 `buy_price` ladder, `held_qty`, `sell_price`, `filled_at` 는 유지하고 `planned_qty`만 새 총예산 기준으로 다시 계산
 - 적용 범위: 빈 슬롯은 즉시 새 `planned_qty`가 반영되고, 보유 슬롯은 현재 보유 수량을 유지한 채 다음 복원 시점부터 새 `planned_qty` 의미를 사용
 - 입력 옵션:
-  - `--target-lower-budget <KRW>` (필수): 업비트 ticker REST 로 현재가 1회 조회 후, 현재가 미만 슬롯들의 매수합이 지정 금액이 되도록 가중치 비율로 총 예산을 역산한다. BTC 수량 양자화 때문에 실제 하단 합은 목표보다 살짝 작을 수 있다. 세부 공식은 [Strategy Formulas](docs/strategy-formulas.md#라이브-예산-조정)에 정리되어 있다.
-- 안전장치: DB ladder 연속성/내림차순 검증, open BUY 주문 차단(확정 전후 2회), BTC 수량 step 내림, 업비트 최소 주문 금액 검사, `역산된 총 예산 < current_inventory_cost` 경고와 `--force` 요구, 사용자 `y/n` 확정 후에만 DB 저장.
-- 권장 절차: `./stop.sh` -> open BUY 없음 확인 -> `.venv/bin/python scripts/adjust_budget_live.py --target-lower-budget <KRW>` -> `./run.sh`
-- 주의: 이 스크립트는 soft adjust 경로다. 이미 보유한 물량을 즉시 줄이지 않으므로, 역산된 총 예산이 현재 인벤토리 원가보다 작아도 실제 예산 회수는 매도 이후에 완료된다.
+  - `--target-budget <KRW>` (필수): 그리드 전체 총 예산을 절대값으로 지정.
+- 안전장치: DB ladder 연속성/내림차순 검증, open BUY 주문 차단(확정 전후 2회), BTC 수량 step 내림, 업비트 최소 주문 금액 검사, `target_budget < current_inventory_cost` 경고와 `--force` 요구, 사용자 `y/n` 확정 후에만 DB 저장.
+- 권장 절차: `./stop.sh` -> open BUY 없음 확인 -> `.venv/bin/python scripts/adjust_budget_live.py --target-budget <KRW>` -> `./run.sh`
+- 주의: 이 스크립트는 soft adjust 경로다. 이미 보유한 물량을 즉시 줄이지 않으므로, 목표 예산이 현재 인벤토리 원가보다 작아도 실제 예산 회수는 매도 이후에 완료된다.
 
 ## 핵심 설정 의미
-- `GRID_LOWER_BUDGET_KRW` / `--lower-budget` / `LOWER_BUDGET_KRW`: `init-grid`와 `grid.properties`가 공유하는 "하단 매수합 목표" 입력값. 시스템이 시드 시점 현재가와 가중치 비율로 implicit 총 예산을 역산한다. `init-grid`는 슬롯 수 기반이다.
-- `MAX_TOTAL_BUDGET_KRW`: 역산 후 최종 그리드 총배정금액 한도 검사에 사용한다.
+- `GRID_TOTAL_BUDGET_KRW` / `--total-budget` / `TOTAL_BUDGET_KRW`: `init-grid`와 `grid.properties`가 공유하는 총예산 입력값이다. `init-grid`는 슬롯 수 기반이다.
+- `MAX_TOTAL_BUDGET_KRW`: 전체 그리드 총배정금액 한도 검사에 사용한다.
 - `MAX_OPERATING_BUDGET_KRW`: 재고 비율 `q_current` 계산 분모다.
 - `UPBIT_FEE_RATE`, `FEE_BUFFER_KRW`: 매수 필요 KRW 추정에 반영하는 수수료/안전 버퍼다.
 - `UPWARD_BUY_ENABLED`: 상승 1칸 돌파 시장가 예산매수 토글이다.

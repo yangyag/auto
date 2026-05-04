@@ -116,8 +116,8 @@ source /home/ubuntu/auto/.venv/bin/activate
 ## 주문 관련 용어
 - `orders` 테이블의 `quantity` 컬럼은 최초 발주량이다. 부분 체결 시 실제 체결량과 다를 수 있으므로 실 체결량은 `GridState.held_qty`를 참조한다. 사고 분석 시 두 값을 함께 본다.
 
-## 라이브 예산 조정 비단조성 주의
-- `scripts/adjust_budget_live.py`의 `r_lower`는 현재가에 의존한다. 동일 `--target-lower-budget X` 입력이라도 시장 위치가 바뀌면 implicit 총예산이 달라진다. 비단조 동작 자체는 설계 정상이지만, 실행 시점을 의식하고 여러 번 실행 시 누적 효과를 고려해야 한다.
+## 라이브 예산 조정 주의
+- `scripts/adjust_budget_live.py`는 절대 총예산(`--target-budget`)으로 운영되며, 현재 그리드의 가격 구조와 보유 수량을 유지한 채 계획 수량만 재계산한다.
 
 ## 자격증명 / 민감정보 원칙
 - API 키는 환경변수 `UPBIT_ACCESS_KEY`, `UPBIT_SECRET_KEY`로만 주입한다.

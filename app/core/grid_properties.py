@@ -25,7 +25,7 @@ DEFAULT_GRID_ALLOCATION_WEIGHTS = (
 ALLOWED_GRID_PROPERTY_KEYS = {
     "MIN_BUY_PRICE",
     "MAX_BUY_PRICE",
-    "LOWER_BUDGET_KRW",
+    "TOTAL_BUDGET_KRW",
     "GRID_COUNT",
     "GRID_STEP_PCT",
     "TP_MODEL",
@@ -38,7 +38,7 @@ ALLOWED_GRID_PROPERTY_KEYS = {
 class GridPropertySpec:
     min_buy_price: Decimal
     max_buy_price: Decimal
-    lower_budget_krw: Decimal
+    total_budget_krw: Decimal
     grid_count: int
     tp_model: str | None = DEFAULT_TP_MODEL
     tp_k_base: Decimal | None = None
@@ -93,7 +93,7 @@ def load_grid_property_spec(path: str | Path) -> GridPropertySpec:
         properties[key.strip()] = value.strip()
 
     missing = [
-        key for key in ("MIN_BUY_PRICE", "MAX_BUY_PRICE", "LOWER_BUDGET_KRW")
+        key for key in ("MIN_BUY_PRICE", "MAX_BUY_PRICE", "TOTAL_BUDGET_KRW")
         if key not in properties or not properties[key]
     ]
     if missing:
@@ -123,7 +123,7 @@ def load_grid_property_spec(path: str | Path) -> GridPropertySpec:
     return GridPropertySpec(
         min_buy_price=min_buy_price,
         max_buy_price=max_buy_price,
-        lower_budget_krw=to_decimal(properties["LOWER_BUDGET_KRW"]),
+        total_budget_krw=to_decimal(properties["TOTAL_BUDGET_KRW"]),
         grid_count=grid_count,
         tp_model=properties.get("TP_MODEL") or DEFAULT_TP_MODEL,
         tp_k_base=to_decimal(properties["TP_K_BASE"]) if properties.get("TP_K_BASE") else None,
@@ -247,92 +247,33 @@ def _compute_buy_prices_desc(
     return buy_prices_desc
 
 
-def resolve_total_budget_from_lower(
-    *,
-    raw_weights: list[Decimal],
-    buy_prices_desc: list[Decimal],
-    current_price: Decimal,
-    lower_budget_krw: Decimal,
-) -> tuple[Decimal, list[int], Decimal]:
-    """LOWER_BUDGET_KRW 로부터 implicit total_budget 을 가중치 비율로 역산한다.
-
-    Returns: (target_total_budget, lower_indices, lower_ratio).
-    lower_indices 는 buy_price < current_price 인 슬롯의 0-based 인덱스 목록.
-    """
-    if current_price <= DECIMAL_ZERO:
-        raise ValueError("현재가는 0보다 커야 합니다.")
-    if lower_budget_krw <= DECIMAL_ZERO:
-        raise ValueError("LOWER_BUDGET_KRW는 0보다 커야 합니다.")
-    if len(raw_weights) != len(buy_prices_desc):
-        raise ValueError(
-            "raw_weights 와 buy_prices_desc 의 길이가 일치해야 합니다: "
-            f"weights={len(raw_weights)}, prices={len(buy_prices_desc)}"
-        )
-
-    lower_indices = [
-        idx for idx, price in enumerate(buy_prices_desc) if price < current_price
-    ]
-    if not lower_indices:
-        raise ValueError(
-            f"현재가({current_price}) 미만의 슬롯이 없습니다. "
-            f"top_buy_price={buy_prices_desc[0]}"
-        )
-
-    total_weight = sum(raw_weights, DECIMAL_ZERO)
-    lower_weight_sum = sum((raw_weights[i] for i in lower_indices), DECIMAL_ZERO)
-    if lower_weight_sum <= DECIMAL_ZERO:
-        raise ValueError("하단 가중치 합이 0 이하입니다. 그리드 가중치 분배를 확인하세요.")
-    lower_ratio = lower_weight_sum / total_weight
-    target_total_budget = lower_budget_krw / lower_ratio
-    return target_total_budget, lower_indices, lower_ratio
-
-
-def build_weighted_slot_budgets(
-    spec: GridPropertySpec,
-    *,
-    current_price: Decimal,
-    buy_prices_desc: list[Decimal] | None = None,
-) -> tuple[list[Decimal], list[int], Decimal, Decimal]:
-    """슬롯별 KRW 예산을 계산하고 리포트 메타를 함께 반환한다.
-
-    spec.lower_budget_krw 는 buy_price < current_price 인 슬롯의 매수합 목표값이며,
-    가중치 비율로 implicit total_budget 을 역산한 뒤 가중치 분배를 수행한다.
-
-    Returns: (slot_budgets, lower_indices, lower_ratio, target_total_budget).
-
-    buy_prices_desc 가 주어지면 그 ladder 를 그대로 사용하고, 없으면 spec 의
-    min/max + grid_count 로 재구성한다 (시드 경로). 라이브 조정 경로는
-    이미 알려진 ladder 를 전달해 재계산을 피한다.
-    """
+def build_weighted_slot_budgets(spec: GridPropertySpec) -> list[Decimal]:
+    """grid.properties 경로 전용 슬롯별 KRW 예산을 계산한다."""
     grid_count = int(spec.grid_count)
-    raw_weights = _compute_raw_weights(grid_count)
-    if buy_prices_desc is None:
-        buy_prices_desc = _compute_buy_prices_desc(
-            min_buy_price=normalize_krw_price(to_decimal(spec.min_buy_price)),
-            max_buy_price=normalize_krw_price(to_decimal(spec.max_buy_price)),
-            grid_count=grid_count,
-        )
+    if grid_count < 2:
+        raise ValueError("GRID_COUNT는 2 이상이어야 합니다.")
 
-    target_total_budget, lower_indices, lower_ratio = resolve_total_budget_from_lower(
-        raw_weights=raw_weights,
-        buy_prices_desc=buy_prices_desc,
-        current_price=to_decimal(current_price),
-        lower_budget_krw=to_decimal(spec.lower_budget_krw),
-    )
-    total_weight = sum(raw_weights, DECIMAL_ZERO)
-    slot_budgets = [(target_total_budget * weight) / total_weight for weight in raw_weights]
-    return slot_budgets, lower_indices, lower_ratio, target_total_budget
+    if grid_count == 2:
+        raw_weights = [DEFAULT_TOP_THIRD_WEIGHT, DEFAULT_BOTTOM_THIRD_WEIGHT]
+    else:
+        raw_weights = []
+        for zero_based_index in range(grid_count):
+            bucket = min((zero_based_index * 3) // (grid_count - 1), 2)
+            raw_weights.append(DEFAULT_GRID_ALLOCATION_WEIGHTS[bucket])
+
+    weight_sum = sum(raw_weights, DECIMAL_ZERO)
+    total_budget = to_decimal(spec.total_budget_krw)
+    if total_budget <= DECIMAL_ZERO:
+        raise ValueError("TOTAL_BUDGET_KRW는 0보다 커야 합니다.")
+    return [(total_budget * weight) / weight_sum for weight in raw_weights]
 
 
-def build_grid_rows_from_property_spec(
-    spec: GridPropertySpec,
-    *,
-    current_price: Decimal,
-) -> list[GridRow]:
+def build_grid_rows_from_property_spec(spec: GridPropertySpec) -> list[GridRow]:
     raw_min_buy_price = to_decimal(spec.min_buy_price)
     raw_max_buy_price = to_decimal(spec.max_buy_price)
     min_buy_price = normalize_krw_price(raw_min_buy_price)
     max_buy_price = normalize_krw_price(raw_max_buy_price)
+    total_budget_krw = to_decimal(spec.total_budget_krw)
     grid_count = int(spec.grid_count)
 
     if raw_min_buy_price != min_buy_price:
@@ -344,18 +285,27 @@ def build_grid_rows_from_property_spec(
             f"MAX_BUY_PRICE는 업비트 호가 단위에 맞아야 합니다: 입력={raw_max_buy_price}, 보정={max_buy_price}"
         )
 
-    buy_prices_desc = _compute_buy_prices_desc(
-        min_buy_price=min_buy_price,
-        max_buy_price=max_buy_price,
-        grid_count=grid_count,
-    )
+    if grid_count < 2:
+        raise ValueError("GRID_COUNT는 2 이상이어야 합니다.")
+    if min_buy_price <= DECIMAL_ZERO:
+        raise ValueError("MIN_BUY_PRICE는 0보다 커야 합니다.")
+    if max_buy_price <= min_buy_price:
+        raise ValueError("MAX_BUY_PRICE는 MIN_BUY_PRICE보다 커야 합니다.")
+    if total_budget_krw <= DECIMAL_ZERO:
+        raise ValueError("TOTAL_BUDGET_KRW는 0보다 커야 합니다.")
 
-    slot_budgets, _, _, _ = build_weighted_slot_budgets(
-        spec,
-        current_price=current_price,
-        buy_prices_desc=buy_prices_desc,
-    )
+    growth_ratio = Decimal(str(exp(log(float(max_buy_price / min_buy_price)) / (grid_count - 1))))
 
+    buy_prices_desc: list[Decimal] = [max_buy_price]
+    for index in range(1, grid_count - 1):
+        raw_price = max_buy_price / (growth_ratio ** index)
+        buy_prices_desc.append(normalize_krw_price(raw_price))
+    buy_prices_desc.append(min_buy_price)
+
+    if len(set(buy_prices_desc)) != grid_count:
+        raise ValueError("호가 단위 적용 후 buy_price 레벨이 중복되었습니다. 범위를 넓히거나 슬롯 수를 줄이세요.")
+
+    slot_budgets = build_weighted_slot_budgets(spec)
     rows: list[GridRow] = []
     for index, (buy_price, slot_budget) in enumerate(zip(buy_prices_desc, slot_budgets), start=1):
         sell_price = build_target_sell_price(

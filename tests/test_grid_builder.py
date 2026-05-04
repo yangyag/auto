@@ -14,17 +14,15 @@ class GridBuilderTest(unittest.TestCase):
             lower_price=Decimal("92253123"),
             upper_price=Decimal("111137221"),
             slot_count=10,
-            lower_budget_krw=Decimal("2000000"),
-            current_price=Decimal("130000000"),
+            total_budget_krw=Decimal("2000000"),
         )
         expected_rows = build_grid_rows_from_property_spec(
             GridPropertySpec(
                 min_buy_price=Decimal("92253000"),
                 max_buy_price=Decimal("111137000"),
-                lower_budget_krw=Decimal("2000000"),
+                total_budget_krw=Decimal("2000000"),
                 grid_count=10,
             ),
-            current_price=Decimal("130000000"),
         )
 
         self.assertEqual(rows, expected_rows)
@@ -34,8 +32,7 @@ class GridBuilderTest(unittest.TestCase):
             lower_price=Decimal("93695193"),
             upper_price=Decimal("110370483"),
             slot_count=10,
-            lower_budget_krw=Decimal("2000000"),
-            current_price=Decimal("130000000"),
+            total_budget_krw=Decimal("2000000"),
         )
 
         self.assertEqual(len(rows), 10)
@@ -56,20 +53,19 @@ class GridBuilderTest(unittest.TestCase):
         )
 
     def test_build_cash_only_grid_preserves_total_budget_with_rounding_tolerance(self):
-        lower_budget = Decimal("2000000")
+        total_budget = Decimal("2000000")
         rows = build_cash_only_grid(
             lower_price=Decimal("92253123"),
             upper_price=Decimal("111137221"),
             slot_count=10,
-            lower_budget_krw=lower_budget,
-            current_price=Decimal("130000000"),
+            total_budget_krw=total_budget,
         )
 
         allocated_budget = sum((row.buy_price * row.planned_qty for row in rows), Decimal("0"))
         max_rounding_loss = sum((row.buy_price * BTC_QUANTITY_STEP for row in rows), Decimal("0"))
 
-        self.assertLessEqual(allocated_budget, lower_budget)
-        self.assertGreater(allocated_budget, lower_budget - max_rounding_loss)
+        self.assertLessEqual(allocated_budget, total_budget)
+        self.assertGreater(allocated_budget, total_budget - max_rounding_loss)
         self.assertGreater(rows[-1].planned_qty, rows[0].planned_qty)
 
     def test_grid_state_snapshot_round_trip_preserves_decimal_quantities(self):
@@ -77,8 +73,7 @@ class GridBuilderTest(unittest.TestCase):
             lower_price=Decimal("92253123"),
             upper_price=Decimal("111137221"),
             slot_count=10,
-            lower_budget_krw=Decimal("2000000"),
-            current_price=Decimal("130000000"),
+            total_budget_krw=Decimal("2000000"),
         )
 
         state = GridState.from_rows("KRW-BTC", rows)

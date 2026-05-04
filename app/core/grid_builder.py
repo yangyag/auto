@@ -1,5 +1,5 @@
 """
-KRW-BTC용 하단 매수합 기반 그리드 생성기
+KRW-BTC용 총예산 기반 그리드 생성기
 """
 from decimal import Decimal
 
@@ -13,20 +13,19 @@ def build_cash_only_grid(
     lower_price: Decimal,
     upper_price: Decimal,
     slot_count: int,
-    lower_budget_krw: Decimal,
-    current_price: Decimal,
+    total_budget_krw: Decimal,
     tp_model: str | None = None,
     tp_k_base: Decimal | None = None,
     tp_k_floor: Decimal | None = None,
 ) -> list[GridRow]:
-    """grid.properties 경로와 같은 하단 매수합 계약으로 KRW-BTC 그리드를 생성한다."""
+    """KRW-BTC 그리드를 생성한다."""
     spec = GridPropertySpec(
         min_buy_price=normalize_krw_price(lower_price),
         max_buy_price=normalize_krw_price(upper_price),
-        lower_budget_krw=lower_budget_krw,
+        total_budget_krw=total_budget_krw,
         grid_count=slot_count,
         tp_model=tp_model,
         tp_k_base=tp_k_base,
         tp_k_floor=tp_k_floor,
     )
-    return build_grid_rows_from_property_spec(spec, current_price=current_price)
+    return build_grid_rows_from_property_spec(spec)

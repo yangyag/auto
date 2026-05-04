@@ -27,7 +27,7 @@
 - $p_{\mathrm{step}}$: `GRID_STEP_PCT`
 - $k_{\mathrm{base}}$: `TP_K_BASE`
 - $k_{\mathrm{floor}}$: `TP_K_FLOOR`
-- $B_{\mathrm{lower}}$: `LOWER_BUDGET_KRW`
+- $B_{\mathrm{total}}$: `TOTAL_BUDGET_KRW`
 - $n_{\mathrm{below}}$: `ACTIVE_WINDOW_BELOW_CURRENT_SLOTS`
 - $n_{\mathrm{above}}$: `ACTIVE_WINDOW_ABOVE_CURRENT_REENTRY_SLOTS`
 - $B_{\mathrm{maxop}}$: `MAX_OPERATING_BUDGET_KRW`
@@ -156,25 +156,7 @@ $$
 W = \sum_{i=0}^{N-1} w_i
 $$
 
-현재가 미만 슬롯:
-
-$$
-\mathcal{L} = \lbrace i : B_i < P_{\mathrm{seed}} \rbrace
-$$
-
-$$
-W_{\mathrm{lower}} = \sum_{i \in \mathcal{L}} w_i
-$$
-
-$$
-r_{\mathrm{lower}} = \frac{W_{\mathrm{lower}}}{W}
-$$
-
-하단 매수합 목표에서 implicit 총 예산을 역산한다.
-
-$$
-B_{\mathrm{total}} = \frac{B_{\mathrm{lower}}}{r_{\mathrm{lower}}}
-$$
+슬롯별 예산 배분:
 
 $$
 B_{\mathrm{slot}, i} = B_{\mathrm{total}} \frac{w_i}{W}
@@ -183,18 +165,6 @@ $$
 $$
 Q_i = F_{\mathrm{step}}(\frac{B_{\mathrm{slot}, i}}{B_i},\ 0.00000001\ \mathrm{BTC})
 $$
-
-양자화 후 실제 하단 매수합:
-
-$$
-B_{\mathrm{lowerActual}} = \sum_{i \in \mathcal{L}} B_i Q_i
-$$
-
-$$
-B_{\mathrm{lowerActual}} \le B_{\mathrm{lower}}
-$$
-
-$\mathcal{L}$이 비어 있으면 그리드 생성은 실패한다. 모든 슬롯이 $\mathcal{L}$에 포함되면 `LOWER_BUDGET_KRW`가 사실상 총 예산이 된다.
 
 ## 현재 재고 원가와 총 배정 금액
 
@@ -496,15 +466,13 @@ $$
 
 ## 라이브 예산 조정
 
-`scripts/adjust_budget_live.py --target-lower-budget X`는 기존 ladder와 보유 수량을 유지하고 $Q_i$만 다시 계산한다.
+`scripts/adjust_budget_live.py --target-budget X`는 기존 ladder와 보유 수량을 유지하고 $Q_i$만 다시 계산한다.
 
 $$
-B_{\mathrm{lower}} \leftarrow X
+B_{\mathrm{total}} \leftarrow X
 $$
 
-$$
-B_{\mathrm{total}} = \frac{X}{r_{\mathrm{lower}}}
-$$
+슬롯별 예산 재배분:
 
 $$
 B_{\mathrm{slot}, i} = B_{\mathrm{total}} \frac{w_i}{W}
@@ -513,18 +481,6 @@ $$
 $$
 Q_i^{\mathrm{new}} =
 F_{\mathrm{step}}(\frac{B_{\mathrm{slot}, i}}{B_i},\ 0.00000001\ \mathrm{BTC})
-$$
-
-검증용 새 계획 매수합:
-
-$$
-B_{\mathrm{plannedNew}} =
-\sum_{i=0}^{N-1} B_i Q_i^{\mathrm{new}}
-$$
-
-$$
-B_{\mathrm{lowerNew}} =
-\sum_{i \in \mathcal{L}} B_i Q_i^{\mathrm{new}}
 $$
 
 보유 슬롯의 $H_i$, $S_i$, `filled_at`은 유지한다.
