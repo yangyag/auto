@@ -4,7 +4,7 @@
 
 문서 역할:
 - 프로그램 로직 설명은 `README.md`
-- EC2, git, 배포, 운영 인프라는 `AGENTS.md`
+- EC2, git, 배포, 운영 인프라는 `docs/operations.md`
 
 기준 운영 방식:
 - 거래소: 업비트 `KRW-BTC`
