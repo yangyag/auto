@@ -261,6 +261,7 @@ def _extract_time_key(
         time.sleep(RATE_LIMIT_SLEEP_SEC)
         trades = detail.get("trades") or []
         assert len(trades) > 0, f"trades 빈 배열: {order['uuid']}"
+        order["_trade_count"] = len(trades)
         trade_times = [to_kst(t["created_at"]) for t in trades]
         return max(trade_times)
     else:
@@ -272,6 +273,15 @@ def _to_decimal(val) -> Decimal:
     """None이면 assert, 아니면 Decimal(str(x)) 변환."""
     assert val is not None, f"None 값을 Decimal 변환 시도: {val!r}"
     return Decimal(str(val))
+
+
+def _sell_trade_count(order: dict) -> int:
+    """SELL 주문의 실제 trade fill 수. 테스트/과거 입력은 1건으로 간주한다."""
+    raw_count = order.get("_trade_count")
+    if raw_count is None:
+        return 1
+    count = int(raw_count)
+    return count if count > 0 else 1
 
 
 # ── 그룹키 ──────────────────────────────────────────────────────
@@ -373,6 +383,7 @@ def run_fifo(
                         "realized_pnl": realized_pnl,
                         "matched_qty": take_qty,
                         "sell_uuid": order["uuid"],
+                        "sell_trade_count": _sell_trade_count(order),
                         "slot": head["slot"],
                     })
                     head["qty"] -= take_qty
@@ -480,6 +491,7 @@ def run_fifo(
                     "realized_pnl": realized_pnl,
                     "matched_qty": matched_qty_tot,
                     "sell_uuid": order["uuid"],
+                    "sell_trade_count": _sell_trade_count(order),
                     "slot": slot,
                 })
 
@@ -527,7 +539,10 @@ def _print_realized_section(
 ) -> None:
     """period 별 realized 합계 섹션 출력."""
     print(title)
-    header = f"{'기간':<23} {'매도건수':>8} {'실현손익(KRW)':>18} {'매도수량(BTC)':>18}"
+    header = (
+        f"{'기간':<23} {'매도주문수':>9} {'체결건수':>8}"
+        f" {'실현손익(KRW)':>18} {'매도수량(BTC)':>18}"
+    )
     print(header)
     print("-" * len(header))
 
@@ -539,17 +554,25 @@ def _print_realized_section(
             groups[k].append(line)
 
         if not groups:
-            k_all = group_key(datetime.now(KST), period) if period != "all" else "ALL"
-            print(f"{'(없음)':<23} {'0':>8} {'0':>18} {'0.00000000':>18}  [{period}]")
+            print(
+                f"{'(없음)':<23} {'0':>9} {'0':>8}"
+                f" {'0':>18} {'0.00000000':>18}  [{period}]"
+            )
             continue
 
         for k in sorted(groups.keys()):
             items = groups[k]
             total_pnl = sum((i["realized_pnl"] for i in items), Decimal("0"))
             total_qty = sum((i["matched_qty"] for i in items), Decimal("0"))
-            count = len(items)
+            sell_orders = {
+                i["sell_uuid"]: int(i.get("sell_trade_count", 1))
+                for i in items
+            }
+            order_count = len(sell_orders)
+            trade_count = sum(sell_orders.values())
             print(
-                f"{k:<23} {count:>8} {_fmt_krw(total_pnl):>18} {_fmt_btc(total_qty):>18}"
+                f"{k:<23} {order_count:>9} {trade_count:>8}"
+                f" {_fmt_krw(total_pnl):>18} {_fmt_btc(total_qty):>18}"
                 f"  [{period}]"
             )
 

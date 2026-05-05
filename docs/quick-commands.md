@@ -93,6 +93,7 @@ python3 scripts/show_grid_state.py
 ```
 
 기본 최근 90일, period=all (일/주/월/년/전체). 업비트 `GET /v1/orders/closed` 와 `/v1/order` 만 사용하는 read-only 분석. 봇 주문 `identifier`의 슬롯 번호를 기준으로 같은 슬롯 안에서만 BUY/SELL을 FIFO 매칭해 수수료 차감 순손익을 산출한다. 글로벌 FIFO가 아니며, 매칭되지 않는 매도(윈도우 시작 이전 매수분, identifier 패턴 불일치 등)는 별도 라인으로 분리한다. 기간은 2자리 연도 형식으로 표시하며, 주간 기간은 `26-04-20 ~ 26-04-26` 처럼 출력한다.
+실현손익 표의 `매도주문수`는 SELL 주문 UUID 기준이고, `체결건수`는 업비트 `/v1/order` 의 `trades` 배열 기준 fill 수다.
 
 `reset_krw_btc_live.py` 로 발생한 reset 전량 시장가 매도는 `{STATE_BOT_KEY}-reset-sell-...` identifier 로 자동 인식된다. 코드 반영 전 발생한 과거 reset 매도처럼 identifier 가 없는 청산 주문은 `--reset-sell-uuid <UUID>` 를 반복 지정해서 reset 청산 경계로 포함한다.
 

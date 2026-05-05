@@ -1,6 +1,8 @@
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta
 from decimal import Decimal
+from io import StringIO
 
 import scripts.upbit_realized_pnl as pnl
 
@@ -182,6 +184,62 @@ class UpbitRealizedPnlTest(unittest.TestCase):
         self.assertEqual(len(reset_residuals), 1)
         self.assertEqual(reset_residuals[0]["residual_qty"], Decimal("0.03"))
         self.assertEqual(reset_residuals[0]["residual_cost"], Decimal("3000000.0"))
+
+    def test_realized_section_reports_order_count_and_trade_count_separately(self):
+        realized_lines = [
+            {
+                "time_key": datetime(2026, 5, 5, 10, 0, tzinfo=KST),
+                "realized_pnl": Decimal("100"),
+                "matched_qty": Decimal("0.001"),
+                "sell_uuid": "sell-1",
+                "sell_trade_count": 2,
+                "slot": 1,
+            },
+            {
+                "time_key": datetime(2026, 5, 5, 11, 0, tzinfo=KST),
+                "realized_pnl": Decimal("200"),
+                "matched_qty": Decimal("0.002"),
+                "sell_uuid": "sell-2",
+                "sell_trade_count": 1,
+                "slot": 2,
+            },
+        ]
+
+        out = StringIO()
+        with redirect_stdout(out):
+            pnl._print_realized_section(realized_lines, ["daily"])
+
+        output = out.getvalue()
+        self.assertIn("매도주문수", output)
+        self.assertIn("체결건수", output)
+        self.assertIn("26-05-05", output)
+        self.assertIn("         2        3", output)
+
+    def test_realized_section_deduplicates_split_lines_for_one_sell_order(self):
+        realized_lines = [
+            {
+                "time_key": datetime(2026, 5, 5, 10, 0, tzinfo=KST),
+                "realized_pnl": Decimal("100"),
+                "matched_qty": Decimal("0.001"),
+                "sell_uuid": "reset-sell",
+                "sell_trade_count": 1,
+                "slot": 1,
+            },
+            {
+                "time_key": datetime(2026, 5, 5, 10, 0, tzinfo=KST),
+                "realized_pnl": Decimal("200"),
+                "matched_qty": Decimal("0.002"),
+                "sell_uuid": "reset-sell",
+                "sell_trade_count": 1,
+                "slot": 2,
+            },
+        ]
+
+        out = StringIO()
+        with redirect_stdout(out):
+            pnl._print_realized_section(realized_lines, ["daily"])
+
+        self.assertIn("         1        1", out.getvalue())
 
 
 if __name__ == "__main__":
