@@ -14,13 +14,33 @@ tie-break 로 SELL 이 먼저 처리될 가능성 (운영상 거의 불가능, �
 사용법:
     .venv/bin/python scripts/upbit_realized_pnl.py [--from YYYY-MM-DD] [--to YYYY-MM-DD]
         [--period daily|weekly|monthly|yearly|all] [--market KRW-BTC]
-        [--reset-sell-uuid UUID]
+        [--reset-sell-uuid UUID] [--lookback DAYS]
 
 기본값:
-    --from  : 오늘 기준 90일 전
-    --to    : 오늘
-    --period: all  (daily/weekly/monthly/yearly/ALL 5개 섹션 모두 출력)
-    --market: KRW-BTC
+    --from     : 오늘 기준 90일 전
+    --to       : 오늘
+    --period   : all  (daily/weekly/monthly/yearly/ALL 5개 섹션 모두 출력)
+    --market   : KRW-BTC
+    --lookback : 30일 (default: DEFAULT_LOOKBACK_DAYS = 30)
+
+--lookback 파라미터:
+    --from 날짜 이전으로 추가 조회할 기간(일). 실현손익 매칭 과정에서
+    --from 전의 과거 BUY 주문들을 포함하기 위해 사용한다.
+
+    3개 윈도우:
+    1. fetch 윈도우: --from - lookback ~ --to (API 조회 범위, 모든 BUY 포함)
+    2. 사용자 입력: --from ~ --to (사용자가 지정한 논리 범위)
+    3. 표시 윈도우: --from ~ --to (출력에 표시되는 범위, 이 범위의 SELL만 보임)
+
+    fetch 범위 경계 근처(--from 이후 1일)에서 BUY가 조회되면 경고를 출력한다.
+    이는 lookback이 부족하여 더 오래된 BUY를 누락했을 가능성을 의미한다.
+    경고가 발생하면 --lookback을 추천값 이상으로 증가시켜 재실행하면 된다.
+
+    예:
+    - 정확한 5월 1일 손익만 분석: --from 2026-05-01 --to 2026-05-01 (default 30일 lookback)
+    - 5월 1일~31일 손익 + 4월 중 BUY: --from 2026-05-01 --to 2026-05-31 --lookback 30
+    - 4월 중 의심 주문 정산 시 lookback 60일로 안전 마진 추가:
+      --from 2026-04-01 --to 2026-04-30 --lookback 60
 """
 import argparse
 import hashlib
@@ -107,7 +127,8 @@ KST = ZoneInfo("Asia/Seoul")
 RATE_LIMIT_SLEEP_SEC = 0.05   # 50ms, rate-limit 안전마진
 WINDOW_DAYS = 7               # closed orders 분할 조회 윈도우 (일)
 DEFAULT_MARKET = "KRW-BTC"
-DEFAULT_LOOKBACK_DAYS = 90
+DEFAULT_REPORT_DAYS = 90
+DEFAULT_LOOKBACK_DAYS = 30
 
 
 # ── 인증 헬퍼 (exchange/crypto.py:86-102 패턴 그대로) ─────────
@@ -612,15 +633,27 @@ def _print_unmatched_section(
 def _print_unparseable_section(
     unparseable_buys: list[dict],
     unparseable_sells: list[dict],
+    display_start_dt: datetime,
+    display_end_dt: datetime,
 ) -> None:
-    """섹션 4: identifier 패턴 안 맞는 주문 출력."""
+    """섹션 4: identifier 패턴 안 맞는 주문 출력 (display 윈도우 필터 적용)."""
+    # display 윈도우 안의 unparseable만 출력
+    filtered_buys = [
+        e for e in unparseable_buys
+        if display_start_dt <= e["time_key"] <= display_end_dt
+    ]
+    filtered_sells = [
+        e for e in unparseable_sells
+        if display_start_dt <= e["time_key"] <= display_end_dt
+    ]
+
     print("[ 매칭 불가 주문 (identifier 패턴 안 맞음, 수동/외부 주문 의심) ]")
-    if not unparseable_buys and not unparseable_sells:
+    if not filtered_buys and not filtered_sells:
         print("  (매칭 불가 주문 없음)")
         return
 
-    print(f"  BUY {len(unparseable_buys)}건:")
-    for entry in unparseable_buys:
+    print(f"  BUY {len(filtered_buys)}건:")
+    for entry in filtered_buys:
         t = entry["time_key"].isoformat(timespec="seconds")
         print(
             f"    - uuid={entry['uuid']}"
@@ -628,8 +661,8 @@ def _print_unparseable_section(
             f" funds={_fmt_krw(entry['executed_funds'])} KRW"
             f" time={t}"
         )
-    print(f"  SELL {len(unparseable_sells)}건:")
-    for entry in unparseable_sells:
+    print(f"  SELL {len(filtered_sells)}건:")
+    for entry in filtered_sells:
         t = entry["time_key"].isoformat(timespec="seconds")
         print(
             f"    - uuid={entry['uuid']}"
@@ -637,6 +670,62 @@ def _print_unparseable_section(
             f" funds={_fmt_krw(entry['executed_funds'])} KRW"
             f" time={t}"
         )
+
+
+def _print_outside_display_window_section(outside_sell_orders: list[dict]) -> None:
+    """디스플레이 윈도우 외부 SELL 주문 (읽기 전용 정보, PnL 아님)."""
+    print("[ 디스플레이 윈도우 외부 주문 (lookback으로 수집했으나 표시 범위 밖, read-only) ]")
+    if not outside_sell_orders:
+        print("  (윈도우 외부 주문 없음)")
+        return
+
+    print(f"  SELL {len(outside_sell_orders)}건 (과거 BUY 매칭에만 사용):")
+    for order in outside_sell_orders:
+        t = order["_time_key"].isoformat(timespec="seconds")
+        exec_vol = _to_decimal(order["executed_volume"])
+        exec_funds = _to_decimal(order["executed_funds"])
+        print(
+            f"    - uuid={order['uuid']}"
+            f" qty={_fmt_btc(exec_vol)}"
+            f" funds={_fmt_krw(exec_funds)} KRW"
+            f" time={t} (created_at: {order['created_at']})"
+        )
+
+
+def _print_fetch_boundary_warning_section(
+    sorted_orders: list[dict],
+    fetch_start_dt: datetime,
+    lookback_days: int,
+) -> None:
+    """fetch 범위 경계 근처에서 소비된 BUY 경고 (슬롯 FIFO 특성상 mis-match 위험)."""
+    boundary_margin_dt = fetch_start_dt + timedelta(days=1)
+
+    # sorted_orders에서 fetch_start ~ +1일 사이에 생성된 BUY를 찾음
+    near_boundary_buys = [
+        o for o in sorted_orders
+        if o["side"] == "bid" and fetch_start_dt <= o["_time_key"] < boundary_margin_dt
+    ]
+
+    if not near_boundary_buys:
+        return
+
+    print(
+        "[ 경고: fetch 범위 경계 근처 BUY 감지 (lookback 부족 위험) ]"
+    )
+    print(
+        f"  lookback={lookback_days}일로 fetch_start({fetch_start_dt.strftime('%Y-%m-%d')}) "
+        f"에서 {len(near_boundary_buys)}건의 BUY가 조회됨."
+    )
+    print(
+        "  → 이 BUY들이 SELL과 매칭되면, 경계 밖의 더 오래된 BUY 누락으로 인해"
+    )
+    print(
+        "     현재 SELL이 잘못된 BUY와 매칭되어 PnL이 부정확할 수 있습니다."
+    )
+    print(
+        f"  → 정확한 실현손익을 원하면 --lookback을 {lookback_days + 15}일 이상으로 증가시켜 재실행하세요."
+    )
+    print()
 
 
 def _print_remaining_buy_section(queues_by_slot: dict[int, list[dict]]) -> None:
@@ -743,6 +832,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="과거 reset 전량 매도 주문 uuid (반복 지정 가능)",
     )
+    parser.add_argument(
+        "--lookback",
+        type=int,
+        default=DEFAULT_LOOKBACK_DAYS,
+        metavar="DAYS",
+        help=f"--from 이전 매칭용 closed orders 추가 조회 기간, 단위: 일 (기본: {DEFAULT_LOOKBACK_DAYS})",
+    )
     return parser
 
 
@@ -754,24 +850,31 @@ def main(argv: list[str] | None = None) -> int:
     # 날짜 범위 결정
     today_kst = datetime.now(KST).date()
     if args.to_date:
-        to_date = date.fromisoformat(args.to_date)
+        user_to_date = date.fromisoformat(args.to_date)
     else:
-        to_date = today_kst
+        user_to_date = today_kst
     if args.from_date:
-        from_date = date.fromisoformat(args.from_date)
+        user_from_date = date.fromisoformat(args.from_date)
     else:
-        from_date = today_kst - timedelta(days=DEFAULT_LOOKBACK_DAYS)
+        user_from_date = today_kst - timedelta(days=DEFAULT_REPORT_DAYS)
 
-    if from_date > to_date:
-        print(f"오류: --from ({from_date}) 이 --to ({to_date}) 보다 늦습니다.", file=sys.stderr)
+    if user_from_date > user_to_date:
+        print(f"오류: --from ({user_from_date}) 이 --to ({user_to_date}) 보다 늦습니다.", file=sys.stderr)
         return 1
 
+    # fetch 범위: lookback margin 포함
+    fetch_from_date = user_from_date - timedelta(days=args.lookback)
+
     # datetime (KST, 하루 시작/끝)
-    start_dt = datetime(from_date.year, from_date.month, from_date.day,
-                        0, 0, 0, tzinfo=KST)
+    fetch_start_dt = datetime(fetch_from_date.year, fetch_from_date.month, fetch_from_date.day,
+                              0, 0, 0, tzinfo=KST)
     # 종료일 당일 자정(다음 날 0시)까지 포함
-    end_dt = datetime(to_date.year, to_date.month, to_date.day,
-                      23, 59, 59, tzinfo=KST)
+    display_end_dt = datetime(user_to_date.year, user_to_date.month, user_to_date.day,
+                              23, 59, 59, tzinfo=KST)
+
+    # 표시용 윈도우
+    display_start_dt = datetime(user_from_date.year, user_from_date.month, user_from_date.day,
+                                0, 0, 0, tzinfo=KST)
 
     api_key = cfg.API_KEY
     api_secret = cfg.API_SECRET
@@ -787,11 +890,13 @@ def main(argv: list[str] | None = None) -> int:
     market = args.market
     period_arg = args.period
 
-    print(f"조회 범위: {from_date} ~ {to_date}  마켓: {market}")
+    print(f"조회 범위: {user_from_date} ~ {user_to_date}  마켓: {market}")
+    if args.lookback > 0:
+        print(f"매칭용 lookback: {args.lookback}일 (fetch: {fetch_from_date} ~ {user_to_date})")
     print("closed orders 수집 중...")
 
-    # 1단계: closed orders 수집
-    raw_orders = fetch_closed_orders(api_key, api_secret, market, start_dt, end_dt)
+    # 1단계: closed orders 수집 (fetch 범위로 확장해서 과거 BUY 포함)
+    raw_orders = fetch_closed_orders(api_key, api_secret, market, fetch_start_dt, display_end_dt)
     print(f"  수집 완료: {len(raw_orders)}건 (cancel+done 포함)")
 
     # 2단계: 체결 0건 필터, 수치 검증, time_key 결정
@@ -838,7 +943,7 @@ def main(argv: list[str] | None = None) -> int:
     # 3단계: time_key + uuid 기준 정렬
     sorted_orders = sorted(valid_orders, key=lambda o: (o["_time_key"], o["uuid"]))
 
-    # 4단계: 슬롯별 매칭
+    # 4단계: 슬롯별 매칭 (확장 fetch 전체 사용)
     (
         realized_lines,
         unmatched_lines,
@@ -848,7 +953,22 @@ def main(argv: list[str] | None = None) -> int:
         reset_residuals,
     ) = run_fifo(sorted_orders, set(args.reset_sell_uuid))
 
-    # 5단계: 출력
+    # 5단계: 표시용 윈도우 필터링 (SELL의 _time_key가 display 범위 내인 것만)
+    display_realized_lines = [
+        x for x in realized_lines
+        if display_start_dt <= x["time_key"] <= display_end_dt
+    ]
+    display_unmatched_lines = [
+        x for x in unmatched_lines
+        if display_start_dt <= x["time_key"] <= display_end_dt
+    ]
+    # 윈도우 밖 SELL 주문 수집 (read-only 정보)
+    outside_sell_orders = [
+        o for o in sorted_orders
+        if o["side"] == "ask" and not (display_start_dt <= o["_time_key"] <= display_end_dt)
+    ]
+
+    # 6단계: 출력
     # period=all 이면 5개 단위 모두 출력, 아니면 해당 단위만
     if period_arg == "all":
         periods_to_show = ["daily", "weekly", "monthly", "yearly", "all"]
@@ -857,11 +977,15 @@ def main(argv: list[str] | None = None) -> int:
 
     print()
     print("=" * 80)
-    _print_realized_section(realized_lines, periods_to_show)
+    _print_realized_section(display_realized_lines, periods_to_show)
     print()
-    _print_unmatched_section(unmatched_lines, periods_to_show)
+    _print_unmatched_section(display_unmatched_lines, periods_to_show)
     print()
-    _print_unparseable_section(unparseable_buys, unparseable_sells)
+    _print_unparseable_section(unparseable_buys, unparseable_sells, display_start_dt, display_end_dt)
+    print()
+    _print_outside_display_window_section(outside_sell_orders)
+    print()
+    _print_fetch_boundary_warning_section(sorted_orders, fetch_start_dt, args.lookback)
     print()
     _print_remaining_buy_section(queues_by_slot)
     print()
