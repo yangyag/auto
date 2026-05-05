@@ -89,11 +89,44 @@ python3 scripts/show_grid_state.py
 
 ### 실현 손익 조회 (KRW-BTC, 업비트 API 기준)
 ```bash
-./scripts/upbit_realized_pnl.py [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--period daily|weekly|monthly|yearly|all] [--reset-sell-uuid UUID]
+.venv/bin/python scripts/upbit_realized_pnl.py [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--period daily|weekly|monthly|yearly|all] [--reset-sell-uuid UUID] [--lookback DAYS]
 ```
 
-기본 최근 90일, period=all (일/주/월/년/전체). 업비트 `GET /v1/orders/closed` 와 `/v1/order` 만 사용하는 read-only 분석. 봇 주문 `identifier`의 슬롯 번호를 기준으로 같은 슬롯 안에서만 BUY/SELL을 FIFO 매칭해 수수료 차감 순손익을 산출한다. 글로벌 FIFO가 아니며, 매칭되지 않는 매도(윈도우 시작 이전 매수분, identifier 패턴 불일치 등)는 별도 라인으로 분리한다. 기간은 2자리 연도 형식으로 표시하며, 주간 기간은 `26-04-20 ~ 26-04-26` 처럼 출력한다.
+기본 최근 90일, period=all (일/주/월/년/전체), lookback 30일. 업비트 `GET /v1/orders/closed` 와 `/v1/order` 만 사용하는 read-only 분석. 봇 주문 `identifier`의 슬롯 번호를 기준으로 같은 슬롯 안에서만 BUY/SELL을 FIFO 매칭해 수수료 차감 순손익을 산출한다. 글로벌 FIFO가 아니며, 매칭되지 않는 매도(윈도우 시작 이전 매수분, identifier 패턴 불일치 등)는 별도 라인으로 분리한다. 기간은 2자리 연도 형식으로 표시하며, 주간 기간은 `26-04-20 ~ 26-04-26` 처럼 출력한다.
 실현손익 표의 `매도주문수`는 SELL 주문 UUID 기준이고, `체결건수`는 업비트 `/v1/order` 의 `trades` 배열 기준 fill 수다.
+
+**--lookback 파라미터 설명:**
+
+실현손익을 정확히 계산하려면 조회 기간 이전의 BUY 주문도 포함해야 한다. `--lookback` 은 `--from` 날짜 이전으로 추가 조회할 기간(일)이다.
+
+- **API 호출 범위(fetch):** `--from - lookback ~ --to` (모든 BUY/SELL 조회)
+- **출력 범위(display):** `--from ~ --to` (이 범위의 SELL만 표시)
+- **매칭 대상:** fetch 범위 전체에서 FIFO 매칭 수행 (표시 범위 외 SELL도 과거 BUY 매칭에 사용)
+
+기본값은 30일이며, 실제 운영 데이터 분석 결과 30일부터 실현손익이 수렴하는 것을 확인했다.
+
+**경고 메커니즘:**
+fetch 범위 경계(`--from` 이후 1일)에 BUY가 조회되면 "lookback 부족 위험" 경고를 출력한다. 이는 lookback이 부족하여 더 오래된 BUY를 누락했을 가능성을 의미하므로, 권장 값으로 재실행하면 정확도가 향상된다.
+
+**한계:** 경고는 fetch_start ~ +1일 사이 BUY 존재 여부 휴리스틱이므로, 일부 케이스에서 경고 없이도 lookback이 실제로 부족할 수 있다. 의심되면 안전하게 lookback을 더 늘려서 재실행하는 것이 권장된다.
+
+**일별 버킷팅 기준:** 
+실현손익 표의 일별 그룹핑은 SELL 주문의 `_time_key`(= 업비트 `/v1/order` 의 `trades` 배열에서 최대 `created_at`, KST 시각)를 기준으로 한다. 이는 SELL 주문 생성 시각이 아니라 실제 체결 완료 시각을 의미하므로, 매도 다중 체결이나 시간대가 다른 매도 건들을 정확히 분류할 수 있다.
+
+**사용 예:**
+```bash
+# 5월 1일 손익 조회 (과거 4월 BUY 포함, default 30일 lookback)
+.venv/bin/python scripts/upbit_realized_pnl.py --from 2026-05-01 --to 2026-05-01
+
+# 5월 전체 손익 + 안전 마진(lookback 45일)
+.venv/bin/python scripts/upbit_realized_pnl.py --from 2026-05-01 --to 2026-05-31 --lookback 45
+
+# 특정 주간 분석 (주간 집계만 출력)
+.venv/bin/python scripts/upbit_realized_pnl.py --from 2026-05-05 --to 2026-05-11 --period weekly
+
+# lookback 부족 경고가 나올 때 안전 마진으로 재실행
+.venv/bin/python scripts/upbit_realized_pnl.py --from 2026-05-01 --to 2026-05-31 --lookback 60
+```
 
 `reset_krw_btc_live.py` 로 발생한 reset 전량 시장가 매도는 `{STATE_BOT_KEY}-reset-sell-...` identifier 로 자동 인식된다. 코드 반영 전 발생한 과거 reset 매도처럼 identifier 가 없는 청산 주문은 `--reset-sell-uuid <UUID>` 를 반복 지정해서 reset 청산 경계로 포함한다.
 

@@ -35,7 +35,7 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 | | `show_grid_state.py` | 현재 DB에 저장된 그리드와 주문의 상태를 요약해서 터미널에 출력 |
 | | `apply_grid_properties_to_postgres.py` | `grid.properties` 파일의 설정을 DB의 그리드 테이블에 강제 반영 |
 | | `adjust_budget_live.py` | 현재 DB 그리드의 가격 구조와 보유 수량은 유지한 채 `planned_qty`만 재계산하여 예산을 보수적으로 증액/감액. `--target-budget` (절대 총액) 으로 지정 |
-| | `upbit_realized_pnl.py` | 업비트 `GET /v1/orders/closed` + `/v1/order` 로 KRW-BTC 실현 손익을 일/주/월/년/전체 단위로 산출. 봇 주문 identifier의 슬롯 번호를 기준으로 같은 슬롯 안에서만 FIFO 매칭한다 (수수료 차감, read-only 분석). reset 청산 매도는 자동 인식하며, 과거 reset 주문은 `--reset-sell-uuid`로 지정 가능 |
+| | `upbit_realized_pnl.py` | 업비트 `GET /v1/orders/closed` + `/v1/order` 로 KRW-BTC 실현 손익을 일/주/월/년/전체 단위로 산출. 봇 주문 identifier의 슬롯 번호를 기준으로 같은 슬롯 안에서만 FIFO 매칭한다 (수수료 차감, read-only 분석). `--from` 기준 lookback 마진(기본 30일)으로 과거 BUY를 포함해 정확한 매칭을 보장한다. reset 청산 매도는 자동 인식하며, 과거 reset 주문은 `--reset-sell-uuid`로 지정 가능. 일별 버킷팅은 SELL `_time_key`(=최대 체결 시각, KST) 기준 |
 | **app/utils/** | `upbit_market.py` | 업비트 마켓의 최소 주문 단위, 호가 단위 등 시장 정보 관리 |
 | | `grid_reporting.py` | 수익률, 재고 현황 등 그리드 운영 성과 리포팅 유틸리티 |
 | | `decimal_utils.py` | 정밀한 수치 계산을 위한 Decimal 변환 및 절사(Truncate) 도구 |
