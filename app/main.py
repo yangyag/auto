@@ -809,7 +809,7 @@ def run_trading_cycle(
                         )
 
                     def notifier_callback(kind, level, current_price, threshold, lower_price, symbol, **kwargs):
-                        if cfg.STOP_LOSS_NOTIFICATION_ENABLED and cfg.STOP_LOSS_WEBHOOK_URL:
+                        if cfg.STOP_LOSS_WEBHOOK_URL:
                             from app.utils.notifier import send_stop_loss_notification, StopLossEventKind
                             event_kind = StopLossEventKind(kind)
                             send_stop_loss_notification(

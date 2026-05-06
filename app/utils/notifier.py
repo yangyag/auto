@@ -107,6 +107,7 @@ def _build_webhook_payload(
         text = f"""
 심볼: {symbol}
 현재가: {current_price}
+임계값: {threshold}
 청산수량: {liquidated_qty} BTC
 상태: 손절 {level_name} 청산 완료.
         """.strip()
@@ -116,6 +117,7 @@ def _build_webhook_payload(
         text = f"""
 심볼: {symbol}
 현재가: {current_price}
+임계값: {threshold}
 실패 슬롯: {failed_slots}
 상태: 일부 슬롯의 청산에 실패했습니다.
         """.strip()
