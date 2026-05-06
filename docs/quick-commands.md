@@ -248,7 +248,9 @@ tail -f logs/trading-$(date +%F).log
 
 ## 11) 손절 관련 명령
 
-### 손절 L1 매수 차단 해제
+### 손절 해제 (reset-stop-loss)
+
+#### L1 매수 차단 해제
 
 L1 손절이 발동된 후 매수 차단을 해제하려면:
 
@@ -268,7 +270,22 @@ python3 main.py reset-stop-loss
 - `stop_loss_active` 상태를 false로 복구
 - 새로운 매수 신호에서 다시 매수 가능하게 복구
 
-**주의:** STOP_LOSS_RESTART_LOCKOUT_HOURS 미경과 시 exit 2 반환. L2 발동 후 24시간이 경과한 후 `init-grid --force`로 새 그리드를 생성해야 한다.
+#### L2 강제 해제 (--force)
+
+L2 24시간 잠금을 강제 해제하려면 --force 옵션을 사용한다:
+
+```bash
+python3 main.py reset-stop-loss --force
+```
+
+**역할:**
+- STOP_LOSS_RESTART_LOCKOUT_HOURS 미경과 상태에서도 24시간 잠금 강제 해제
+- L2 이후 모든 포지션이 청산되었으므로 새 그리드 생성 후 매수 재개 가능
+- 긴급 상황에서 24시간 대기 없이 즉시 봇 재시작 필요시 사용
+
+**주의:** 
+- --force 없이 호출 시, STOP_LOSS_RESTART_LOCKOUT_HOURS 미경과 상태면 exit 2 반환
+- L2 이후는 `init-grid --force`로 새 그리드 생성 필수
 
 ### 손절 상태 확인
 
@@ -302,5 +319,6 @@ PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh
 - 모든 `STOP_LOSS_*_ARM_HOLD_SECONDS`: 대기 시간
 - `STOP_LOSS_L1_LIQUIDATE_RATIO`: L1 청산 비율
 - `STOP_LOSS_WEBHOOK_URL`: 외부 알림 Webhook URL (비어있으면 미발송)
+- `STOP_LOSS_NOTIFICATION_ENABLED`: 외부 알림 활성화/비활성화 (True/False)
 
 자세한 설명은 [docs/operations.md](operations.md#손절stop-loss-운영-가이드)의 손절 운영 가이드를 참조한다.

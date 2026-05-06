@@ -167,6 +167,7 @@ STOP_LOSS_L2_PCT=30
 | `STOP_LOSS_L1_LIQUIDATE_RATIO` | `0.5` | L1 청산 비율 | 0.3 ~ 0.7 | L1에서 청산할 포지션 비율 (0=0%, 1=100%) |
 | `STOP_LOSS_RESTART_LOCKOUT_HOURS` | `24` | L2 재시작 잠금 | 12 ~ 48 | L2 발동 후 자동 재시작 금지 시간 |
 | `STOP_LOSS_WEBHOOK_URL` | (없음) | 외부 알림 Webhook | URL 문자열 | Slack/Generic Webhook URL. 비어있으면 알림 미발송 |
+| `STOP_LOSS_NOTIFICATION_ENABLED` | `True` | 외부 알림 활성화 | `True` / `False` | False로 설정하면 WEBHOOK_URL이 있어도 알림 미발송 |
 
 ### L0/L1/L2 트리거 시 봇 거동
 
@@ -178,25 +179,40 @@ STOP_LOSS_L2_PCT=30
 
 ### reset-stop-loss CLI 사용법
 
-L1 발동 후 매수 차단을 해제하려면 `reset-stop-loss` 명령을 사용한다:
+L1 발동 후 매수 차단을 해제하거나 L2 24시간 잠금을 강제 해제하려면 `reset-stop-loss` 명령을 사용한다:
 
 ```bash
 # EC2에서 (venv 활성화 또는 절대 경로 사용)
 cd /home/ubuntu/auto
 source .venv/bin/activate
+
+# L1 해제
 python main.py reset-stop-loss
 
+# L2 24시간 잠금 강제 해제 (--force 옵션)
+python main.py reset-stop-loss --force
+
 # 또는 절대 경로:
-/home/ubuntu/auto/.venv/bin/python /home/ubuntu/auto/main.py reset-stop-loss
+/home/ubuntu/auto/.venv/bin/python /home/ubuntu/auto/main.py reset-stop-loss [--force]
 ```
 
 **역할:**
-- 기존 포지션의 상태 보존 (L1 청산 이후 남은 TP 매도 주문은 그대로 유지)
-- L1 매수 영구 차단 해제 (새 매수 신호에서 다시 매수 가능)
-- `stop_loss_active` 상태를 false로 복구
-- 운영 로그에 `[STOP_LOSS] reset-stop-loss completed` 기록
+- **기본 (L1 해제):** 
+  - 기존 포지션의 상태 보존 (L1 청산 이후 남은 TP 매도 주문은 그대로 유지)
+  - L1 매수 영구 차단 해제 (새 매수 신호에서 다시 매수 가능)
+  - `stop_loss_active` 상태를 false로 복구
+  
+- **--force 옵션 (L2 강제 해제):**
+  - STOP_LOSS_RESTART_LOCKOUT_HOURS 미경과 상태에서도 24시간 잠금을 강제 해제
+  - L2 발동 후 모든 포지션이 청산되었으므로, 새 그리드 없이 매수 재개 가능
+  - 긴급 상황에서 24시간 대기 없이 즉시 봇 재시작 필요시 사용
 
-**주의:** STOP_LOSS_RESTART_LOCKOUT_HOURS 미경과 상태에서 호출하면 exit 2로 실패. L2 이후 24시간이 경과한 후 `init-grid --force`로 새 그리드를 생성해야 한다.
+- **운영 로그:** `[STOP_LOSS] reset-stop-loss completed` 기록
+
+**주의:** 
+- --force 없이 STOP_LOSS_RESTART_LOCKOUT_HOURS 미경과 상태에서 호출하면 exit 2로 실패
+- L2 이후는 포지션이 모두 청산되었으므로 `init-grid --force`로 새 그리드를 생성해야 봇 재시작 가능
+- --force는 L2 강제 해제용이므로, L1 상태에서는 --force 없이 호출하는 것을 권장
 
 ### L2 후 재시작 절차
 
@@ -239,17 +255,30 @@ PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh
 ```properties
 # Slack Incoming Webhook URL 또는 Generic Webhook URL
 STOP_LOSS_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+
+# 알림 활성화/비활성화 (기본값: True)
+STOP_LOSS_NOTIFICATION_ENABLED=True
 ```
 
-**알림 종류:**
-- **ARMED**: 손절 조건 충족 후 대기 시간 진입 (L1은 1시간, L2는 30분)
-- **EXECUTED**: 손절이 실제로 실행되어 포지션 청산 완료
-- **FAILED**: 손절 실행 중 오류 발생
+**알림 종류 및 페이로드:**
+
+| 이벤트 | 색상 | 트리거 시점 | 포함 정보 |
+|--------|------|-----------|---------|
+| **ARMED** | 주황 | 손절 조건 충족 → 대기 시간 진입 | 현재가, 임계값, 하락률, 그리드 기준가 |
+| **EXECUTED** | 초록 | 대기 시간 경과 → 포지션 청산 완료 | 현재가, 임계값, 청산수량 |
+| **FAILED** | 빨강 | 청산 중 오류 발생 | 현재가, 임계값, 실패한 슬롯 정보 |
+
+**설정 상세:**
+- `STOP_LOSS_WEBHOOK_URL`: Slack Incoming Webhook URL 또는 Generic Webhook URL
+  - 비어있으면 알림 송신이 자동 skip됨
+  - 유효한 URL만 설정하면 알림 송신 시작
+- `STOP_LOSS_NOTIFICATION_ENABLED`: 알림 활성화/비활성화 (기본 True)
+  - False로 설정하면 `WEBHOOK_URL`이 있어도 알림 미발송
 
 **주의:**
-- `STOP_LOSS_WEBHOOK_URL`이 비어있으면 알림 송신이 자동 skip된다
 - 알림 송신 실패가 발생해도 손절 본 흐름(포지션 청산)은 계속 진행된다
-- Slack 형식은 attachments 페이로드로 전송되므로 채널 포맷 설정이 필요할 수 있다
+- Slack 형식은 attachments 페이로드로 전송됨
+- 네트워크 단절이나 Webhook 서버 장애는 로그에 기록되지만 손절 흐름을 차단하지 않음
 
 ### 운영 중 설정 변경
 
