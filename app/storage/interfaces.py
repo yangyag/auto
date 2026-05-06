@@ -10,6 +10,7 @@ class RepositoryMetadata:
     revision: str | None = None
     stop_loss_active: bool = False
     stop_loss_level: int | None = None
+    stop_loss_armed_at: str | None = None  # ISO 8601 형식
     liquidated_at: str | None = None  # ISO 8601 형식
 
 

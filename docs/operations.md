@@ -166,14 +166,15 @@ STOP_LOSS_L2_PCT=30
 | `STOP_LOSS_L2_ARM_HOLD_SECONDS` | `1800` | L2 대기 시간 (초) | 300 ~ 1800 | 컨펌 후 손절 실행까지의 추가 대기 시간 (30분) |
 | `STOP_LOSS_L1_LIQUIDATE_RATIO` | `0.5` | L1 청산 비율 | 0.3 ~ 0.7 | L1에서 청산할 포지션 비율 (0=0%, 1=100%) |
 | `STOP_LOSS_RESTART_LOCKOUT_HOURS` | `24` | L2 재시작 잠금 | 12 ~ 48 | L2 발동 후 자동 재시작 금지 시간 |
+| `STOP_LOSS_WEBHOOK_URL` | (없음) | 외부 알림 Webhook | URL 문자열 | Slack/Generic Webhook URL. 비어있으면 알림 미발송 |
 
 ### L0/L1/L2 트리거 시 봇 거동
 
 | 단계 | 트리거 조건 | 봇 거동 | 재개 방법 |
 |-----|-----------|--------|---------|
-| **L0** | 현재가 < L0 임계값 (기본 -10%) | 신규 매수만 차단. 기존 TP 매도는 정상 진행. 가역적. | 현재가가 L0 임계값 위로 회복하면 자동 해제 |
-| **L1** | 현재가 < L1 임계값 (기본 -20%) | 1시간 대기 후 보유 BTC 50% 지정가 매도. 매수 영구 차단. | `reset-stop-loss` CLI로 수동 해제 |
-| **L2** | 현재가 < L2 임계값 (기본 -30%) | 30분 대기 후 잔여 100% 시장가 분할 청산. 봇 즉시 종료. 24시간 재시작 잠금. | 새 그리드로 `init-grid --force` 재구성 |
+| **L0** | 현재가 < L0 임계값 (기본 -10%) | 신규 매수만 차단. 손절 본 흐름은 실행하지 않음. 기존 TP 매도는 정상 진행. 가역적. | 현재가가 L0 임계값 위로 회복하면 자동 해제 |
+| **L1** | 현재가 < L1 임계값 (기본 -20%) | 컨펌 후 1시간 대기하여 보유 BTC 50%를 threshold 가격 지정가로 매도. 매수 영구 차단. | `reset-stop-loss` CLI로 수동 해제. STOP_LOSS_RESTART_LOCKOUT_HOURS 미경과 시 exit 2 반환. |
+| **L2** | 현재가 < L2 임계값 (기본 -30%) | 컨펌 후 30분 대기하여 잔여 100%를 시장가로 분할 청산. 봇 즉시 종료 (프로세스 exit). 24시간 재시작 잠금. | 새 그리드로 `init-grid --force` 재구성 |
 
 ### reset-stop-loss CLI 사용법
 
@@ -190,9 +191,12 @@ python main.py reset-stop-loss
 ```
 
 **역할:**
-- 기존 포지션의 상태 보존 (손절 이후 남은 TP 매도 주문은 그대로 유지)
-- L1 매수 차단 해제 (새 매수 신호에서 다시 매수 가능)
+- 기존 포지션의 상태 보존 (L1 청산 이후 남은 TP 매도 주문은 그대로 유지)
+- L1 매수 영구 차단 해제 (새 매수 신호에서 다시 매수 가능)
+- `stop_loss_active` 상태를 false로 복구
 - 운영 로그에 `[STOP_LOSS] reset-stop-loss completed` 기록
+
+**주의:** STOP_LOSS_RESTART_LOCKOUT_HOURS 미경과 상태에서 호출하면 exit 2로 실패. L2 이후 24시간이 경과한 후 `init-grid --force`로 새 그리드를 생성해야 한다.
 
 ### L2 후 재시작 절차
 
@@ -226,6 +230,26 @@ PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh
 2026-05-06 10:30:45,123 [main] ERROR [STOP_LOSS] L1 armed at 2026-05-06T10:30:45+00:00 (threshold=87300000)
 2026-05-06 11:30:46,456 [main] ERROR [STOP_LOSS] L1 triggered: 50% liquidate (sold 0.0005 BTC)
 ```
+
+### 외부 알림 (Slack/Webhook)
+
+손절 이벤트를 Slack 또는 Generic Webhook으로 즉시 알림받을 수 있다.
+
+**활성화:**
+```properties
+# Slack Incoming Webhook URL 또는 Generic Webhook URL
+STOP_LOSS_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+```
+
+**알림 종류:**
+- **ARMED**: 손절 조건 충족 후 대기 시간 진입 (L1은 1시간, L2는 30분)
+- **EXECUTED**: 손절이 실제로 실행되어 포지션 청산 완료
+- **FAILED**: 손절 실행 중 오류 발생
+
+**주의:**
+- `STOP_LOSS_WEBHOOK_URL`이 비어있으면 알림 송신이 자동 skip된다
+- 알림 송신 실패가 발생해도 손절 본 흐름(포지션 청산)은 계속 진행된다
+- Slack 형식은 attachments 페이로드로 전송되므로 채널 포맷 설정이 필요할 수 있다
 
 ### 운영 중 설정 변경
 

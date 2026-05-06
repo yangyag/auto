@@ -46,6 +46,10 @@ class GridStateRuntime:
         if self.metadata is None:
             self.metadata = RepositoryMetadata()
 
+        armed_at_str = None
+        if self.stop_loss_armed_at:
+            armed_at_str = self.stop_loss_armed_at.isoformat()
+
         liquidated_at_str = None
         if self.liquidated_at:
             liquidated_at_str = self.liquidated_at.isoformat()
@@ -56,6 +60,7 @@ class GridStateRuntime:
             self.metadata,
             stop_loss_active=self.stop_loss_active,
             stop_loss_level=self.stop_loss_level,
+            stop_loss_armed_at=armed_at_str,
             liquidated_at=liquidated_at_str,
         )
 
@@ -97,6 +102,13 @@ def load_grid_state(repository: GridStateRepository) -> tuple[GridState, GridSta
     validate_runtime_grid_state(grid_state)
 
     # metadata에서 stop_loss 상태 복원
+    stop_loss_armed_at = None
+    if snapshot.metadata.stop_loss_armed_at:
+        try:
+            stop_loss_armed_at = datetime.fromisoformat(snapshot.metadata.stop_loss_armed_at)
+        except (ValueError, TypeError):
+            pass
+
     liquidated_at = None
     if snapshot.metadata.liquidated_at:
         try:
@@ -108,6 +120,7 @@ def load_grid_state(repository: GridStateRepository) -> tuple[GridState, GridSta
         metadata=snapshot.metadata,
         stop_loss_active=snapshot.metadata.stop_loss_active,
         stop_loss_level=snapshot.metadata.stop_loss_level,
+        stop_loss_armed_at=stop_loss_armed_at,
         liquidated_at=liquidated_at,
     )
     return grid_state, runtime
@@ -719,6 +732,14 @@ def run_trading_cycle(
     force_rest_price: bool = False,
 ) -> TradingCycleResult:
     """Run one full strategy evaluation cycle without sleeping."""
+    # L2 손절 발동 후 무한 루프 방지: 다음 사이클 완전 스킵
+    if runtime.stop_loss_active and runtime.stop_loss_level == 2:
+        logger.info("[STOP_LOSS] L2 상태 지속. 사이클 스킵 (봇 종료 대기).")
+        return TradingCycleResult(
+            current_order_day=current_order_day,
+            daily_order_count=daily_order_count,
+        )
+
     current_order_day, daily_order_count = reset_daily_order_count_if_new_day(
         current_order_day,
         daily_order_count,
@@ -829,9 +850,11 @@ def run_trading_cycle(
             elif runtime.stop_loss_active and runtime.stop_loss_level == 1:
                 # L1 상태 유지: 매수 차단, TP 매도 유지 (BreakoutGuard와 동일 방식)
                 logger.info("[STOP_LOSS] L1 상태 유지. 신규 매수 차단.")
-        except (ValueError, AttributeError, TypeError) as e:
-            # 테스트 환경에서 Mock 객체 등으로 인한 오류: 로그만 하고 계속
-            logger.debug(f"[STOP_LOSS] 평가 건너뜀: {e}")
+        except ValueError as e:
+            logger.error(f"[STOP_LOSS] 평가 실패 (ValueError): {e}")
+        except (AttributeError, TypeError) as e:
+            # 테스트/Mock 환경: 평가 스킵하고 계속
+            logger.debug(f"[STOP_LOSS] Mock/테스트 환경 (skip): {type(e).__name__}")
 
     breakout_guard_status = fetch_breakout_guard_status(exchange, grid_state)
     log_breakout_guard_transition(runtime, breakout_guard_status)
@@ -1250,8 +1273,8 @@ def run_grid_init(
     return 0
 
 
-def run_reset_stop_loss() -> int:
-    """손절 L1 상태를 해제하고 신규 매수를 재개한다."""
+def run_reset_stop_loss(force: bool = False) -> int:
+    """손절 상태를 해제하고 신규 매수를 재개한다."""
     print("=== 손절 상태 해제 ===")
     print(f"심볼: {cfg.SYMBOL}")
 
@@ -1265,6 +1288,21 @@ def run_reset_stop_loss() -> int:
             return 0
 
         print(f"현재 손절 상태: L{runtime.stop_loss_level}")
+
+        # L2 24시간 재시작 잠금 확인
+        if runtime.stop_loss_level == 2 and runtime.liquidated_at is not None and not force:
+            lockout_hours = cfg.STOP_LOSS_RESTART_LOCKOUT_HOURS
+            elapsed = datetime.now(tz=timezone.utc) - runtime.liquidated_at
+            remaining = timedelta(hours=lockout_hours) - elapsed
+            if remaining.total_seconds() > 0:
+                remaining_h = int(remaining.total_seconds() // 3600)
+                remaining_m = int((remaining.total_seconds() % 3600) // 60)
+                print(f"오류: L2 청산 후 {lockout_hours}시간 재시작 잠금 중.")
+                print(f"잠금 해제까지: {remaining_h}시간 {remaining_m}분 남음.")
+                print("강제 해제하려면 --force 옵션을 사용하십시오.")
+                print("상태: 실패")
+                return 2
+
         runtime.stop_loss_active = False
         runtime.stop_loss_level = None
         runtime.stop_loss_armed_at = None
@@ -1300,7 +1338,8 @@ def build_cli_parser() -> argparse.ArgumentParser:
     grid_parser.add_argument("--tp-k-floor", type=decimal_arg, default=cfg.GRID_TP_K_FLOOR)
     grid_parser.add_argument("--force", action="store_true", help="기존 PostgreSQL 그리드 스냅샷을 덮어쓴다")
 
-    subparsers.add_parser("reset-stop-loss", help="손절 L1 상태를 해제하고 신규 매수를 재개한다")
+    reset_stop_loss_parser = subparsers.add_parser("reset-stop-loss", help="손절 상태를 해제하고 신규 매수를 재개한다")
+    reset_stop_loss_parser.add_argument("--force", action="store_true", help="L2 24시간 잠금을 무시하고 강제 해제")
 
     return parser
 
@@ -1331,7 +1370,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     if args.command == "reset-stop-loss":
-        return run_reset_stop_loss()
+        return run_reset_stop_loss(force=args.force)
 
     parser.print_help()
     return 0
