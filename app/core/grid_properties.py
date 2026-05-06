@@ -31,6 +31,19 @@ ALLOWED_GRID_PROPERTY_KEYS = {
     "TP_MODEL",
     "TP_K_BASE",
     "TP_K_FLOOR",
+    "STOP_LOSS_MODE",
+    "STOP_LOSS_BAND_MULTIPLE",
+    "STOP_LOSS_L0_PCT",
+    "STOP_LOSS_L1_PCT",
+    "STOP_LOSS_L2_PCT",
+    "STOP_LOSS_CANDLE_UNIT",
+    "STOP_LOSS_L0_CONSECUTIVE_CLOSES",
+    "STOP_LOSS_L1_CONSECUTIVE_CLOSES",
+    "STOP_LOSS_L2_CONSECUTIVE_CLOSES",
+    "STOP_LOSS_L1_ARM_HOLD_SECONDS",
+    "STOP_LOSS_L2_ARM_HOLD_SECONDS",
+    "STOP_LOSS_L1_LIQUIDATE_RATIO",
+    "STOP_LOSS_RESTART_LOCKOUT_HOURS",
 }
 
 
@@ -43,6 +56,140 @@ class GridPropertySpec:
     tp_model: str | None = DEFAULT_TP_MODEL
     tp_k_base: Decimal | None = None
     tp_k_floor: Decimal | None = None
+    stop_loss_mode: str = "off"
+    stop_loss_band_multiple: Decimal | None = None
+    stop_loss_l0_pct: Decimal | None = None
+    stop_loss_l1_pct: Decimal | None = None
+    stop_loss_l2_pct: Decimal | None = None
+    stop_loss_candle_unit: int = 15
+    stop_loss_l0_consecutive_closes: int = 4
+    stop_loss_l1_consecutive_closes: int = 4
+    stop_loss_l2_consecutive_closes: int = 2
+    stop_loss_l1_arm_hold_seconds: int = 3600
+    stop_loss_l2_arm_hold_seconds: int = 1800
+    stop_loss_l1_liquidate_ratio: Decimal | None = None
+    stop_loss_restart_lockout_hours: int = 24
+
+
+def validate_stop_loss_config(
+    spec: GridPropertySpec,
+    min_buy_price: Decimal,
+    max_buy_price: Decimal,
+) -> None:
+    if spec.stop_loss_mode == "off":
+        return
+
+    if spec.stop_loss_mode == "band_multiple":
+        if spec.stop_loss_band_multiple is None:
+            raise ValueError("band_multiple 모드는 STOP_LOSS_BAND_MULTIPLE이 필요합니다.")
+        if not (Decimal("1.0") <= spec.stop_loss_band_multiple <= Decimal("2.0")):
+            raise ValueError(
+                f"STOP_LOSS_BAND_MULTIPLE은 1.0~2.0 범위여야 합니다: {spec.stop_loss_band_multiple}"
+            )
+    elif spec.stop_loss_mode == "fixed_pct":
+        for name in ("L0", "L1", "L2"):
+            attr = f"stop_loss_{name.lower()}_pct"
+            if not hasattr(spec, attr) or getattr(spec, attr) is None:
+                raise ValueError(f"fixed_pct 모드는 STOP_LOSS_{name}_PCT가 필요합니다.")
+
+        l0 = spec.stop_loss_l0_pct
+        l1 = spec.stop_loss_l1_pct
+        l2 = spec.stop_loss_l2_pct
+        if l0 <= Decimal("0"):
+            raise ValueError(f"STOP_LOSS_L0_PCT는 0보다 커야 합니다: {l0}")
+        if l1 <= Decimal("0"):
+            raise ValueError(f"STOP_LOSS_L1_PCT는 0보다 커야 합니다: {l1}")
+        if l2 <= Decimal("0"):
+            raise ValueError(f"STOP_LOSS_L2_PCT는 0보다 커야 합니다: {l2}")
+        if not (l0 < l1 < l2):
+            raise ValueError(f"STOP_LOSS L0 < L1 < L2 순서 강제: {l0} < {l1} < {l2}")
+        if l2 >= Decimal("50"):
+            raise ValueError(f"STOP_LOSS_L2_PCT는 50 미만이어야 합니다: {l2}")
+    else:
+        raise ValueError(f"지원하지 않는 STOP_LOSS_MODE: {spec.stop_loss_mode}")
+
+    if spec.stop_loss_candle_unit <= 0:
+        raise ValueError(f"STOP_LOSS_CANDLE_UNIT는 양수여야 합니다: {spec.stop_loss_candle_unit}")
+
+    if spec.stop_loss_l0_consecutive_closes < 2:
+        raise ValueError(
+            f"STOP_LOSS_L0_CONSECUTIVE_CLOSES는 2 이상이어야 합니다: {spec.stop_loss_l0_consecutive_closes}"
+        )
+    if spec.stop_loss_l1_consecutive_closes < 2:
+        raise ValueError(
+            f"STOP_LOSS_L1_CONSECUTIVE_CLOSES는 2 이상이어야 합니다: {spec.stop_loss_l1_consecutive_closes}"
+        )
+    if spec.stop_loss_l2_consecutive_closes < 1:
+        raise ValueError(
+            f"STOP_LOSS_L2_CONSECUTIVE_CLOSES는 1 이상이어야 합니다: {spec.stop_loss_l2_consecutive_closes}"
+        )
+
+    if spec.stop_loss_l1_arm_hold_seconds <= 0:
+        raise ValueError(
+            f"STOP_LOSS_L1_ARM_HOLD_SECONDS는 양수여야 합니다: {spec.stop_loss_l1_arm_hold_seconds}"
+        )
+    if spec.stop_loss_l2_arm_hold_seconds <= 0:
+        raise ValueError(
+            f"STOP_LOSS_L2_ARM_HOLD_SECONDS는 양수여야 합니다: {spec.stop_loss_l2_arm_hold_seconds}"
+        )
+
+    if spec.stop_loss_l1_liquidate_ratio is not None:
+        if not (Decimal("0") < spec.stop_loss_l1_liquidate_ratio <= Decimal("1")):
+            raise ValueError(
+                f"STOP_LOSS_L1_LIQUIDATE_RATIO는 0 < 값 <= 1이어야 합니다: {spec.stop_loss_l1_liquidate_ratio}"
+            )
+
+    if spec.stop_loss_restart_lockout_hours < 0:
+        raise ValueError(
+            f"STOP_LOSS_RESTART_LOCKOUT_HOURS는 0 이상이어야 합니다: {spec.stop_loss_restart_lockout_hours}"
+        )
+
+    if spec.stop_loss_mode == "band_multiple":
+        if spec.stop_loss_band_multiple <= Decimal("0.5"):
+            raise ValueError(
+                f"STOP_LOSS_BAND_MULTIPLE이 너무 작음: {spec.stop_loss_band_multiple} (최소 0.5 초과 권장)"
+            )
+    elif spec.stop_loss_mode == "fixed_pct":
+        for level_num, level_name in [(0, "L0"), (1, "L1"), (2, "L2")]:
+            pct = getattr(spec, f"stop_loss_{level_name.lower()}_pct")
+            if pct >= Decimal("50"):
+                raise ValueError(
+                    f"STOP_LOSS_{level_name}_PCT가 너무 높음: {pct} (50 미만이어야 함)"
+                )
+
+    if min_buy_price <= DECIMAL_ZERO or max_buy_price <= min_buy_price:
+        return
+
+    lower = min_buy_price
+    upper = max_buy_price
+
+    if spec.stop_loss_mode == "band_multiple":
+        band_multiple = spec.stop_loss_band_multiple
+        if band_multiple is not None:
+            threshold = lower * (Decimal("1") - band_multiple * (Decimal("1") - lower / upper))
+            if threshold >= lower * Decimal("0.9"):
+                raise ValueError(
+                    f"band_multiple이 너무 작아 그리드 정상 운영 구간 침범: threshold={threshold}, lower={lower} (threshold < {lower * Decimal('0.9')}이어야 함)"
+                )
+            if threshold <= lower * Decimal("0.5"):
+                raise ValueError(
+                    f"band_multiple이 너무 커 하한 50% 초과: threshold={threshold}, lower={lower} (threshold > {lower * Decimal('0.5')}이어야 함)"
+                )
+    elif spec.stop_loss_mode == "fixed_pct":
+        l0_pct = spec.stop_loss_l0_pct
+        l2_pct = spec.stop_loss_l2_pct
+        if l0_pct is not None:
+            threshold_upper = lower * (Decimal("1") - l0_pct / Decimal("100"))
+            if threshold_upper >= lower * Decimal("0.9"):
+                raise ValueError(
+                    f"L0_PCT가 너무 작아 그리드 정상 운영 구간 침범: L0_PCT={l0_pct}, threshold={threshold_upper} (threshold < {lower * Decimal('0.9')}이어야 함)"
+                )
+        if l2_pct is not None:
+            threshold_lower = lower * (Decimal("1") - l2_pct / Decimal("100"))
+            if threshold_lower <= lower * Decimal("0.5"):
+                raise ValueError(
+                    f"L2_PCT가 너무 커 하한 50% 초과: L2_PCT={l2_pct}, threshold={threshold_lower} (threshold > {lower * Decimal('0.5')}이어야 함)"
+                )
 
 
 def _resolve_grid_count_from_step_pct(
@@ -120,7 +267,7 @@ def load_grid_property_spec(path: str | Path) -> GridPropertySpec:
     else:
         grid_count = int(grid_count_value)
 
-    return GridPropertySpec(
+    spec = GridPropertySpec(
         min_buy_price=min_buy_price,
         max_buy_price=max_buy_price,
         total_budget_krw=to_decimal(properties["TOTAL_BUDGET_KRW"]),
@@ -128,7 +275,22 @@ def load_grid_property_spec(path: str | Path) -> GridPropertySpec:
         tp_model=properties.get("TP_MODEL") or DEFAULT_TP_MODEL,
         tp_k_base=to_decimal(properties["TP_K_BASE"]) if properties.get("TP_K_BASE") else None,
         tp_k_floor=to_decimal(properties["TP_K_FLOOR"]) if properties.get("TP_K_FLOOR") else None,
+        stop_loss_mode=properties.get("STOP_LOSS_MODE", "off"),
+        stop_loss_band_multiple=to_decimal(properties["STOP_LOSS_BAND_MULTIPLE"]) if properties.get("STOP_LOSS_BAND_MULTIPLE") else None,
+        stop_loss_l0_pct=to_decimal(properties["STOP_LOSS_L0_PCT"]) if properties.get("STOP_LOSS_L0_PCT") else None,
+        stop_loss_l1_pct=to_decimal(properties["STOP_LOSS_L1_PCT"]) if properties.get("STOP_LOSS_L1_PCT") else None,
+        stop_loss_l2_pct=to_decimal(properties["STOP_LOSS_L2_PCT"]) if properties.get("STOP_LOSS_L2_PCT") else None,
+        stop_loss_candle_unit=int(properties.get("STOP_LOSS_CANDLE_UNIT", "15")),
+        stop_loss_l0_consecutive_closes=int(properties.get("STOP_LOSS_L0_CONSECUTIVE_CLOSES", "4")),
+        stop_loss_l1_consecutive_closes=int(properties.get("STOP_LOSS_L1_CONSECUTIVE_CLOSES", "4")),
+        stop_loss_l2_consecutive_closes=int(properties.get("STOP_LOSS_L2_CONSECUTIVE_CLOSES", "2")),
+        stop_loss_l1_arm_hold_seconds=int(properties.get("STOP_LOSS_L1_ARM_HOLD_SECONDS", "3600")),
+        stop_loss_l2_arm_hold_seconds=int(properties.get("STOP_LOSS_L2_ARM_HOLD_SECONDS", "1800")),
+        stop_loss_l1_liquidate_ratio=to_decimal(properties["STOP_LOSS_L1_LIQUIDATE_RATIO"]) if properties.get("STOP_LOSS_L1_LIQUIDATE_RATIO") else None,
+        stop_loss_restart_lockout_hours=int(properties.get("STOP_LOSS_RESTART_LOCKOUT_HOURS", "24")),
     )
+    validate_stop_loss_config(spec, min_buy_price, max_buy_price)
+    return spec
 
 
 def normalize_tp_model(tp_model: str | None = None) -> str:

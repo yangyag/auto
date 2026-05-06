@@ -8,6 +8,9 @@ from app.core.models import GridRow, Order
 class RepositoryMetadata:
     version: int | str | None = None
     revision: str | None = None
+    stop_loss_active: bool = False
+    stop_loss_level: int | None = None
+    liquidated_at: str | None = None  # ISO 8601 형식
 
 
 @dataclass(frozen=True)

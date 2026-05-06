@@ -245,3 +245,58 @@ tail -f logs/trading-$(date +%F).log
 ```
 
 전량 시장가 매도 주문에는 reset 전용 identifier 가 붙으므로, 이후 `scripts/upbit_realized_pnl.py` 에서 옵션 없이 reset 청산 손익에 포함된다.
+
+## 11) 손절 관련 명령
+
+### 손절 L1 매수 차단 해제
+
+L1 손절이 발동된 후 매수 차단을 해제하려면:
+
+```bash
+python3 main.py reset-stop-loss
+```
+
+또는 EC2에서 venv 없이:
+
+```bash
+/home/ubuntu/auto/.venv/bin/python /home/ubuntu/auto/main.py reset-stop-loss
+```
+
+**역할:**
+- 손절 이후 남은 포지션의 TP 매도는 그대로 유지
+- L1 매수 영구 차단 상태를 해제
+- 새로운 매수 신호에서 다시 매수 가능하게 복구
+
+### 손절 상태 확인
+
+현재 손절 상태는 `scripts/show_grid_state.py` 의 상단 출력에 포함된다:
+
+```bash
+python3 scripts/show_grid_state.py
+```
+
+출력에서 다음을 확인한다:
+- `stop_loss_active`: 현재 손절 발동 상태 (True/False)
+- `armed_at`: 가장 최근 손절 armed 시간
+- 각 슬롯의 `status` 컬럼 (L1/L2 발동시 일부 슬롯은 청산 상태)
+
+### 손절 파라미터 변경
+
+손절 매개변수는 `grid.properties` 또는 환경변수로 제어된다.
+
+변경 후 봇 재시작:
+
+```bash
+./stop.sh
+# grid.properties 또는 .env 수정
+PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh
+```
+
+**변경 가능한 파라미터:**
+- `STOP_LOSS_MODE`: 활성화/비활성화 모드 (band_multiple / fixed_pct / off)
+- `STOP_LOSS_BAND_MULTIPLE`: 그리드 폭 배수 (1.0 ~ 2.0)
+- 모든 `STOP_LOSS_*_CONSECUTIVE_CLOSES`: 컨펌 캔들 개수
+- 모든 `STOP_LOSS_*_ARM_HOLD_SECONDS`: 대기 시간
+- `STOP_LOSS_L1_LIQUIDATE_RATIO`: L1 청산 비율
+
+자세한 설명은 [docs/operations.md](operations.md#손절stop-loss-운영-가이드)의 손절 운영 가이드를 참조한다.

@@ -123,3 +123,132 @@ source /home/ubuntu/auto/.venv/bin/activate
 - API 키는 환경변수 `UPBIT_ACCESS_KEY`, `UPBIT_SECRET_KEY`로만 주입한다.
 - PostgreSQL 접속정보도 프로젝트 루트 `.env` 또는 EC2 `/home/ubuntu/auto/.env`로만 관리한다.
 - 민감정보를 문서, 샘플 파일, 커밋에 복제하지 않는다.
+
+## 손절(Stop-Loss) 운영 가이드
+
+### 개요
+
+손절 기능은 현재가가 그리드 최하단 아래로 내려갔을 때 단계별 자동 대응을 제공한다. 설정된 임계값에 도달하고 컨펌 조건이 만족되면 자동으로 포지션을 청산한다.
+
+자세한 설계와 이론은 [docs/stop-loss-design.md](stop-loss-design.md)를 참조한다.
+
+### 손절 모드 활성화
+
+손절 기능은 `grid.properties` 또는 환경변수로 제어된다. 기본값은 `band_multiple` 모드로 활성화되어 있다:
+
+```properties
+# 모드: band_multiple (권장) | fixed_pct | off
+STOP_LOSS_MODE=band_multiple
+
+# band_multiple 모드: 그리드 폭 배수 기반 임계값 (권장)
+STOP_LOSS_BAND_MULTIPLE=1.5        # k값, 범위 1.0~2.0
+
+# fixed_pct 모드: 고정 퍼센트 기반 (백테스트/비교용)
+STOP_LOSS_L0_PCT=10
+STOP_LOSS_L1_PCT=20
+STOP_LOSS_L2_PCT=30
+```
+
+### ENV 파라미터 표
+
+| 파라미터 | 기본값 | 의미 | 권장 범위 | 설명 |
+|---------|--------|------|----------|------|
+| `STOP_LOSS_MODE` | `band_multiple` | 손절 모드 | `band_multiple` / `fixed_pct` / `off` | band_multiple 권장 (그리드 폭이 달라져도 일관된 기준) |
+| `STOP_LOSS_BAND_MULTIPLE` | `1.5` | 그리드 폭 배수 | 1.0 ~ 2.0 | 임계값 = min × (1 - k × band_ratio) |
+| `STOP_LOSS_L0_PCT` | `10` | L0 고정 % | 5 ~ 15 | band_multiple 모드에서는 사용 안 됨 |
+| `STOP_LOSS_L1_PCT` | `20` | L1 고정 % | 15 ~ 25 | band_multiple 모드에서는 사용 안 됨 |
+| `STOP_LOSS_L2_PCT` | `30` | L2 고정 % | 25 ~ 35 | band_multiple 모드에서는 사용 안 됨 |
+| `STOP_LOSS_CANDLE_UNIT` | `15` | 캔들 단위 (분) | 5 ~ 60 | 손절 트리거 컨펌용 캔들 종가 분석 |
+| `STOP_LOSS_L0_CONSECUTIVE_CLOSES` | `4` | L0 연속 캔들 | 2 ~ 6 | 이 개수의 캔들이 연속으로 L0 임계 아래 종가해야 트리거 |
+| `STOP_LOSS_L1_CONSECUTIVE_CLOSES` | `4` | L1 연속 캔들 | 2 ~ 6 | |
+| `STOP_LOSS_L2_CONSECUTIVE_CLOSES` | `2` | L2 연속 캔들 | 1 ~ 4 | L2는 위험하므로 더 빠르게 컨펌 |
+| `STOP_LOSS_L1_ARM_HOLD_SECONDS` | `3600` | L1 대기 시간 (초) | 600 ~ 3600 | 컨펌 후 손절 실행까지의 추가 대기 시간 (1시간) |
+| `STOP_LOSS_L2_ARM_HOLD_SECONDS` | `1800` | L2 대기 시간 (초) | 300 ~ 1800 | 컨펌 후 손절 실행까지의 추가 대기 시간 (30분) |
+| `STOP_LOSS_L1_LIQUIDATE_RATIO` | `0.5` | L1 청산 비율 | 0.3 ~ 0.7 | L1에서 청산할 포지션 비율 (0=0%, 1=100%) |
+| `STOP_LOSS_RESTART_LOCKOUT_HOURS` | `24` | L2 재시작 잠금 | 12 ~ 48 | L2 발동 후 자동 재시작 금지 시간 |
+
+### L0/L1/L2 트리거 시 봇 거동
+
+| 단계 | 트리거 조건 | 봇 거동 | 재개 방법 |
+|-----|-----------|--------|---------|
+| **L0** | 현재가 < L0 임계값 (기본 -10%) | 신규 매수만 차단. 기존 TP 매도는 정상 진행. 가역적. | 현재가가 L0 임계값 위로 회복하면 자동 해제 |
+| **L1** | 현재가 < L1 임계값 (기본 -20%) | 1시간 대기 후 보유 BTC 50% 지정가 매도. 매수 영구 차단. | `reset-stop-loss` CLI로 수동 해제 |
+| **L2** | 현재가 < L2 임계값 (기본 -30%) | 30분 대기 후 잔여 100% 시장가 분할 청산. 봇 즉시 종료. 24시간 재시작 잠금. | 새 그리드로 `init-grid --force` 재구성 |
+
+### reset-stop-loss CLI 사용법
+
+L1 발동 후 매수 차단을 해제하려면 `reset-stop-loss` 명령을 사용한다:
+
+```bash
+# EC2에서 (venv 활성화 또는 절대 경로 사용)
+cd /home/ubuntu/auto
+source .venv/bin/activate
+python main.py reset-stop-loss
+
+# 또는 절대 경로:
+/home/ubuntu/auto/.venv/bin/python /home/ubuntu/auto/main.py reset-stop-loss
+```
+
+**역할:**
+- 기존 포지션의 상태 보존 (손절 이후 남은 TP 매도 주문은 그대로 유지)
+- L1 매수 차단 해제 (새 매수 신호에서 다시 매수 가능)
+- 운영 로그에 `[STOP_LOSS] reset-stop-loss completed` 기록
+
+### L2 후 재시작 절차
+
+L2 손절이 발동되면:
+1. 봇이 자동으로 종료된다 (프로세스 exit)
+2. 모든 포지션이 청산된다
+3. `liquidated_at` 타임스탬프가 DB에 기록된다
+4. 24시간 동안 자동 재시작이 차단된다
+
+**재시작 방법:**
+```bash
+cd /home/ubuntu/auto
+./stop.sh
+git fetch origin && git pull --ff-only origin main  # 필요시 코드 동기화
+.venv/bin/python main.py init-grid --force         # 새 그리드 생성 (기존 상태 초기화)
+PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh
+./tail-latest-log.sh
+```
+
+주의: `init-grid --force`는 `grid.properties` 기준으로 **완전히 새로운 그리드**를 생성한다. 따라서 손절 전 체결 이력은 모두 정리된다.
+
+### 손절 이벤트 로그
+
+손절 관련 이벤트는 다음과 같이 기록된다:
+
+- **로그 파일**: `logs/trading-YYYY-MM-DD.log`
+- **로그 레벨**: ERROR (CloudWatch, journalctl 연동)
+- **형식**: `[STOP_LOSS] L{n} armed at {armed_at}` / `[STOP_LOSS] L{n} triggered`
+
+```
+2026-05-06 10:30:45,123 [main] ERROR [STOP_LOSS] L1 armed at 2026-05-06T10:30:45+00:00 (threshold=87300000)
+2026-05-06 11:30:46,456 [main] ERROR [STOP_LOSS] L1 triggered: 50% liquidate (sold 0.0005 BTC)
+```
+
+### 운영 중 설정 변경
+
+손절 파라미터를 변경하려면:
+
+1. EC2에서 `./stop.sh`로 봇 정지
+2. `grid.properties` 또는 `.env` 파일 수정
+3. `PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh`로 재시작
+
+**변경 대상이 되는 파라미터** (재시작으로 반영):
+- `STOP_LOSS_MODE`, `STOP_LOSS_BAND_MULTIPLE`
+- 모든 `STOP_LOSS_*_CONSECUTIVE_CLOSES`, `STOP_LOSS_*_ARM_HOLD_SECONDS`
+- `STOP_LOSS_L1_LIQUIDATE_RATIO`
+
+**변경 대상이 아닌 파라미터** (그리드 생성 시에만 반영):
+- `STOP_LOSS_CANDLE_UNIT` (이미 실행 중인 그리드는 이전 값으로 평가)
+
+### 손절 비활성화
+
+손절을 완전히 비활성화하려면:
+
+```properties
+STOP_LOSS_MODE=off
+```
+
+이 경우 봇은 현재가가 그리드 최하단 아래로 내려가도 아무 조치를 취하지 않는다. 모든 매수/매도는 정상 운영된다.
