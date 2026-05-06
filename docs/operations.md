@@ -217,10 +217,11 @@ python main.py reset-stop-loss --force
 ### L2 후 재시작 절차
 
 L2 손절이 발동되면:
-1. 봇이 자동으로 종료된다 (프로세스 exit)
-2. 모든 포지션이 청산된다
-3. `liquidated_at` 타임스탬프가 DB에 기록된다
+1. 봇이 자동으로 종료된다 (프로세스 exit, 메인 루프 탈출)
+2. 모든 포지션이 청산된다 (시장가 분할 매도)
+3. `liquidated_at` 타임스탐프가 DB에 기록된다
 4. 24시간 동안 자동 재시작이 차단된다
+5. 손절 상태 (`stop_loss_armed_at`, `stop_loss_active` 등)는 DB에 영속화되어 봇 재시작 후 복원됨
 
 **재시작 방법:**
 ```bash
@@ -232,7 +233,10 @@ PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh
 ./tail-latest-log.sh
 ```
 
-주의: `init-grid --force`는 `grid.properties` 기준으로 **완전히 새로운 그리드**를 생성한다. 따라서 손절 전 체결 이력은 모두 정리된다.
+**주의:**
+- `init-grid --force`는 `grid.properties` 기준으로 **완전히 새로운 그리드**를 생성한다. 따라서 손절 전 체결 이력은 모두 정리된다.
+- 24시간 잠금을 강제 해제하려면 `reset-stop-loss --force`를 먼저 실행한 후 `init-grid --force`를 진행한다.
+- 봇 재시작 후 손절 상태가 자동으로 복원되므로 별도의 손절 상태 초기화는 불필요하다.
 
 ### 손절 이벤트 로그
 

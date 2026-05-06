@@ -850,11 +850,12 @@ def run_trading_cycle(
             elif runtime.stop_loss_active and runtime.stop_loss_level == 1:
                 # L1 상태 유지: 매수 차단, TP 매도 유지 (BreakoutGuard와 동일 방식)
                 logger.info("[STOP_LOSS] L1 상태 유지. 신규 매수 차단.")
-            elif runtime.stop_loss_active and runtime.stop_loss_level == 0 and not stop_loss_decision.triggered:
-                # L0 자동 해제: 현재가가 L0 임계값 위로 회복
-                runtime.stop_loss_active = False
-                runtime.stop_loss_level = None
-                logger.info("[STOP_LOSS] L0 자동 해제. 신규 매수 재개.")
+            else:
+                if runtime.stop_loss_active and runtime.stop_loss_level == 0:
+                    runtime.stop_loss_active = False
+                    runtime.stop_loss_level = None
+                    runtime.stop_loss_armed_at = None
+                    logger.info("[STOP_LOSS] L0 해제. 현재가 회복. 신규 매수 재개.")
         except ValueError as e:
             logger.error(f"[STOP_LOSS] 평가 실패 (ValueError): {e}")
         except (AttributeError, TypeError) as e:
