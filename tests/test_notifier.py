@@ -174,6 +174,8 @@ class TestStopLossNotifier(unittest.TestCase):
         attachment = payload["attachments"][0]
         self.assertEqual(attachment["color"], "#36A64F")  # 초록색
         self.assertIn("청산 완료", attachment["title"])
+        self.assertIn("임계값", attachment["text"])
+        self.assertIn("70000000", attachment["text"])
 
     def test_build_webhook_payload_failed(self):
         """FAILED 페이로드 구성"""
@@ -191,6 +193,8 @@ class TestStopLossNotifier(unittest.TestCase):
         attachment = payload["attachments"][0]
         self.assertEqual(attachment["color"], "#FF0000")  # 빨강색
         self.assertIn("실패", attachment["title"])
+        self.assertIn("임계값", attachment["text"])
+        self.assertIn("80000000", attachment["text"])
 
 
 if __name__ == "__main__":
