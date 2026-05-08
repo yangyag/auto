@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: auto-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PGDATABASE:?PGDATABASE is required}
+      POSTGRES_USER: ${PGUSER:?PGUSER is required}
+      POSTGRES_PASSWORD: ${PGPASSWORD:?PGPASSWORD is required}
+      PGDATA: /var/lib/postgresql/18/docker
+    ports:
+      - "127.0.0.1:${PGPORT:-5432}:5432"
+    volumes:
+      - auto_postgres18_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  auto_postgres18_data:
+    external: true
+    name: auto_postgres18_data
