@@ -42,10 +42,10 @@ tail -f logs/trading-$(date +%F).log
 
 ### 날짜별 최저 현재가 한눈에 보기
 ```bash
-python3 scripts/show_daily_low.py
+python3 scripts/check_daily_low.py
 ```
 
-`logs/trading-YYYY-MM-DD.log` 파일들을 모두 스캔해서 날짜별 최저 현재가를 출력한다. 특정 매수 라인까지 가격이 내려왔는지 빠르게 가늠할 때 쓴다. EC2에서는 `.venv/bin/python scripts/show_daily_low.py` 로 실행한다.
+`logs/trading-YYYY-MM-DD.log` 파일들을 모두 스캔해서 날짜별 최저 현재가를 출력한다. 특정 매수 라인까지 가격이 내려왔는지 빠르게 가늠할 때 쓴다. EC2에서는 `.venv/bin/python scripts/check_daily_low.py` 로 실행한다.
 
 ## 3) 업비트 잔고 확인
 

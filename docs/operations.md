@@ -110,7 +110,7 @@ source /home/ubuntu/auto/.venv/bin/activate
 - 백그라운드 실행/종료는 가능하면 `./run.sh`, `./stop.sh`를 우선 사용한다.
 - 직접 `nohup python3 main.py`를 실행하면 PID 추적과 로그 해석이 꼬일 수 있다.
 - 운영 로그는 `logs/trading-YYYY-MM-DD.log`를 기준으로 본다.
-- 날짜별 최저 현재가는 `scripts/show_daily_low.py` 로 빠르게 확인할 수 있다 (매수 라인 도달 여부 점검용).
+- 날짜별 최저 현재가는 `scripts/check_daily_low.py` 로 빠르게 확인할 수 있다 (매수 라인 도달 여부 점검용).
 - 테스트 로그가 같은 날짜 파일에 남을 수 있으므로 로거 이름 `__main__` / `main`도 함께 확인한다.
 - 실거래 주문이 발생할 수 있는 루프 실행은 명시적으로 필요할 때만 한다.
 
