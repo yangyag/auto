@@ -34,6 +34,7 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 | | `stock.py` | 주식 거래소 연동용 stub. `EXCHANGE_TYPE=stock` 일 때 로드되는 `BaseExchange` 구현 뼈대이며 현재는 `NotImplementedError` 만 던진다 (KIS API 등 실 연동 시 교체 예정) |
 | **scripts/** | `reset_krw_btc_live.py` | 운영 중인 그리드와 자산을 정리하고 새 그리드를 반영하는 운영 스크립트. 봇 재시작은 자동으로 하지 않는다 |
 | | `show_grid_state.py` | 현재 DB에 저장된 그리드와 주문의 상태를 요약해서 터미널에 출력 |
+| | `show_daily_low.py` | `logs/trading-YYYY-MM-DD.log` 파일들을 스캔해 날짜별 최저 현재가를 출력. 매수 라인 도달 여부 빠른 점검용 |
 | | `apply_grid_properties_to_postgres.py` | `grid.properties` 파일의 설정을 DB의 그리드 테이블에 강제 반영 |
 | | `adjust_budget_live.py` | 현재 DB 그리드의 가격 구조와 보유 수량은 유지한 채 `planned_qty`만 재계산하여 예산을 보수적으로 증액/감액. `--target-budget` (절대 총액) 으로 지정 |
 | | `upbit_realized_pnl.py` | 업비트 `GET /v1/orders/closed` + `/v1/order` 로 KRW-BTC 실현 손익을 일/주/월/년/전체 단위로 산출. 봇 주문 identifier의 슬롯 번호를 기준으로 같은 슬롯 안에서만 FIFO 매칭한다 (수수료 차감, read-only 분석). `--from` 기준 lookback 마진(기본 30일)으로 과거 BUY를 포함해 정확한 매칭을 보장한다. reset 청산 매도는 자동 인식하며, 과거 reset 주문은 `--reset-sell-uuid`로 지정 가능. 일별 버킷팅은 SELL `_time_key`(=최대 체결 시각, KST) 기준 |
