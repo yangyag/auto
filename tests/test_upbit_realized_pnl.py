@@ -1,6 +1,6 @@
 import unittest
 from contextlib import redirect_stdout
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from io import StringIO
 
@@ -48,6 +48,45 @@ def _identifier(side: str, slot: int, suffix: str) -> str:
 
 
 class UpbitRealizedPnlTest(unittest.TestCase):
+    def test_default_report_window_shows_recent_90_days_all_sections(self):
+        args = pnl.build_parser().parse_args([])
+
+        window = pnl.resolve_report_window(args, date(2026, 5, 11))
+
+        self.assertEqual(window.from_date, date(2026, 2, 10))
+        self.assertEqual(window.to_date, date(2026, 5, 11))
+        self.assertEqual(window.periods_to_show, ["daily", "weekly", "monthly", "yearly", "all"])
+        self.assertEqual(window.mode_label, "전체")
+
+    def test_period_presets_resolve_to_current_ranges(self):
+        today = date(2026, 5, 13)
+
+        daily = pnl.resolve_report_window(pnl.build_parser().parse_args(["--period", "d"]), today)
+        weekly = pnl.resolve_report_window(pnl.build_parser().parse_args(["--period", "w"]), today)
+        monthly = pnl.resolve_report_window(pnl.build_parser().parse_args(["--period", "m"]), today)
+        yearly = pnl.resolve_report_window(pnl.build_parser().parse_args(["--period", "y"]), today)
+
+        self.assertEqual((daily.from_date, daily.to_date, daily.periods_to_show), (today, today, ["daily"]))
+        self.assertEqual((weekly.from_date, weekly.to_date, weekly.periods_to_show), (date(2026, 5, 11), today, ["weekly"]))
+        self.assertEqual((monthly.from_date, monthly.to_date, monthly.periods_to_show), (date(2026, 5, 1), today, ["monthly"]))
+        self.assertEqual((yearly.from_date, yearly.to_date, yearly.periods_to_show), (date(2026, 1, 1), today, ["yearly"]))
+
+    def test_custom_date_range_outputs_single_range_section(self):
+        args = pnl.build_parser().parse_args(["--from", "2026-05-01", "--to", "2026-05-11"])
+
+        window = pnl.resolve_report_window(args, date(2026, 5, 13))
+
+        self.assertEqual(window.from_date, date(2026, 5, 1))
+        self.assertEqual(window.to_date, date(2026, 5, 11))
+        self.assertEqual(window.periods_to_show, ["range"])
+        self.assertEqual(pnl.group_key(datetime(2026, 5, 5, tzinfo=KST), "range"), "조회범위")
+
+    def test_period_cannot_be_combined_with_custom_range(self):
+        args = pnl.build_parser().parse_args(["--period", "d", "--from", "2026-05-01"])
+
+        with self.assertRaises(ValueError):
+            pnl.resolve_report_window(args, date(2026, 5, 13))
+
     def test_normal_slot_matching_is_unchanged(self):
         orders = [
             _order(

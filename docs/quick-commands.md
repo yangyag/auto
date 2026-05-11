@@ -96,18 +96,28 @@ python3 scripts/show_grid_state.py
 
 ### 실현 손익 조회 (KRW-BTC, 업비트 API 기준)
 ```bash
-.venv/bin/python scripts/upbit_realized_pnl.py [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--period daily|weekly|monthly|yearly|all] [--reset-sell-uuid UUID] [--lookback DAYS]
+.venv/bin/python scripts/upbit_realized_pnl.py [--period d|w|m|y] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--reset-sell-uuid UUID] [--lookback DAYS]
 ```
 
-기본 최근 90일, period=all (일/주/월/년/전체), lookback 30일. 업비트 `GET /v1/orders/closed` 와 `/v1/order` 만 사용하는 read-only 분석. 봇 주문 `identifier`의 슬롯 번호를 기준으로 같은 슬롯 안에서만 BUY/SELL을 FIFO 매칭해 수수료 차감 순손익을 산출한다. 글로벌 FIFO가 아니며, 매칭되지 않는 매도(윈도우 시작 이전 매수분, identifier 패턴 불일치 등)는 별도 라인으로 분리한다. 기간은 2자리 연도 형식으로 표시하며, 주간 기간은 `26-04-20 ~ 26-04-26` 처럼 출력한다.
+옵션이 없으면 기본 최근 90일을 일/주/월/년/전체 섹션으로 모두 출력하고, lookback 30일을 사용한다. 업비트 `GET /v1/orders/closed` 와 `/v1/order` 만 사용하는 read-only 분석. 봇 주문 `identifier`의 슬롯 번호를 기준으로 같은 슬롯 안에서만 BUY/SELL을 FIFO 매칭해 수수료 차감 순손익을 산출한다. 글로벌 FIFO가 아니며, 매칭되지 않는 매도(윈도우 시작 이전 매수분, identifier 패턴 불일치 등)는 별도 라인으로 분리한다. 기간은 2자리 연도 형식으로 표시하며, 주간 기간은 `26-04-20 ~ 26-04-26` 처럼 출력한다.
 실현손익 표의 `매도주문수`는 SELL 주문 UUID 기준이고, `체결건수`는 업비트 `/v1/order` 의 `trades` 배열 기준 fill 수다.
+
+**기간 옵션:**
+
+- `--period d`: 오늘
+- `--period w`: 이번주(월요일~오늘)
+- `--period m`: 이번달(1일~오늘)
+- `--period y`: 이번년(1월 1일~오늘)
+- `--from YYYY-MM-DD --to YYYY-MM-DD`: 직접 지정 기간 1개 합산 출력
+
+`--period` 와 `--from/--to` 는 같이 쓰지 않는다. 특정 날짜/기간을 직접 지정할 때만 `--from/--to` 를 사용한다.
 
 **--lookback 파라미터 설명:**
 
-실현손익을 정확히 계산하려면 조회 기간 이전의 BUY 주문도 포함해야 한다. `--lookback` 은 `--from` 날짜 이전으로 추가 조회할 기간(일)이다.
+실현손익을 정확히 계산하려면 조회 기간 이전의 BUY 주문도 포함해야 한다. `--lookback` 은 표시 시작일 이전으로 추가 조회할 기간(일)이다.
 
-- **API 호출 범위(fetch):** `--from - lookback ~ --to` (모든 BUY/SELL 조회)
-- **출력 범위(display):** `--from ~ --to` (이 범위의 SELL만 표시)
+- **API 호출 범위(fetch):** `표시 시작일 - lookback ~ 표시 종료일` (모든 BUY/SELL 조회)
+- **출력 범위(display):** `--period` 또는 `--from/--to` 로 정한 기간 (이 범위의 SELL만 표시)
 - **매칭 대상:** fetch 범위 전체에서 FIFO 매칭 수행 (표시 범위 외 SELL도 과거 BUY 매칭에 사용)
 
 기본값은 30일이며, 실제 운영 데이터 분석 결과 30일부터 실현손익이 수렴하는 것을 확인했다.
@@ -122,14 +132,20 @@ fetch 범위 경계(`--from` 이후 1일)에 BUY가 조회되면 "lookback 부�
 
 **사용 예:**
 ```bash
-# 5월 1일 손익 조회 (과거 4월 BUY 포함, default 30일 lookback)
-.venv/bin/python scripts/upbit_realized_pnl.py --from 2026-05-01 --to 2026-05-01
+# 전체 조회: 최근 90일 일/주/월/년/전체 섹션 출력
+.venv/bin/python scripts/upbit_realized_pnl.py
 
-# 5월 전체 손익 + 안전 마진(lookback 45일)
+# 오늘 손익만 조회
+.venv/bin/python scripts/upbit_realized_pnl.py --period d
+
+# 이번주 손익만 조회
+.venv/bin/python scripts/upbit_realized_pnl.py --period w
+
+# 이번달 손익만 조회
+.venv/bin/python scripts/upbit_realized_pnl.py --period m
+
+# 직접 지정 기간 1개 합산 출력 + 안전 마진(lookback 45일)
 .venv/bin/python scripts/upbit_realized_pnl.py --from 2026-05-01 --to 2026-05-31 --lookback 45
-
-# 특정 주간 분석 (주간 집계만 출력)
-.venv/bin/python scripts/upbit_realized_pnl.py --from 2026-05-05 --to 2026-05-11 --period weekly
 
 # lookback 부족 경고가 나올 때 안전 마진으로 재실행
 .venv/bin/python scripts/upbit_realized_pnl.py --from 2026-05-01 --to 2026-05-31 --lookback 60

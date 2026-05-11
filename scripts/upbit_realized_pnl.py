@@ -12,33 +12,34 @@ STATE_BOT_KEY 는 cfg.STATE_BOT_KEY 로 동적 참조 (운영 환경별 호환).
 tie-break 로 SELL 이 먼저 처리될 가능성 (운영상 거의 불가능, 안내 노트).
 
 사용법:
-    .venv/bin/python scripts/upbit_realized_pnl.py [--from YYYY-MM-DD] [--to YYYY-MM-DD]
-        [--period daily|weekly|monthly|yearly|all] [--market KRW-BTC]
+    .venv/bin/python scripts/upbit_realized_pnl.py [--period d|w|m|y]
+        [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--market KRW-BTC]
         [--reset-sell-uuid UUID] [--lookback DAYS]
 
 기본값:
-    --from     : 오늘 기준 90일 전
-    --to       : 오늘
-    --period   : all  (daily/weekly/monthly/yearly/ALL 5개 섹션 모두 출력)
+    옵션 없음 : 오늘 기준 최근 90일, daily/weekly/monthly/yearly/ALL 5개 섹션 출력
+    --period  : d=오늘, w=이번주, m=이번달, y=이번년
+    --from/to : 사용자가 직접 지정한 기간 1개 합산 출력
     --market   : KRW-BTC
     --lookback : 30일 (default: DEFAULT_LOOKBACK_DAYS = 30)
 
 --lookback 파라미터:
-    --from 날짜 이전으로 추가 조회할 기간(일). 실현손익 매칭 과정에서
-    --from 전의 과거 BUY 주문들과 reset 직전 취소된 TP SELL 주문들을
+    조회 시작일 이전으로 추가 조회할 기간(일). 실현손익 매칭 과정에서
+    표시 기간 전의 과거 BUY 주문들과 reset 직전 취소된 TP SELL 주문들을
     포함하기 위해 사용한다.
 
     3개 윈도우:
-    1. fetch 윈도우: --from - lookback ~ --to (API 조회 범위, 모든 BUY 포함)
-    2. 사용자 입력: --from ~ --to (사용자가 지정한 논리 범위)
-    3. 표시 윈도우: --from ~ --to (출력에 표시되는 범위, 이 범위의 SELL만 보임)
+    1. fetch 윈도우: 표시 시작일 - lookback ~ 표시 종료일 (API 조회 범위, 모든 BUY 포함)
+    2. 사용자 입력: --period 또는 --from/--to 로 정한 논리 범위
+    3. 표시 윈도우: 출력에 표시되는 범위, 이 범위의 SELL만 보임
 
-    fetch 범위 경계 근처(--from 이후 1일)에서 BUY가 조회되면 경고를 출력한다.
+    fetch 범위 경계 근처(표시 시작일 이후 1일)에서 BUY가 조회되면 경고를 출력한다.
     이는 lookback이 부족하여 더 오래된 BUY를 누락했을 가능성을 의미한다.
     경고가 발생하면 --lookback을 추천값 이상으로 증가시켜 재실행하면 된다.
 
     예:
-    - 정확한 5월 1일 손익만 분석: --from 2026-05-01 --to 2026-05-01 (default 30일 lookback)
+    - 오늘 손익만 분석: --period d
+    - 이번주 손익만 분석: --period w
     - 5월 1일~31일 손익 + 4월 중 BUY: --from 2026-05-01 --to 2026-05-31 --lookback 30
     - 4월 중 의심 주문 정산 시 lookback 60일로 안전 마진 추가:
       --from 2026-04-01 --to 2026-04-30 --lookback 60
@@ -51,6 +52,7 @@ import time
 import uuid
 import warnings
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -131,6 +133,42 @@ DEFAULT_MARKET = "KRW-BTC"
 DEFAULT_REPORT_DAYS = 90
 DEFAULT_LOOKBACK_DAYS = 30
 RESET_QTY_TOLERANCE = Decimal("0.00000001")
+DEFAULT_PERIODS_TO_SHOW = ["daily", "weekly", "monthly", "yearly", "all"]
+PERIOD_PRESET_TO_GROUP = {
+    "d": "daily",
+    "w": "weekly",
+    "m": "monthly",
+    "y": "yearly",
+}
+PERIOD_PRESET_LABELS = {
+    "d": "오늘",
+    "w": "이번주",
+    "m": "이번달",
+    "y": "이번년",
+}
+PERIOD_PRESET_ALIASES = {
+    "d": "d",
+    "day": "d",
+    "daily": "d",
+    "today": "d",
+    "w": "w",
+    "week": "w",
+    "weekly": "w",
+    "m": "m",
+    "month": "m",
+    "monthly": "m",
+    "y": "y",
+    "year": "y",
+    "yearly": "y",
+}
+
+
+@dataclass(frozen=True)
+class ReportWindow:
+    from_date: date
+    to_date: date
+    periods_to_show: list[str]
+    mode_label: str
 
 
 # ── 인증 헬퍼 (exchange/crypto.py:86-102 패턴 그대로) ─────────
@@ -398,7 +436,69 @@ def group_key(time_key: datetime, period: str) -> str:
         return time_key.strftime("%y")
     if period == "all":
         return "ALL"
+    if period == "range":
+        return "조회범위"
     raise ValueError(f"알 수 없는 period: {period}")
+
+
+def parse_period_preset(value: str) -> str:
+    """CLI --period 값을 d/w/m/y 프리셋으로 정규화한다."""
+    normalized = PERIOD_PRESET_ALIASES.get(value.lower())
+    if normalized is None:
+        valid = ", ".join(PERIOD_PRESET_TO_GROUP.keys())
+        raise argparse.ArgumentTypeError(f"--period 는 {valid} 중 하나여야 합니다")
+    return normalized
+
+
+def resolve_report_window(args: argparse.Namespace, today_kst: date) -> ReportWindow:
+    """CLI 옵션을 표시 범위와 출력 집계 단위로 변환한다.
+
+    - 옵션 없음: 기존 운영 기본값처럼 최근 90일 전체 섹션 출력
+    - --period d/w/m/y: 오늘/이번주/이번달/이번년 프리셋
+    - --from/--to: 사용자가 지정한 기간 하나를 합산 출력
+    """
+    has_custom_range = bool(args.from_date or args.to_date)
+    if args.period and has_custom_range:
+        raise ValueError("--period 와 --from/--to 는 같이 사용할 수 없습니다")
+
+    if has_custom_range:
+        if not args.from_date:
+            raise ValueError("--to 만 단독으로 사용할 수 없습니다. --from YYYY-MM-DD 를 함께 지정하세요")
+        from_date = date.fromisoformat(args.from_date)
+        to_date = date.fromisoformat(args.to_date) if args.to_date else today_kst
+        if from_date > to_date:
+            raise ValueError(f"--from ({from_date}) 이 --to ({to_date}) 보다 늦습니다")
+        return ReportWindow(
+            from_date=from_date,
+            to_date=to_date,
+            periods_to_show=["range"],
+            mode_label="직접지정",
+        )
+
+    if args.period:
+        if args.period == "d":
+            from_date = today_kst
+        elif args.period == "w":
+            from_date = today_kst - timedelta(days=today_kst.weekday())
+        elif args.period == "m":
+            from_date = date(today_kst.year, today_kst.month, 1)
+        elif args.period == "y":
+            from_date = date(today_kst.year, 1, 1)
+        else:
+            raise ValueError(f"알 수 없는 --period 값: {args.period}")
+        return ReportWindow(
+            from_date=from_date,
+            to_date=today_kst,
+            periods_to_show=[PERIOD_PRESET_TO_GROUP[args.period]],
+            mode_label=PERIOD_PRESET_LABELS[args.period],
+        )
+
+    return ReportWindow(
+        from_date=today_kst - timedelta(days=DEFAULT_REPORT_DAYS),
+        to_date=today_kst,
+        periods_to_show=DEFAULT_PERIODS_TO_SHOW,
+        mode_label="전체",
+    )
 
 
 # ── FIFO 매칭 엔진 ────────────────────────────────────────────
@@ -942,19 +1042,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--from",
         dest="from_date",
         metavar="YYYY-MM-DD",
-        help="조회 시작일 (기본: 오늘 기준 90일 전)",
+        help="직접 조회 시작일 (--period 와 같이 사용 불가)",
     )
     parser.add_argument(
         "--to",
         dest="to_date",
         metavar="YYYY-MM-DD",
-        help="조회 종료일 (기본: 오늘)",
+        help="직접 조회 종료일 (기본: 오늘, --period 와 같이 사용 불가)",
     )
     parser.add_argument(
         "--period",
-        choices=["daily", "weekly", "monthly", "yearly", "all"],
-        default="all",
-        help="집계 단위 (기본: all — 5개 단위 모두 출력)",
+        type=parse_period_preset,
+        metavar="{d,w,m,y}",
+        help="기간 프리셋: d=오늘, w=이번주, m=이번달, y=이번년 (옵션 없으면 최근 90일 전체)",
     )
     parser.add_argument(
         "--market",
@@ -972,7 +1072,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=DEFAULT_LOOKBACK_DAYS,
         metavar="DAYS",
-        help=f"--from 이전 매칭용 closed orders 추가 조회 기간, 단위: 일 (기본: {DEFAULT_LOOKBACK_DAYS})",
+        help=f"표시 시작일 이전 매칭용 closed orders 추가 조회 기간, 단위: 일 (기본: {DEFAULT_LOOKBACK_DAYS})",
     )
     return parser
 
@@ -984,18 +1084,13 @@ def main(argv: list[str] | None = None) -> int:
 
     # 날짜 범위 결정
     today_kst = datetime.now(KST).date()
-    if args.to_date:
-        user_to_date = date.fromisoformat(args.to_date)
-    else:
-        user_to_date = today_kst
-    if args.from_date:
-        user_from_date = date.fromisoformat(args.from_date)
-    else:
-        user_from_date = today_kst - timedelta(days=DEFAULT_REPORT_DAYS)
-
-    if user_from_date > user_to_date:
-        print(f"오류: --from ({user_from_date}) 이 --to ({user_to_date}) 보다 늦습니다.", file=sys.stderr)
+    try:
+        report_window = resolve_report_window(args, today_kst)
+    except ValueError as exc:
+        print(f"오류: {exc}", file=sys.stderr)
         return 1
+    user_from_date = report_window.from_date
+    user_to_date = report_window.to_date
 
     # fetch 범위: lookback margin 포함
     fetch_from_date = user_from_date - timedelta(days=args.lookback)
@@ -1023,9 +1118,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     market = args.market
-    period_arg = args.period
 
-    print(f"조회 범위: {user_from_date} ~ {user_to_date}  마켓: {market}")
+    print(f"조회 범위: {user_from_date} ~ {user_to_date}  마켓: {market}  모드: {report_window.mode_label}")
     if args.lookback > 0:
         print(f"매칭용 lookback: {args.lookback}일 (fetch: {fetch_from_date} ~ {user_to_date})")
     print("closed orders 수집 중...")
@@ -1123,12 +1217,7 @@ def main(argv: list[str] | None = None) -> int:
     ]
 
     # 6단계: 출력
-    # period=all 이면 5개 단위 모두 출력, 아니면 해당 단위만
-    if period_arg == "all":
-        periods_to_show = ["daily", "weekly", "monthly", "yearly", "all"]
-    else:
-        periods_to_show = [period_arg]
-
+    periods_to_show = report_window.periods_to_show
     print()
     print("=" * 80)
     _print_realized_section(display_realized_lines, periods_to_show)
