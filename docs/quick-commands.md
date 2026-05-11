@@ -135,7 +135,7 @@ fetch 범위 경계(`--from` 이후 1일)에 BUY가 조회되면 "lookback 부�
 .venv/bin/python scripts/upbit_realized_pnl.py --from 2026-05-01 --to 2026-05-31 --lookback 60
 ```
 
-`reset_krw_btc_live.py` 로 발생한 reset 전량 시장가 매도는 `{STATE_BOT_KEY}-reset-sell-...` identifier 로 자동 인식된다. 코드 반영 전 발생한 과거 reset 매도처럼 identifier 가 없는 청산 주문은 `--reset-sell-uuid <UUID>` 를 반복 지정해서 reset 청산 경계로 포함한다.
+`reset_krw_btc_live.py` 로 발생한 reset 전량 시장가 매도는 `{STATE_BOT_KEY}-reset-sell-...` identifier 로 자동 인식된다. reset 직전에 취소된 봇 TP SELL 주문들이 있으면 해당 슬롯/수량을 우선 사용해 청산 손익을 매칭한다. 코드 반영 전 발생한 과거 reset 매도처럼 identifier 가 없는 청산 주문도 직전 취소 TP SELL 수량으로 일부 자동 추론되며, 자동 추론이 애매한 경우는 `--reset-sell-uuid <UUID>` 를 반복 지정해서 reset 청산 경계로 포함한다.
 
 ## 6) 테스트
 

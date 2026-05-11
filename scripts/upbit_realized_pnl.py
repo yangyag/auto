@@ -25,7 +25,8 @@ tie-break 로 SELL 이 먼저 처리될 가능성 (운영상 거의 불가능, �
 
 --lookback 파라미터:
     --from 날짜 이전으로 추가 조회할 기간(일). 실현손익 매칭 과정에서
-    --from 전의 과거 BUY 주문들을 포함하기 위해 사용한다.
+    --from 전의 과거 BUY 주문들과 reset 직전 취소된 TP SELL 주문들을
+    포함하기 위해 사용한다.
 
     3개 윈도우:
     1. fetch 윈도우: --from - lookback ~ --to (API 조회 범위, 모든 BUY 포함)
@@ -129,6 +130,7 @@ WINDOW_DAYS = 7               # closed orders 분할 조회 윈도우 (일)
 DEFAULT_MARKET = "KRW-BTC"
 DEFAULT_REPORT_DAYS = 90
 DEFAULT_LOOKBACK_DAYS = 30
+RESET_QTY_TOLERANCE = Decimal("0.00000001")
 
 
 # ── 인증 헬퍼 (exchange/crypto.py:86-102 패턴 그대로) ─────────
@@ -296,6 +298,33 @@ def _to_decimal(val) -> Decimal:
     return Decimal(str(val))
 
 
+def _to_decimal_or_zero(val) -> Decimal:
+    if val in (None, ""):
+        return Decimal("0")
+    return Decimal(str(val))
+
+
+def _cancelled_tp_sell_qty(order: dict) -> Decimal:
+    return _to_decimal_or_zero(order.get("remaining_volume") or order.get("volume"))
+
+
+def is_cancelled_tp_sell_candidate(order: dict) -> bool:
+    """reset 직전 취소된 봇 TP SELL 주문 후보인지 판정한다.
+
+    Upbit closed orders에는 취소 시각이 없고 생성 시각만 있으므로, reset
+    매도 시점에는 최근 취소된 봇 SELL 후보들을 수량으로 맞춰 사용한다.
+    """
+    if order.get("side") != "ask":
+        return False
+    if order.get("state") != "cancel":
+        return False
+    if _to_decimal_or_zero(order.get("executed_volume")) != Decimal("0"):
+        return False
+    if extract_slot_index(order.get("identifier")) is None:
+        return False
+    return _cancelled_tp_sell_qty(order) > Decimal("0")
+
+
 def _sell_trade_count(order: dict) -> int:
     """SELL 주문의 실제 trade fill 수. 테스트/과거 입력은 1건으로 간주한다."""
     raw_count = order.get("_trade_count")
@@ -303,6 +332,54 @@ def _sell_trade_count(order: dict) -> int:
         return 1
     count = int(raw_count)
     return count if count > 0 else 1
+
+
+def _select_reset_cancelled_sell_targets(
+    cancelled_sell_candidates: list[dict],
+    reset_sell_qty: Decimal,
+) -> list[dict]:
+    """최근 취소된 TP SELL 후보들 중 reset 수량에 해당하는 슬롯 목표를 고른다."""
+    if reset_sell_qty <= Decimal("0"):
+        return []
+
+    selected: list[dict] = []
+    selected_qty = Decimal("0")
+    for candidate in sorted(
+        cancelled_sell_candidates,
+        key=lambda item: (item["time_key"], item["uuid"]),
+        reverse=True,
+    ):
+        if selected_qty >= reset_sell_qty - RESET_QTY_TOLERANCE:
+            break
+        remaining_needed = reset_sell_qty - selected_qty
+        take_qty = min(candidate["qty"], remaining_needed)
+        if take_qty <= Decimal("0"):
+            continue
+        selected.append({**candidate, "qty": take_qty})
+        selected_qty += take_qty
+
+    if selected_qty < reset_sell_qty - RESET_QTY_TOLERANCE:
+        return []
+
+    return sorted(selected, key=lambda item: (item["slot"], item["time_key"], item["uuid"]))
+
+
+def _record_reset_residuals(
+    queues_by_slot: dict[int, list[dict]],
+    reset_time_key: datetime,
+) -> list[dict]:
+    residuals: list[dict] = []
+    for queue in queues_by_slot.values():
+        for head in queue:
+            if head["qty"] > Decimal("0"):
+                residuals.append({
+                    "time_key": reset_time_key,
+                    "slot": head["slot"],
+                    "residual_qty": head["qty"],
+                    "residual_cost": head["qty"] * head["unit_cost"],
+                    "buy_uuid": head["buy_uuid"],
+                })
+    return residuals
 
 
 # ── 그룹키 ──────────────────────────────────────────────────────
@@ -352,6 +429,7 @@ def run_fifo(
     unparseable_buys: list[dict] = []
     unparseable_sells: list[dict] = []
     reset_residuals: list[dict] = []
+    cancelled_sell_candidates: list[dict] = []
 
     for order in sorted_orders:
         exec_vol = _to_decimal(order["executed_volume"])
@@ -360,6 +438,25 @@ def run_fifo(
         time_key = order["_time_key"]
         is_reset_sell = is_reset_sell_order(order, reset_sell_uuids)
         slot = None if is_reset_sell else extract_slot_index(order.get("identifier"))
+
+        if order.get("_cancelled_tp_sell_candidate"):
+            if slot is not None:
+                cancelled_sell_candidates.append({
+                    "slot": slot,
+                    "qty": _cancelled_tp_sell_qty(order),
+                    "time_key": time_key,
+                    "uuid": order["uuid"],
+                })
+            continue
+
+        reset_targets: list[dict] = []
+        if slot is None and order.get("side") == "ask" and exec_vol > Decimal("0"):
+            reset_targets = _select_reset_cancelled_sell_targets(
+                cancelled_sell_candidates,
+                exec_vol,
+            )
+            if reset_targets:
+                is_reset_sell = True
 
         if slot is None:
             if is_reset_sell:
@@ -380,37 +477,82 @@ def run_fifo(
                         )
                         continue
 
-                pre_reset_entries = sorted(
-                    (
-                        entry
-                        for queue in queues_by_slot.values()
-                        for entry in queue
-                        if entry["qty"] > Decimal("0")
-                    ),
-                    key=lambda entry: (entry["time_key"], entry["buy_uuid"]),
-                )
                 remaining_qty = reset_sell_qty
 
-                for head in pre_reset_entries:
-                    if remaining_qty <= Decimal("0"):
-                        break
-                    take_qty = min(remaining_qty, head["qty"])
-                    matched_cost = take_qty * head["unit_cost"]
-                    ratio = take_qty / reset_sell_qty
-                    matched_net_proceeds = sell_gross_krw * ratio - paid_fee * ratio
-                    realized_pnl = matched_net_proceeds - matched_cost
-                    realized_lines.append({
-                        "time_key": time_key,
-                        "realized_pnl": realized_pnl,
-                        "matched_qty": take_qty,
-                        "sell_uuid": order["uuid"],
-                        "sell_trade_count": _sell_trade_count(order),
-                        "slot": head["slot"],
-                    })
-                    head["qty"] -= take_qty
-                    remaining_qty -= take_qty
+                if reset_targets:
+                    for target in reset_targets:
+                        remaining_qty -= target["qty"]
+                        target_remaining = target["qty"]
+                        target_matched_cost = Decimal("0")
+                        target_matched_qty = Decimal("0")
+                        queue = queues_by_slot.get(target["slot"], [])
 
-                if remaining_qty > Decimal("0"):
+                        while target_remaining > Decimal("0") and queue:
+                            head = queue[0]
+                            take_qty = min(target_remaining, head["qty"])
+                            target_matched_cost += take_qty * head["unit_cost"]
+                            target_matched_qty += take_qty
+                            head["qty"] -= take_qty
+                            target_remaining -= take_qty
+                            if head["qty"] == Decimal("0"):
+                                queue.pop(0)
+                            elif head["qty"] < Decimal("0"):
+                                assert False, f"head.qty 음수: slot={target['slot']} head={head}"
+
+                        if target_matched_qty > Decimal("0"):
+                            ratio = target_matched_qty / reset_sell_qty
+                            matched_net_proceeds = sell_gross_krw * ratio - paid_fee * ratio
+                            realized_pnl = matched_net_proceeds - target_matched_cost
+                            realized_lines.append({
+                                "time_key": time_key,
+                                "realized_pnl": realized_pnl,
+                                "matched_qty": target_matched_qty,
+                                "sell_uuid": order["uuid"],
+                                "sell_trade_count": _sell_trade_count(order),
+                                "slot": target["slot"],
+                            })
+
+                        if target_remaining > RESET_QTY_TOLERANCE:
+                            ratio = target_remaining / reset_sell_qty
+                            unmatched_proceeds = sell_gross_krw * ratio - paid_fee * ratio
+                            unmatched_lines.append({
+                                "time_key": time_key,
+                                "unmatched_proceeds": unmatched_proceeds,
+                                "unmatched_qty": target_remaining,
+                                "sell_uuid": order["uuid"],
+                                "slot": target["slot"],
+                            })
+                else:
+                    pre_reset_entries = sorted(
+                        (
+                            entry
+                            for queue in queues_by_slot.values()
+                            for entry in queue
+                            if entry["qty"] > Decimal("0")
+                        ),
+                        key=lambda entry: (entry["time_key"], entry["buy_uuid"]),
+                    )
+
+                    for head in pre_reset_entries:
+                        if remaining_qty <= Decimal("0"):
+                            break
+                        take_qty = min(remaining_qty, head["qty"])
+                        matched_cost = take_qty * head["unit_cost"]
+                        ratio = take_qty / reset_sell_qty
+                        matched_net_proceeds = sell_gross_krw * ratio - paid_fee * ratio
+                        realized_pnl = matched_net_proceeds - matched_cost
+                        realized_lines.append({
+                            "time_key": time_key,
+                            "realized_pnl": realized_pnl,
+                            "matched_qty": take_qty,
+                            "sell_uuid": order["uuid"],
+                            "sell_trade_count": _sell_trade_count(order),
+                            "slot": head["slot"],
+                        })
+                        head["qty"] -= take_qty
+                        remaining_qty -= take_qty
+
+                if remaining_qty > RESET_QTY_TOLERANCE:
                     ratio = remaining_qty / reset_sell_qty
                     unmatched_proceeds = sell_gross_krw * ratio - paid_fee * ratio
                     unmatched_lines.append({
@@ -421,18 +563,11 @@ def run_fifo(
                         "slot": None,
                     })
 
-                for head in pre_reset_entries:
-                    if head["qty"] > Decimal("0"):
-                        reset_residuals.append({
-                            "time_key": time_key,
-                            "slot": head["slot"],
-                            "residual_qty": head["qty"],
-                            "residual_cost": head["qty"] * head["unit_cost"],
-                            "buy_uuid": head["buy_uuid"],
-                        })
+                reset_residuals.extend(_record_reset_residuals(queues_by_slot, time_key))
 
                 for queue in queues_by_slot.values():
                     queue.clear()
+                cancelled_sell_candidates.clear()
                 continue
 
             # identifier 패턴 안 맞음 (수동 주문, 외부 봇 등)
@@ -904,8 +1039,14 @@ def main(argv: list[str] | None = None) -> int:
     for order in raw_orders:
         exec_vol = _to_decimal(order.get("executed_volume", "0"))
 
-        # 체결 0건 skip (cancel/done 무관)
+        # 체결 0건 cancel SELL은 reset 매칭용 후보로 보존한다.
         if exec_vol == Decimal("0"):
+            if is_cancelled_tp_sell_candidate(order):
+                order["executed_funds"] = order.get("executed_funds") or "0"
+                order["paid_fee"] = order.get("paid_fee") or "0"
+                order["_time_key"] = to_kst(order["created_at"])
+                order["_cancelled_tp_sell_candidate"] = True
+                valid_orders.append(order)
             continue
 
         exec_funds = order.get("executed_funds")
@@ -938,7 +1079,15 @@ def main(argv: list[str] | None = None) -> int:
 
         valid_orders.append(order)
 
-    print(f"  유효 주문: {len(valid_orders)}건 (체결 0건, 이상치 제외 후)")
+    valid_trade_count = sum(
+        1 for order in valid_orders
+        if not order.get("_cancelled_tp_sell_candidate")
+    )
+    reset_candidate_count = len(valid_orders) - valid_trade_count
+    print(
+        f"  유효 주문: {valid_trade_count}건 "
+        f"(reset 매칭 후보 {reset_candidate_count}건 별도 보존)"
+    )
 
     # 3단계: time_key + uuid 기준 정렬
     sorted_orders = sorted(valid_orders, key=lambda o: (o["_time_key"], o["uuid"]))
@@ -965,7 +1114,12 @@ def main(argv: list[str] | None = None) -> int:
     # 윈도우 밖 SELL 주문 수집 (read-only 정보)
     outside_sell_orders = [
         o for o in sorted_orders
-        if o["side"] == "ask" and not (display_start_dt <= o["_time_key"] <= display_end_dt)
+        if (
+            o["side"] == "ask"
+            and not o.get("_cancelled_tp_sell_candidate")
+            and _to_decimal(o["executed_volume"]) > Decimal("0")
+            and not (display_start_dt <= o["_time_key"] <= display_end_dt)
+        )
     ]
 
     # 6단계: 출력

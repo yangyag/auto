@@ -52,17 +52,17 @@ def run_project_command(args: list[str], *, env: dict[str, str] | None = None) -
     completed.check_returncode()
 
 
-def print_runtime_snapshot(exchange) -> None:
+def print_runtime_snapshot(exchange, *, title: str = "런타임 스냅샷") -> None:
     krw_balance = exchange.get_balance()
-    holdings = exchange.get_holdings(cfg.SYMBOL)
+    holdings_available = exchange.get_holdings(cfg.SYMBOL)
     current_price = exchange.get_current_price(cfg.SYMBOL)
     open_order_ids = exchange.get_open_order_ids(cfg.SYMBOL)
 
-    logger.info("=== 런타임 스냅샷 ===")
+    logger.info(f"=== {title} ===")
     logger.info(f"symbol: {cfg.SYMBOL}")
     logger.info(f"current_price: {format_decimal(current_price)}")
     logger.info(f"krw_balance: {format_decimal(krw_balance)}")
-    logger.info(f"holdings: {format_decimal(holdings)}")
+    logger.info(f"holdings_available: {format_decimal(holdings_available)}")
     logger.info(f"live_open_orders: {len(open_order_ids)}")
 
 
@@ -214,6 +214,7 @@ def main(argv: list[str] | None = None) -> int:
             timeout_seconds=args.wait_timeout,
             poll_interval=args.poll_interval,
         )
+        print_runtime_snapshot(exchange, title="미체결 취소 후 런타임 스냅샷")
         liquidate_btc_position(
             exchange,
             timeout_seconds=args.wait_timeout,

@@ -123,7 +123,13 @@ class ResetKrwBtcLiveScriptTest(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         chdir.assert_called_once_with(reset_script.PROJECT_ROOT)
-        print_runtime_snapshot.assert_called_once_with(exchange)
+        self.assertEqual(
+            print_runtime_snapshot.call_args_list,
+            [
+                call(exchange),
+                call(exchange, title="미체결 취소 후 런타임 스냅샷"),
+            ],
+        )
         cancel_open_orders.assert_called_once_with(
             exchange,
             repository,
