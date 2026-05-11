@@ -187,6 +187,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     validate_environment()
 
+    run_project_command([str(PROJECT_ROOT / "stop.sh")])
+
     lock = PostgresRuntimeLock(
         host=cfg.PGHOST,
         port=cfg.PGPORT,
@@ -205,7 +207,6 @@ def main(argv: list[str] | None = None) -> int:
         pending_order_repository = build_pending_order_repository(cfg)
 
         print_runtime_snapshot(exchange)
-        run_project_command([str(PROJECT_ROOT / "stop.sh")])
         cancel_open_orders(
             exchange,
             pending_order_repository,

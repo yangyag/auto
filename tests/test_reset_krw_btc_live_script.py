@@ -110,6 +110,15 @@ class ResetKrwBtcLiveScriptTest(unittest.TestCase):
              patch.object(reset_script, "cancel_open_orders") as cancel_open_orders, \
              patch.object(reset_script, "liquidate_btc_position") as liquidate_btc_position:
             mock_lock_cls.return_value.acquire.return_value = True
+
+            def observe_project_command(command, *, env=None):
+                del env
+                if command == [str(reset_script.PROJECT_ROOT / "stop.sh")]:
+                    self.assertEqual(mock_lock_cls.call_count, 0)
+                else:
+                    self.assertEqual(mock_lock_cls.call_count, 1)
+
+            run_project_command.side_effect = observe_project_command
             exit_code = reset_script.main([])
 
         self.assertEqual(exit_code, 0)
