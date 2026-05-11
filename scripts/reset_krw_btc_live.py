@@ -41,7 +41,7 @@ def run_project_command(args: list[str], *, env: dict[str, str] | None = None) -
         args,
         cwd=PROJECT_ROOT,
         env=env,
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
     )
@@ -49,6 +49,7 @@ def run_project_command(args: list[str], *, env: dict[str, str] | None = None) -
         logger.info(completed.stdout.rstrip())
     if completed.stderr:
         logger.error(completed.stderr.rstrip())
+    completed.check_returncode()
 
 
 def print_runtime_snapshot(exchange) -> None:
@@ -221,7 +222,12 @@ def main(argv: list[str] | None = None) -> int:
 
         python_bin = sys.executable
         run_project_command(
-            [python_bin, "scripts/apply_grid_properties_to_postgres.py", "--force"]
+            [
+                python_bin,
+                "scripts/apply_grid_properties_to_postgres.py",
+                "--force",
+                "--assume-external-lock",
+            ]
         )
         run_project_command([python_bin, "scripts/show_grid_state.py"])
         logger.info("리셋 완료. 봇 재시작은 필요 시 ./run.sh 로 직접 수행하세요.")

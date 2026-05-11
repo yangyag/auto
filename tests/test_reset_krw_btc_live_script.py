@@ -134,7 +134,12 @@ class ResetKrwBtcLiveScriptTest(unittest.TestCase):
         self.assertEqual(run_project_command.call_args_list[0].args[0], [str(reset_script.PROJECT_ROOT / "stop.sh")])
         self.assertEqual(
             run_project_command.call_args_list[1].args[0],
-            [reset_script.sys.executable, "scripts/apply_grid_properties_to_postgres.py", "--force"],
+            [
+                reset_script.sys.executable,
+                "scripts/apply_grid_properties_to_postgres.py",
+                "--force",
+                "--assume-external-lock",
+            ],
         )
         self.assertEqual(
             run_project_command.call_args_list[2].args[0],

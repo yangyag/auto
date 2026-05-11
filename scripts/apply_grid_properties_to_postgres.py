@@ -35,24 +35,27 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--user", default=cfg.PGUSER)
     parser.add_argument("--password", default=cfg.PGPASSWORD)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--assume-external-lock", action="store_true", help=argparse.SUPPRESS)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    lock = PostgresRuntimeLock(
-        host=args.host,
-        port=args.port,
-        dbname=args.dbname,
-        user=args.user,
-        password=args.password,
-        schema=args.schema,
-        bot_key=args.bot_key,
-    )
-    if not lock.acquire():
-        print("락 점유 실패: 봇이 실행 중이거나 기존 스크립트 실행 중", file=sys.stderr)
-        sys.exit(1)
+    lock = None
+    if not args.assume_external_lock:
+        lock = PostgresRuntimeLock(
+            host=args.host,
+            port=args.port,
+            dbname=args.dbname,
+            user=args.user,
+            password=args.password,
+            schema=args.schema,
+            bot_key=args.bot_key,
+        )
+        if not lock.acquire():
+            print("락 점유 실패: 봇이 실행 중이거나 기존 스크립트 실행 중", file=sys.stderr)
+            sys.exit(1)
 
     try:
         spec = load_grid_property_spec(args.properties_file)
@@ -103,7 +106,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"version: {saved.metadata.version}")
         return 0
     finally:
-        lock.release()
+        if lock is not None:
+            lock.release()
 
 
 if __name__ == "__main__":
