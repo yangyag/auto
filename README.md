@@ -4,6 +4,145 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 
 > **쉽게 말하면**: 그리드(여러 가격대 슬롯) 를 설정해두고 — **"가격이 매수 라인을 지나쳐 내려가면 사고, 보유 슬롯의 목표 매도 가격 이상이면 판다"**. 매수 쪽 핵심은 "지금 가격이 얼마냐" 가 아니라 "직전 체크 시점과 비교해서 어느 라인을 **건너갔냐**" 다. 그래야 같은 슬롯을 여러 번 체결하거나 가격 변동을 놓치는 일이 없다.
 
+## 먼저 읽기
+
+이 README는 프로그램의 전체 구조와 핵심 로직을 설명하는 기준 문서다. 초보 운영자가 매일 봐야 하는 내용은 아래 **초보 운영자 빠른 시작**부터 확인하면 된다.
+
+- 처음 설치하거나 `.env`, PostgreSQL, 가상환경을 준비해야 하면 [docs/setup.md](docs/setup.md)를 먼저 본다.
+- EC2 접속, 배포, 운영 서버 기준은 [docs/operations.md](docs/operations.md)를 본다.
+- 명령어만 빠르게 찾고 싶으면 [docs/quick-commands.md](docs/quick-commands.md)를 본다.
+- 전략 수식과 세부 판정 조건은 [docs/strategy-formulas.md](docs/strategy-formulas.md)를 본다.
+
+## 초보 운영자 빠른 시작
+
+기준 작업 위치는 로컬에서 `cd /home/yangyag/auto`, EC2 운영 서버에서 `cd /home/ubuntu/auto` 다. 아래 명령은 프로젝트 루트에서 실행한다.
+
+> **운영 원칙**: 실거래 주문이 발생할 수 있는 봇 루프는 명시적으로 필요할 때만 실행한다. 단순 확인은 `show_grid_state.py`, `balance`, 로그 조회처럼 읽기 전용 명령부터 사용한다.
+
+### 1. 지금 봇이 실행 중인지 확인
+
+```bash
+test -f .auto-trading.pid && cat .auto-trading.pid || true
+ps -eo pid,args | grep '[p]ython.*/main.py'
+```
+
+PID가 나오고 `main.py` 프로세스가 보이면 실행 중이다. PID 파일만 있고 프로세스가 없으면 이전 실행 흔적일 수 있으니 로그를 같이 확인한다.
+
+### 2. 로그 확인
+
+```bash
+./tail-latest-log.sh
+```
+
+직접 오늘 로그만 보고 싶으면:
+
+```bash
+tail -n 50 logs/trading-$(date +%F).log
+```
+
+### 3. 현재 그리드 상태 확인
+
+```bash
+.venv/bin/python scripts/show_grid_state.py
+```
+
+이 명령은 DB에 저장된 슬롯, 보유 수량, pending 주문, 손절 상태 요약을 확인하는 읽기 전용 점검 명령이다.
+
+### 4. 업비트 주문 가능 잔고 확인
+
+```bash
+.venv/bin/python main.py balance
+```
+
+### 5. 봇 시작 / 종료
+
+시작:
+
+```bash
+PYTHON_BIN=.venv/bin/python ./run.sh
+```
+
+종료:
+
+```bash
+./stop.sh
+```
+
+실행 후에는 `./tail-latest-log.sh` 로 로그가 계속 쌓이는지 확인한다.
+
+### 6. 실현 손익 확인
+
+```bash
+.venv/bin/python scripts/upbit_realized_pnl.py
+```
+
+오늘/이번주/이번달만 보려면:
+
+```bash
+.venv/bin/python scripts/upbit_realized_pnl.py --period d
+.venv/bin/python scripts/upbit_realized_pnl.py --period w
+.venv/bin/python scripts/upbit_realized_pnl.py --period m
+```
+
+## grid.properties 수정 후 기본 흐름
+
+`grid.properties`는 그리드 가격 범위, 총예산, 슬롯 간격, TP 기준을 정하는 운영 입력 파일이다. 라이브 운영 중 값을 바꿀 때는 먼저 봇을 멈춘 뒤 반영한다.
+
+```bash
+./stop.sh
+.venv/bin/python scripts/apply_grid_properties_to_postgres.py --force
+.venv/bin/python scripts/show_grid_state.py
+PYTHON_BIN=.venv/bin/python ./run.sh
+```
+
+> **쉽게 말하면**: `grid.properties`를 저장했다고 봇 DB 상태가 자동으로 바뀌지는 않는다. `apply_grid_properties_to_postgres.py --force` 를 실행해야 현재 `.env`의 `STATE_BOT_KEY` 기준 DB 그리드에 반영된다.
+
+주의할 점:
+
+- 이 경로는 DB 그리드를 강제로 반영하는 경로다.
+- 이미 운영 중인 포지션을 정리하고 완전히 새 그리드로 시작하려면 아래의 라이브 리셋 경로를 검토한다.
+- 기존 보유 물량은 유지하고 빈 슬롯 계획 수량만 조정하려면 예산 조정 경로를 사용한다.
+
+## 위험 명령
+
+아래 명령들은 운영 상태를 크게 바꿀 수 있으므로 실행 전에 [docs/operations.md](docs/operations.md)와 [docs/quick-commands.md](docs/quick-commands.md)의 해당 절차를 먼저 확인한다.
+
+### 라이브 리셋
+
+```bash
+.venv/bin/python scripts/reset_krw_btc_live.py
+```
+
+이 명령은 `KRW-BTC` 미체결 주문을 취소하고, BTC를 전량 시장가 매도한 뒤, `grid.properties` 기준으로 DB 그리드를 다시 반영한다. 재시작은 자동으로 하지 않으므로 결과 확인 후 직접 `./run.sh` 를 실행한다.
+
+### 라이브 예산 조정
+
+```bash
+.venv/bin/python scripts/adjust_budget_live.py --target-budget <KRW>
+```
+
+이 명령은 현재 그리드 가격 구조와 보유 수량은 유지하고 `planned_qty`만 목표 예산 기준으로 다시 계산한다. 이미 보유한 BTC를 즉시 줄이지 않으므로, 목표 예산이 현재 재고 원가보다 작아도 실제 예산 회수는 이후 매도 체결을 기다려야 한다.
+
+### 손절 상태 해제
+
+```bash
+.venv/bin/python main.py reset-stop-loss
+```
+
+L1 손절 이후 매수 차단을 해제할 때 사용한다. L2 24시간 잠금을 강제로 해제해야 하는 상황은 `--force`가 필요하므로 [docs/operations.md](docs/operations.md#손절stop-loss-운영-가이드)를 먼저 확인한다.
+
+## 문제가 생기면 먼저 볼 것
+
+문제가 생겼을 때는 임의로 재시작하거나 리셋하기 전에 아래 순서로 확인한다.
+
+1. 최신 로그: `./tail-latest-log.sh`
+2. DB 그리드 상태: `.venv/bin/python scripts/show_grid_state.py`
+3. 업비트 잔고: `.venv/bin/python main.py balance`
+4. 설정 파일: 프로젝트 루트 `.env` 또는 EC2 `/home/ubuntu/auto/.env`
+5. PostgreSQL 접속 정보: `.env`의 `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGSCHEMA`
+
+로그에 손절, 브레이크아웃 가드, 주문 실패, PostgreSQL 연결 실패가 보이면 관련 세부 문서를 먼저 확인한다. 실거래 주문이 걸릴 수 있는 명령은 원인을 파악한 뒤 실행한다.
+
 ## 파일 구성 및 역할
 
 루트의 업무 폴더는 `app/`, `scripts/`, `db/`, `docs/`, `tests/`로 제한한다.
