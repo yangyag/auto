@@ -19,6 +19,7 @@ from app.exchange.base import BaseExchange
 from app.exchange.crypto import UpbitAPIError
 from app.storage.factory import build_grid_repository, build_pending_order_repository
 from app.storage.interfaces import GridStateRepository, PendingOrderRepository, RepositoryMetadata
+from app.storage.postgres_runtime_repository import PostgresBotHeartbeatRepository
 from app.strategy.breakout_guard import BreakoutGuardStatus, evaluate_breakout_guard
 from app.strategy.grid_strategy import GridStrategy
 from app.utils.decimal_utils import DECIMAL_ZERO, format_decimal, to_decimal
@@ -137,6 +138,28 @@ def persist_grid_state(
     except Exception as exc:
         raise StatePersistenceError(f"상태 저장 실패: {exc}") from exc
     runtime.metadata = saved_snapshot.metadata
+
+
+def write_bot_heartbeat(
+    *,
+    current_price: Decimal | None,
+    runtime: GridStateRuntime,
+) -> None:
+    """모바일 API가 읽을 수 있도록 봇 런타임 상태를 DB에 기록한다."""
+    try:
+        PostgresBotHeartbeatRepository.from_config(cfg).upsert(
+            symbol=cfg.SYMBOL,
+            current_price=current_price,
+            breakout_guard_active=runtime.breakout_guard_active,
+            breakout_guard_side=runtime.breakout_guard_side,
+            breakout_guard_reason=runtime.breakout_guard_reason,
+            stop_loss_active=runtime.stop_loss_active,
+            stop_loss_level=runtime.stop_loss_level,
+            stop_loss_armed_at=runtime.stop_loss_armed_at,
+            liquidated_at=runtime.liquidated_at,
+        )
+    except Exception as exc:  # pragma: no cover - heartbeat must not stop trading
+        logger.warning(f"봇 heartbeat 저장 실패: {exc}")
 
 
 def format_order_log(order: Order) -> str:
@@ -840,6 +863,7 @@ def run_trading_cycle(
 
                     if stop_loss_result.level == 2:
                         runtime.liquidated_at = datetime.now(tz=timezone.utc)
+                        write_bot_heartbeat(current_price=current_price, runtime=runtime)
                         logger.error("[STOP_LOSS] L2 청산 완료. 봇 종료.")
                         return TradingCycleResult(
                             current_order_day=current_order_day,
@@ -864,6 +888,7 @@ def run_trading_cycle(
 
     breakout_guard_status = fetch_breakout_guard_status(exchange, grid_state)
     log_breakout_guard_transition(runtime, breakout_guard_status)
+    write_bot_heartbeat(current_price=current_price, runtime=runtime)
 
     pending_slots = {order.slot_index for order in pending_orders.values()}
     buy_orders, sell_orders = strategy.evaluate_with_pending(

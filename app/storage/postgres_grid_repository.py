@@ -18,7 +18,8 @@ class PostgresGridRepository(GridStateRepository, PostgresRepositoryMixin):
             with conn.cursor() as cur:
                 cur.execute(
                     sql.SQL(
-                        "SELECT symbol, version, last_revision "
+                        "SELECT symbol, version, last_revision, "
+                        "stop_loss_active, stop_loss_level, stop_loss_armed_at, liquidated_at "
                         "FROM {} WHERE bot_key = %s"
                     ).format(self._qualified("bot_state")),
                     (self.bot_key,),
@@ -27,7 +28,15 @@ class PostgresGridRepository(GridStateRepository, PostgresRepositoryMixin):
                 if state_row is None:
                     return GridSnapshot(symbol="", rows=tuple(), metadata=RepositoryMetadata())
 
-                symbol, version, revision = state_row
+                (
+                    symbol,
+                    version,
+                    revision,
+                    stop_loss_active,
+                    stop_loss_level,
+                    stop_loss_armed_at,
+                    liquidated_at,
+                ) = state_row
                 cur.execute(
                     sql.SQL(
                         "SELECT slot_index, buy_price, held_qty, sell_price, planned_qty, filled_at "
@@ -53,6 +62,10 @@ class PostgresGridRepository(GridStateRepository, PostgresRepositoryMixin):
             metadata=RepositoryMetadata(
                 version=version,
                 revision=str(revision) if revision is not None else None,
+                stop_loss_active=bool(stop_loss_active),
+                stop_loss_level=stop_loss_level,
+                stop_loss_armed_at=stop_loss_armed_at.isoformat() if stop_loss_armed_at else None,
+                liquidated_at=liquidated_at.isoformat() if liquidated_at else None,
             ),
         )
 
@@ -81,18 +94,38 @@ class PostgresGridRepository(GridStateRepository, PostgresRepositoryMixin):
                 if existing is None:
                     cur.execute(
                         sql.SQL(
-                            "INSERT INTO {} (bot_key, symbol, version, updated_at) "
-                            "VALUES (%s, %s, %s, NOW())"
+                            "INSERT INTO {} ("
+                            "bot_key, symbol, version, stop_loss_active, stop_loss_level, "
+                            "stop_loss_armed_at, liquidated_at, updated_at"
+                            ") VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())"
                         ).format(self._qualified("bot_state")),
-                        (self.bot_key, snapshot.symbol, new_version),
+                        (
+                            self.bot_key,
+                            snapshot.symbol,
+                            new_version,
+                            snapshot.metadata.stop_loss_active,
+                            snapshot.metadata.stop_loss_level,
+                            snapshot.metadata.stop_loss_armed_at,
+                            snapshot.metadata.liquidated_at,
+                        ),
                     )
                 else:
                     cur.execute(
                         sql.SQL(
-                            "UPDATE {} SET symbol = %s, version = %s, updated_at = NOW() "
+                            "UPDATE {} SET "
+                            "symbol = %s, version = %s, stop_loss_active = %s, stop_loss_level = %s, "
+                            "stop_loss_armed_at = %s, liquidated_at = %s, updated_at = NOW() "
                             "WHERE bot_key = %s"
                         ).format(self._qualified("bot_state")),
-                        (snapshot.symbol, new_version, self.bot_key),
+                        (
+                            snapshot.symbol,
+                            new_version,
+                            snapshot.metadata.stop_loss_active,
+                            snapshot.metadata.stop_loss_level,
+                            snapshot.metadata.stop_loss_armed_at,
+                            snapshot.metadata.liquidated_at,
+                            self.bot_key,
+                        ),
                     )
 
                 cur.execute(

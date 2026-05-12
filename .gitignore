@@ -6,6 +6,9 @@ upbit.txt
 __pycache__/
 *.pyc
 .pytest_cache/
+.venv/
+.auto-api.pid
+.auto-command-worker.pid
 grid.txt
 aws/
 .claude/settings.local.json

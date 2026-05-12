@@ -1,0 +1,13 @@
+[Unit]
+Description=auto mobile command worker
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/yangyag/auto
+ExecStart=/home/yangyag/auto/.venv/bin/python -m app.api.command_worker
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
