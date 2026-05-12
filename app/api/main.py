@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from app.api.errors import install_error_handlers
-from app.api.routers import auth, commands, grid, health, orders, pnl, runtime
+from app.api.routers import auth, commands, grid, health, ops, orders, pnl, runtime
 
 
 def create_app() -> FastAPI:
@@ -16,6 +16,7 @@ def create_app() -> FastAPI:
     )
     install_error_handlers(app)
     app.include_router(health.router)
+    app.include_router(ops.router)
     app.include_router(auth.router)
     app.include_router(runtime.bot_router)
     app.include_router(runtime.market_router)

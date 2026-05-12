@@ -77,6 +77,7 @@ tail -f logs/trading-$(date +%F).log
 
 - API URL: `http://<EC2_PUBLIC_IP>:8086`
 - EC2 내부 확인 URL: `http://127.0.0.1:8086`
+- 브라우저 점검 화면: `GET /ops`
 - FastAPI 서비스: `auto-api.service`
 - 명령 워커 서비스: `auto-command-worker.service`
 - OpenAPI: `GET /openapi.json`
@@ -90,6 +91,28 @@ tail -f logs/trading-$(date +%F).log
 
 - `deploy/systemd/user/auto-api.service`
 - `deploy/systemd/user/auto-command-worker.service`
+
+## 브라우저 점검 화면
+
+간단히 눈으로 API 상태를 확인하려면 브라우저에서 아래 주소를 연다.
+
+```text
+http://<EC2_PUBLIC_IP>:8086/ops
+```
+
+이 화면은 FastAPI가 직접 내려주는 HTML이다. HTML과 API가 같은 서버/같은 포트에서 열리므로 CORS 문제가 없다.
+
+화면에서 할 수 있는 일:
+
+- API health check
+- username/password 로그인
+- 봇 상태 조회
+- 그리드 요약 조회
+- 현재가 조회
+- 미체결 주문 조회
+- 오늘/이번주/이번달/올해/전체 실현손익 조회
+
+이 화면에는 reset, 예산 조정, 봇 중지 같은 위험 명령 버튼을 넣지 않았다. 운영 상태를 바꾸지 않고 조회만 해보는 용도다.
 
 ## 환경 변수
 
