@@ -4,8 +4,8 @@ After=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/yangyag/auto
-ExecStart=/home/yangyag/auto/.venv/bin/python -m app.api.command_worker
+WorkingDirectory=%h/auto
+ExecStart=%h/auto/.venv/bin/python -m app.api.command_worker
 Restart=on-failure
 RestartSec=3
 

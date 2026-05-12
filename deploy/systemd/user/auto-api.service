@@ -4,8 +4,8 @@ After=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/yangyag/auto
-ExecStart=/home/yangyag/auto/.venv/bin/python -m uvicorn app.api.main:app --host 0.0.0.0 --port 8086
+WorkingDirectory=%h/auto
+ExecStart=%h/auto/.venv/bin/python -m uvicorn app.api.main:app --host 0.0.0.0 --port 8086
 Restart=on-failure
 RestartSec=3
 
