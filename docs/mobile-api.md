@@ -104,8 +104,8 @@ http://<EC2_PUBLIC_IP>:8086/ops
 
 화면에서 할 수 있는 일:
 
-- API health check
-- username/password 로그인
+- API 상태 확인
+- 아이디/비밀번호 로그인
 - 봇 상태 조회
 - 그리드 요약 조회
 - 현재가 조회

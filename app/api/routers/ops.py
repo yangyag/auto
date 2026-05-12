@@ -12,7 +12,7 @@ OPS_DASHBOARD_HTML = """<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>auto API Ops</title>
+  <title>auto API 점검</title>
   <style>
     :root {
       color-scheme: light;
@@ -165,61 +165,61 @@ OPS_DASHBOARD_HTML = """<!doctype html>
 </head>
 <body>
   <header>
-    <h1>auto API Ops</h1>
-    <p>Read-only browser checks for the mobile API served from the same FastAPI origin.</p>
+    <h1>auto API 점검</h1>
+    <p>모바일 API를 같은 FastAPI 서버에서 바로 확인하는 읽기 전용 화면입니다.</p>
   </header>
   <main>
     <section>
-      <h2>Connection</h2>
+      <h2>접속 정보</h2>
       <div class="grid">
-        <label>API base URL
+        <label>API 기본 주소
           <input id="baseUrl" autocomplete="off">
         </label>
-        <label>Username
+        <label>아이디
           <input id="username" autocomplete="username" placeholder="admin">
         </label>
-        <label>Password
+        <label>비밀번호
           <input id="password" type="password" autocomplete="current-password">
         </label>
-        <label>TOTP code
-          <input id="totpCode" inputmode="numeric" autocomplete="one-time-code" placeholder="optional">
+        <label>TOTP 코드
+          <input id="totpCode" inputmode="numeric" autocomplete="one-time-code" placeholder="선택 사항">
         </label>
       </div>
       <div class="actions">
-        <button id="loginBtn" type="button">Login</button>
-        <button id="logoutBtn" class="secondary" type="button">Forget Token</button>
-        <button id="healthBtn" class="secondary" type="button">Health Check</button>
-        <span id="authStatus" class="status">Not logged in</span>
+        <button id="loginBtn" type="button">로그인</button>
+        <button id="logoutBtn" class="secondary" type="button">토큰 지우기</button>
+        <button id="healthBtn" class="secondary" type="button">상태 확인</button>
+        <span id="authStatus" class="status">로그인 전</span>
       </div>
     </section>
 
     <section>
-      <h2>Quick Checks</h2>
+      <h2>빠른 조회</h2>
       <div class="actions">
-        <button data-path="/v1/bot/status" type="button">Bot Status</button>
-        <button data-path="/v1/grid/summary" type="button">Grid Summary</button>
-        <button data-path="/v1/market/price" type="button">Market Price</button>
-        <button data-path="/v1/orders/pending" type="button">Pending Orders</button>
-        <button data-path="/v1/config" type="button">Config</button>
+        <button data-path="/v1/bot/status" type="button">봇 상태</button>
+        <button data-path="/v1/grid/summary" type="button">그리드 요약</button>
+        <button data-path="/v1/market/price" type="button">현재가</button>
+        <button data-path="/v1/orders/pending" type="button">미체결 주문</button>
+        <button data-path="/v1/config" type="button">설정</button>
       </div>
       <div class="actions" style="margin-top: 10px;">
-        <label style="max-width: 180px; margin: 0;">PnL period
+        <label style="max-width: 180px; margin: 0;">손익 기간
           <select id="pnlPeriod">
-            <option value="d">Today</option>
-            <option value="w">This week</option>
-            <option value="m">This month</option>
-            <option value="y">This year</option>
-            <option value="all">All</option>
+            <option value="d">오늘</option>
+            <option value="w">이번 주</option>
+            <option value="m">이번 달</option>
+            <option value="y">올해</option>
+            <option value="all">전체</option>
           </select>
         </label>
-        <button id="pnlBtn" type="button">Realized PnL</button>
+        <button id="pnlBtn" type="button">실현손익</button>
       </div>
       <div id="facts" class="facts"></div>
     </section>
 
     <section>
-      <h2>Response</h2>
-      <pre id="output">No request yet.</pre>
+      <h2>응답</h2>
+      <pre id="output">아직 요청하지 않았습니다.</pre>
     </section>
   </main>
 
@@ -296,7 +296,7 @@ OPS_DASHBOARD_HTML = """<!doctype html>
     }
 
     document.getElementById("loginBtn").addEventListener("click", async () => {
-      await run("Login", async () => {
+      await run("로그인", async () => {
         const payload = {
           username: usernameInput.value,
           password: passwordInput.value,
@@ -310,10 +310,10 @@ OPS_DASHBOARD_HTML = """<!doctype html>
         window.sessionStorage.setItem("autoOpsAccessToken", data.access_token);
         window.sessionStorage.setItem("autoOpsRefreshToken", data.refresh_token);
         window.localStorage.setItem("autoOpsUsername", usernameInput.value);
-        setStatus("Logged in", "ok");
+        setStatus("로그인됨", "ok");
         return Object.assign({}, data, {
-          access_token: data.access_token ? "[stored in session]" : null,
-          refresh_token: data.refresh_token ? "[stored in session]" : null
+          access_token: data.access_token ? "[브라우저 세션에 저장됨]" : null,
+          refresh_token: data.refresh_token ? "[브라우저 세션에 저장됨]" : null
         });
       });
     });
@@ -321,13 +321,13 @@ OPS_DASHBOARD_HTML = """<!doctype html>
     document.getElementById("logoutBtn").addEventListener("click", () => {
       window.sessionStorage.removeItem("autoOpsAccessToken");
       window.sessionStorage.removeItem("autoOpsRefreshToken");
-      setStatus("Not logged in", "");
-      show("Token removed from this browser session.");
+      setStatus("로그인 전", "");
+      show("이 브라우저 세션의 토큰을 지웠습니다.");
       showFacts([]);
     });
 
     document.getElementById("healthBtn").addEventListener("click", () => {
-      run("Health check", () => request("/health", {auth: false}));
+      run("상태 확인", () => request("/health", {auth: false}));
     });
 
     for (const button of document.querySelectorAll("button[data-path]")) {
@@ -335,24 +335,24 @@ OPS_DASHBOARD_HTML = """<!doctype html>
         const data = await run(button.textContent, () => request(button.dataset.path));
         if (button.dataset.path === "/v1/bot/status") {
           showFacts([
-            {label: "Bot alive", value: data.is_alive},
-            {label: "Symbol", value: data.symbol},
-            {label: "Lag seconds", value: data.lag_seconds},
-            {label: "Current price", value: data.current_price}
+            {label: "봇 실행 여부", value: data.is_alive},
+            {label: "마켓", value: data.symbol},
+            {label: "지연 시간(초)", value: data.lag_seconds},
+            {label: "현재가", value: data.current_price}
           ]);
         } else if (button.dataset.path === "/v1/grid/summary") {
           showFacts([
-            {label: "Rows", value: data.row_count},
-            {label: "Holding slots", value: data.holding_count},
-            {label: "Inventory BTC", value: data.total_inventory_btc},
-            {label: "Inventory cost KRW", value: data.current_inventory_cost_krw}
+            {label: "행 수", value: data.row_count},
+            {label: "보유 칸 수", value: data.holding_count},
+            {label: "보유 BTC", value: data.total_inventory_btc},
+            {label: "보유 원가(KRW)", value: data.current_inventory_cost_krw}
           ]);
         } else if (button.dataset.path === "/v1/market/price") {
           showFacts([
-            {label: "Symbol", value: data.symbol},
-            {label: "Price", value: data.price},
-            {label: "Source", value: data.source},
-            {label: "Observed at", value: data.observed_at}
+            {label: "마켓", value: data.symbol},
+            {label: "가격", value: data.price},
+            {label: "출처", value: data.source},
+            {label: "확인 시각", value: data.observed_at}
           ]);
         }
       });
@@ -360,17 +360,17 @@ OPS_DASHBOARD_HTML = """<!doctype html>
 
     document.getElementById("pnlBtn").addEventListener("click", async () => {
       const period = document.getElementById("pnlPeriod").value;
-      const data = await run("Realized PnL", () => request("/v1/pnl/realized?period=" + encodeURIComponent(period)));
+      const data = await run("실현손익", () => request("/v1/pnl/realized?period=" + encodeURIComponent(period)));
       const first = data.buckets && data.buckets[0] ? data.buckets[0] : {};
       showFacts([
-        {label: "Period", value: data.period},
-        {label: "Bucket", value: first.key},
-        {label: "Realized PnL KRW", value: first.realized_pnl_krw},
-        {label: "Matched BTC", value: first.matched_qty_btc}
+        {label: "기간", value: data.period},
+        {label: "구간", value: first.key},
+        {label: "실현손익(KRW)", value: first.realized_pnl_krw},
+        {label: "매칭 BTC", value: first.matched_qty_btc}
       ]);
     });
 
-    setStatus(token() ? "Token loaded from session" : "Not logged in", token() ? "ok" : "");
+    setStatus(token() ? "세션 토큰 불러옴" : "로그인 전", token() ? "ok" : "");
   </script>
 </body>
 </html>
