@@ -140,6 +140,50 @@ OPS_DASHBOARD_HTML = """<!doctype html>
       font-size: 18px;
       font-weight: 650;
     }
+    .table-wrap {
+      margin-top: 12px;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+    table {
+      width: 100%;
+      min-width: 980px;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--line);
+      text-align: right;
+      white-space: nowrap;
+    }
+    th {
+      color: var(--muted);
+      font-weight: 650;
+      background: #f8fafc;
+    }
+    th:first-child, td:first-child,
+    th:nth-child(2), td:nth-child(2),
+    th:last-child, td:last-child {
+      text-align: left;
+    }
+    tr:last-child td { border-bottom: 0; }
+    tr.holding { background: #f7fcf8; }
+    .slot-status {
+      display: inline-flex;
+      min-width: 44px;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 2px 7px;
+      color: var(--muted);
+      background: #edf1f7;
+    }
+    .slot-status.holding {
+      color: var(--ok);
+      background: #e8f5ec;
+    }
     pre {
       margin: 0;
       min-height: 220px;
@@ -198,6 +242,7 @@ OPS_DASHBOARD_HTML = """<!doctype html>
       <div class="actions">
         <button data-path="/v1/bot/status" type="button">봇 상태</button>
         <button data-path="/v1/grid/summary" type="button">그리드 요약</button>
+        <button data-path="/v1/grid/state" type="button">그리드 전체</button>
         <button data-path="/v1/market/price" type="button">현재가</button>
         <button data-path="/v1/orders/pending" type="button">미체결 주문</button>
         <button data-path="/v1/config" type="button">설정</button>
@@ -215,6 +260,7 @@ OPS_DASHBOARD_HTML = """<!doctype html>
         <button id="pnlBtn" type="button">실현손익</button>
       </div>
       <div id="facts" class="facts"></div>
+      <div id="gridTableWrap" class="table-wrap" hidden></div>
     </section>
 
     <section>
@@ -231,6 +277,7 @@ OPS_DASHBOARD_HTML = """<!doctype html>
     const output = document.getElementById("output");
     const authStatus = document.getElementById("authStatus");
     const facts = document.getElementById("facts");
+    const gridTableWrap = document.getElementById("gridTableWrap");
 
     baseUrlInput.value = window.location.origin;
     usernameInput.value = window.localStorage.getItem("autoOpsUsername") || "admin";
@@ -262,6 +309,102 @@ OPS_DASHBOARD_HTML = """<!doctype html>
       }
     }
 
+    function clearGridTable() {
+      gridTableWrap.hidden = true;
+      gridTableWrap.innerHTML = "";
+    }
+
+    function valueOrDash(value) {
+      return value == null || value === "" ? "-" : String(value);
+    }
+
+    function formatKrw(value) {
+      if (value == null || value === "") {
+        return "-";
+      }
+      const number = Number(value);
+      if (!Number.isFinite(number)) {
+        return String(value);
+      }
+      return new Intl.NumberFormat("ko-KR", {maximumFractionDigits: 0}).format(number);
+    }
+
+    function slotStatusLabel(status) {
+      if (status === "holding") {
+        return "보유";
+      }
+      if (status === "empty") {
+        return "대기";
+      }
+      return valueOrDash(status);
+    }
+
+    function pendingOrderText(order) {
+      if (!order) {
+        return "-";
+      }
+      const rawSide = String(order.side || "").toLowerCase();
+      const side = rawSide === "buy" ? "매수" : rawSide === "sell" ? "매도" : valueOrDash(order.side);
+      const status = order.status || "open";
+      const amount = order.spend_amount ? formatKrw(order.spend_amount) + " KRW" : valueOrDash(order.quantity) + " BTC";
+      return side + " " + status + " " + amount;
+    }
+
+    function appendCell(row, text, className) {
+      const cell = document.createElement("td");
+      if (className) {
+        cell.className = className;
+      }
+      cell.textContent = text;
+      row.appendChild(cell);
+    }
+
+    function renderGridTable(data) {
+      const slots = data.slots || [];
+      gridTableWrap.innerHTML = "";
+      const table = document.createElement("table");
+      const thead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      const headers = [
+        "슬롯", "상태", "매수가", "계획 BTC", "계획 매수(KRW)",
+        "보유 BTC", "보유 원가(KRW)", "매도가", "유효 매도가", "미체결"
+      ];
+      for (const header of headers) {
+        const cell = document.createElement("th");
+        cell.textContent = header;
+        headerRow.appendChild(cell);
+      }
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      for (const slot of slots) {
+        const row = document.createElement("tr");
+        row.className = slot.status === "holding" ? "holding" : "";
+        appendCell(row, valueOrDash(slot.slot_index));
+
+        const statusCell = document.createElement("td");
+        const statusBadge = document.createElement("span");
+        statusBadge.className = "slot-status" + (slot.status === "holding" ? " holding" : "");
+        statusBadge.textContent = slotStatusLabel(slot.status);
+        statusCell.appendChild(statusBadge);
+        row.appendChild(statusCell);
+
+        appendCell(row, formatKrw(slot.buy_price));
+        appendCell(row, valueOrDash(slot.planned_qty));
+        appendCell(row, formatKrw(slot.planned_buy_krw));
+        appendCell(row, valueOrDash(slot.held_qty));
+        appendCell(row, formatKrw(slot.inventory_cost_krw));
+        appendCell(row, formatKrw(slot.sell_price));
+        appendCell(row, formatKrw(slot.effective_sell_price));
+        appendCell(row, pendingOrderText(slot.pending_order));
+        tbody.appendChild(row);
+      }
+      table.appendChild(tbody);
+      gridTableWrap.appendChild(table);
+      gridTableWrap.hidden = false;
+    }
+
     async function request(path, options = {}) {
       const base = baseUrlInput.value.replace(/\\/$/, "");
       const headers = Object.assign({"Content-Type": "application/json"}, options.headers || {});
@@ -284,6 +427,7 @@ OPS_DASHBOARD_HTML = """<!doctype html>
     }
 
     async function run(name, callback) {
+      clearGridTable();
       show(name + "...");
       try {
         const data = await callback();
@@ -347,6 +491,16 @@ OPS_DASHBOARD_HTML = """<!doctype html>
             {label: "보유 BTC", value: data.total_inventory_btc},
             {label: "보유 원가(KRW)", value: data.current_inventory_cost_krw}
           ]);
+        } else if (button.dataset.path === "/v1/grid/state") {
+          const slots = data.slots || [];
+          const holdingCount = slots.filter((slot) => slot.status === "holding").length;
+          showFacts([
+            {label: "마켓", value: data.symbol},
+            {label: "슬롯 수", value: slots.length},
+            {label: "보유 슬롯", value: holdingCount},
+            {label: "대기 슬롯", value: slots.length - holdingCount}
+          ]);
+          renderGridTable(data);
         } else if (button.dataset.path === "/v1/market/price") {
           showFacts([
             {label: "마켓", value: data.symbol},

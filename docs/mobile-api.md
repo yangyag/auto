@@ -108,6 +108,7 @@ http://<EC2_PUBLIC_IP>:8086/ops
 - 아이디/비밀번호 로그인
 - 봇 상태 조회
 - 그리드 요약 조회
+- 그리드 전체 조회: 슬롯별 매수가, 계획 매수 BTC/KRW, 보유 BTC/KRW, 매도가, 미체결 주문
 - 현재가 조회
 - 미체결 주문 조회
 - 오늘/이번주/이번달/올해/전체 실현손익 조회
@@ -257,7 +258,7 @@ export async function apiGet(path: string) {
 |---|---|---|
 | `GET /v1/bot/status` | 봇 alive 여부, 마지막 heartbeat, 손절/브레이크아웃 상태 | 봇이 꺼져 있으면 API는 살아 있어도 `is_alive=false`가 될 수 있다. |
 | `GET /v1/market/price` | 현재가 | 봇 heartbeat 가격이 fresh하면 우선 사용하고, 없으면 Upbit public REST를 사용한다. |
-| `GET /v1/grid/state` | 전체 그리드 슬롯 목록 | 각 슬롯의 매수가, 매도가, 보유 수량, pending 주문을 확인한다. |
+| `GET /v1/grid/state` | 전체 그리드 슬롯 목록 | 각 슬롯의 매수가, 계획 매수 BTC/KRW, 보유 BTC/KRW, 매도가, pending 주문을 확인한다. |
 | `GET /v1/grid/summary` | 그리드 요약 | 보유 슬롯 수, 총 재고, 원가, 평균 매수가 등을 보여준다. |
 | `GET /v1/orders/pending` | DB 기준 미체결 주문 | 봇이 관리하는 open 주문 목록이다. |
 | `GET /v1/orders/recent?limit=50` | 최근 주문 이력 | DB에 기록된 주문 기준이다. |
@@ -270,6 +271,21 @@ export async function apiGet(path: string) {
 curl -s http://127.0.0.1:8086/v1/grid/summary \
   -H "Authorization: Bearer <access_token>"
 ```
+
+전체 그리드 슬롯을 보려면:
+
+```bash
+curl -s http://127.0.0.1:8086/v1/grid/state \
+  -H "Authorization: Bearer <access_token>"
+```
+
+`/v1/grid/state`의 `slots`에는 슬롯별로 아래 값이 들어간다.
+
+- `buy_price`: 해당 슬롯의 매수 기준 가격
+- `planned_qty`, `planned_buy_krw`: 아직 비어 있는 슬롯에서 매수할 목표 BTC 수량과 KRW 금액
+- `held_qty`, `inventory_cost_krw`: 이미 매수되어 보유 중인 BTC 수량과 원가
+- `sell_price`, `effective_sell_price`: 기본 매도 기준 가격과 Age TP 등이 반영된 실제 매도 기준 가격
+- `pending_order`: 해당 슬롯에 아직 완료되지 않은 주문이 있으면 주문 정보
 
 ## 명령 API
 
