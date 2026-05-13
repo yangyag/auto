@@ -7,6 +7,7 @@
 - `docs/setup.md`
 - `docs/operations.md`
 - `docs/quick-commands.md`
+- `docs/mobile-api.md`
 - `docs/strategy-formulas.md`
 - `docs/UPBIT_API_REFERENCE.md`
 

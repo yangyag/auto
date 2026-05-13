@@ -358,5 +358,6 @@ rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단
 - [docs/setup.md](docs/setup.md)
 - [docs/operations.md](docs/operations.md)
 - [docs/quick-commands.md](docs/quick-commands.md)
+- [docs/mobile-api.md](docs/mobile-api.md)
 - [docs/strategy-formulas.md](docs/strategy-formulas.md)
 - [docs/UPBIT_API_REFERENCE.md](docs/UPBIT_API_REFERENCE.md)

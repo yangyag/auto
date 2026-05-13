@@ -2,11 +2,24 @@
 
 React Native Android 앱에서 자동매매 상태를 조회하고 운영 명령을 요청하기 위한 FastAPI 서버 문서다.
 
-이 문서는 운영자가 헷갈리기 쉬운 실행 구조, 환경 변수, API 호출 방법, 장애 확인 순서를 함께 정리한다.
+이 문서는 모바일 API 관련 설계 기준, 실행 구조, 환경 변수, API 호출 방법, 장애 확인 순서를 함께 정리하는 기준 문서다.
 
 ## 한 줄 요약
 
 `./run.sh`는 트레이딩 봇만 실행한다. 모바일 앱용 API는 `auto-api.service`, 앱에서 요청한 명령을 실제로 실행하는 워커는 `auto-command-worker.service`로 따로 실행된다.
+
+## 구현 위치
+
+| 경로 | 역할 |
+|---|---|
+| `app/api/main.py` | FastAPI 인스턴스 생성, 라우터 등록 |
+| `app/api/routers/` | 인증, 상태 조회, 그리드, 주문, 손익, 명령 API 라우터 |
+| `app/api/schemas/` | API 요청/응답 Pydantic 모델 |
+| `app/api/services/` | 기존 봇 저장소/스크립트 로직을 HTTP 응답으로 가공하는 서비스 계층 |
+| `app/api/command_worker.py` | `commands` 테이블에 쌓인 운영 명령 실행 |
+| `db/migrations/004_mobile_api.sql` | 모바일 API용 heartbeat, 명령, refresh token 테이블 |
+| `deploy/systemd/user/auto-api.service` | FastAPI 서버 user systemd unit |
+| `deploy/systemd/user/auto-command-worker.service` | 명령 워커 user systemd unit |
 
 ## 전체 실행 구조
 
