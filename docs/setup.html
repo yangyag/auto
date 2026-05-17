@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>설치 / 초기 설정 가이드 · auto</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --panel: #ffffff;
+    --panel-2: #f1f3f5;
+    --text: #1f2328;
+    --muted: #5b6470;
+    --border: #e1e4e8;
+    --accent: #2f6feb;
+    --accent-soft: #dbe7ff;
+    --code-bg: #0d1117;
+    --code-fg: #e6edf3;
+    --code-comment: #8b949e;
+    --warn-bg: #fff8e1;
+    --warn-border: #f0c419;
+    --danger-bg: #ffebee;
+    --danger-border: #ef5350;
+    --ok-bg: #e8f5e9;
+    --ok-border: #66bb6a;
+    --info-bg: #e3f2fd;
+    --info-border: #42a5f5;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
+    --radius: 10px;
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2128;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --accent-soft: #1f2d4a;
+    --warn-bg: #2d2410;
+    --warn-border: #d4a017;
+    --danger-bg: #2d1414;
+    --danger-border: #d44a4a;
+    --ok-bg: #102a14;
+    --ok-border: #4ac26b;
+    --info-bg: #0f1f2e;
+    --info-border: #4493e0;
+    --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.2);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    min-height: 100vh;
+  }
+  /* ----- Sidebar ----- */
+  aside.sidebar {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 1.25rem 1rem;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+  }
+  .brand-mark {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #2f6feb 0%, #8a3ffc 100%);
+    display: grid; place-items: center;
+    color: white; font-weight: 700; font-size: 14px;
+  }
+  .brand-text { font-weight: 700; font-size: 0.95rem; }
+  .brand-sub { font-size: 0.75rem; color: var(--muted); }
+  .search-box {
+    width: 100%;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel-2);
+    color: var(--text);
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+  }
+  .search-box:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  nav.toc ul { list-style: none; padding: 0; margin: 0; }
+  nav.toc li a {
+    display: block;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 0.35rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.83rem;
+    border-left: 2px solid transparent;
+    margin-bottom: 1px;
+  }
+  nav.toc li a:hover { background: var(--panel-2); color: var(--text); }
+  nav.toc li a.active {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-left-color: var(--accent);
+    font-weight: 600;
+  }
+  nav.toc li.indent a { padding-left: 1.4rem; font-size: 0.78rem; }
+  .theme-toggle {
+    margin-top: 1rem;
+    padding: 0.5rem 0.75rem;
+    width: 100%;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .theme-toggle:hover { background: var(--accent-soft); }
+  /* ----- Main ----- */
+  main.content {
+    padding: 2rem 2.5rem 4rem;
+    max-width: 1100px;
+  }
+  .hero {
+    background: linear-gradient(135deg, #1c2541 0%, #3a506b 100%);
+    color: white;
+    padding: 1.5rem 1.75rem;
+    border-radius: var(--radius);
+    margin-bottom: 1.5rem;
+    box-shadow: var(--shadow);
+  }
+  .hero h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+  .hero p { margin: 0; opacity: 0.85; font-size: 0.9rem; }
+  .hero .hero-meta {
+    margin-top: 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-family: "SFMono-Regular", Consolas, monospace;
+  }
+  /* Quick-reference cards */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+    box-shadow: var(--shadow);
+  }
+  .card-title {
+    display: flex; align-items: center; gap: 0.5rem;
+    font-weight: 700; font-size: 0.85rem;
+    margin-bottom: 0.6rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .card-icon {
+    width: 22px; height: 22px;
+    display: grid; place-items: center;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 6px;
+    font-size: 0.75rem;
+  }
+  .kv { display: grid; grid-template-columns: 80px 1fr; gap: 0.25rem 0.6rem; font-size: 0.82rem; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; font-family: "SFMono-Regular", Consolas, monospace; word-break: break-all; }
+
+  h2 {
+    margin-top: 2.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 1.35rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 2px solid var(--border);
+    scroll-margin-top: 1rem;
+  }
+  h3 {
+    margin-top: 1.75rem;
+    margin-bottom: 0.5rem;
+    font-size: 1.1rem;
+    color: var(--text);
+    scroll-margin-top: 1rem;
+  }
+  h4 { margin-top: 1.25rem; margin-bottom: 0.4rem; font-size: 0.98rem; }
+  p { margin: 0.6rem 0; }
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: 0.2rem 0; }
+  a { color: var(--accent); }
+
+  /* Code blocks */
+  .code-wrap {
+    position: relative;
+    margin: 1rem 0;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .code-head {
+    display: flex; justify-content: space-between; align-items: center;
+    background: #1c2128;
+    color: #8b949e;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.72rem;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    border-bottom: 1px solid #30363d;
+  }
+  .code-lang { text-transform: uppercase; letter-spacing: 0.04em; }
+  .copy-btn {
+    background: transparent;
+    border: 1px solid #30363d;
+    color: #8b949e;
+    border-radius: 5px;
+    padding: 0.15rem 0.55rem;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .copy-btn:hover { color: #e6edf3; border-color: #58a6ff; }
+  .copy-btn.copied { color: #4ac26b; border-color: #4ac26b; }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 0.9rem 1rem;
+    margin: 0;
+    overflow-x: auto;
+    font-size: 0.83rem;
+    line-height: 1.55;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  pre code { background: transparent; padding: 0; color: inherit; }
+  p code, li code, td code, dd code {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    padding: 0.05em 0.4em;
+    border-radius: 4px;
+    font-size: 0.85em;
+    font-family: "SFMono-Regular", Consolas, monospace;
+  }
+
+  /* Callouts */
+  .callout {
+    border-left: 4px solid;
+    background: var(--panel);
+    border-radius: 0 8px 8px 0;
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    box-shadow: var(--shadow);
+  }
+  .callout-title { font-weight: 700; margin-bottom: 0.25rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem; }
+  .callout.warn { border-color: var(--warn-border); background: var(--warn-bg); }
+  .callout.danger { border-color: var(--danger-border); background: var(--danger-bg); }
+  .callout.ok { border-color: var(--ok-border); background: var(--ok-bg); }
+  .callout.info { border-color: var(--info-border); background: var(--info-bg); }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  /* Tables */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+    background: var(--panel);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 0.85rem;
+    box-shadow: var(--shadow);
+  }
+  th, td {
+    border-bottom: 1px solid var(--border);
+    padding: 0.55rem 0.75rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--panel-2); font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+  tbody tr:hover { background: var(--panel-2); }
+  td code { white-space: nowrap; }
+
+  /* Workflow stepper */
+  .stepper { counter-reset: step; padding: 0; list-style: none; margin: 1rem 0; }
+  .stepper li {
+    counter-increment: step;
+    position: relative;
+    padding: 0.6rem 0.75rem 0.6rem 2.5rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    font-size: 0.88rem;
+  }
+  .stepper li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0.6rem; top: 50%; transform: translateY(-50%);
+    width: 1.5rem; height: 1.5rem;
+    background: var(--accent); color: white;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 0.78rem;
+  }
+
+  /* Big numbered step block (for top-level install steps) */
+  .step-block {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    margin: 1rem 0 1.5rem;
+    overflow: hidden;
+  }
+  .step-block .step-head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, var(--accent-soft) 0%, transparent 100%);
+    border-bottom: 1px solid var(--border);
+  }
+  .step-num {
+    flex: 0 0 auto;
+    width: 2rem; height: 2rem;
+    border-radius: 8px;
+    background: var(--accent);
+    color: white;
+    display: grid; place-items: center;
+    font-weight: 800;
+    font-size: 0.95rem;
+  }
+  .step-title {
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--text);
+  }
+  .step-tag {
+    margin-left: auto;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    font-weight: 700;
+  }
+  .step-tag.req { background: #ffebee; color: #c62828; border: 1px solid #ef5350; }
+  .step-tag.opt { background: #e3f2fd; color: #1565c0; border: 1px solid #42a5f5; }
+  html[data-theme="dark"] .step-tag.req { background: #2d1414; color: #ff8a80; border-color: #d44a4a; }
+  html[data-theme="dark"] .step-tag.opt { background: #0f1f2e; color: #82b1ff; border-color: #4493e0; }
+  .step-body { padding: 0.85rem 1rem; }
+  .step-body > *:first-child { margin-top: 0; }
+  .step-body > *:last-child { margin-bottom: 0; }
+
+  /* Prereq grid (split required/optional) */
+  .prereq-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .prereq {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.85rem 1rem;
+    box-shadow: var(--shadow);
+  }
+  .prereq.req { border-top: 3px solid var(--danger-border); }
+  .prereq.opt { border-top: 3px solid var(--info-border); }
+  .prereq h4 {
+    margin: 0 0 0.5rem;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+  .prereq ul { margin: 0; padding-left: 1.2rem; }
+  .prereq li { font-size: 0.88rem; margin: 0.2rem 0; }
+
+  .section { scroll-margin-top: 1rem; }
+
+  .hidden { display: none !important; }
+
+  footer {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+  }
+
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: 1fr; }
+    aside.sidebar { position: relative; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+    main.content { padding: 1.25rem 1rem 3rem; }
+    .prereq-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">A</div>
+      <div>
+        <div class="brand-text">auto · 설치 가이드</div>
+        <div class="brand-sub">Setup &amp; First Run</div>
+      </div>
+    </div>
+    <input type="text" id="search" class="search-box" placeholder="섹션 검색… (예: venv, .env, postgres)">
+    <nav class="toc" id="toc">
+      <ul>
+        <li><a href="#intro">문서 개요</a></li>
+        <li><a href="#step1">1. 준비물</a></li>
+        <li><a href="#step2">2. 저장소 받기</a></li>
+        <li><a href="#step3">3. 가상환경 생성</a></li>
+        <li><a href="#step4">4. 의존성 설치</a></li>
+        <li><a href="#step5">5. .env 작성</a></li>
+        <li><a href="#step6">6. PostgreSQL 준비</a></li>
+        <li><a href="#step7">7. 스키마 적용</a></li>
+        <li><a href="#step8">8. grid.properties 확인</a></li>
+        <li><a href="#step9">9. 비파괴 검증</a></li>
+        <li><a href="#step10">10. 초기 그리드 반영</a></li>
+        <li><a href="#step11">11. 실행</a></li>
+        <li><a href="#step12">12. 운영 체크</a></li>
+      </ul>
+    </nav>
+    <button class="theme-toggle" id="themeToggle">
+      <span>테마</span>
+      <span id="themeLabel">☀ Light</span>
+    </button>
+  </aside>
+
+  <main class="content">
+    <div class="hero">
+      <h1>설치 / 초기 설정 가이드</h1>
+      <p>git clone 한 직후 PostgreSQL 기반으로 초기 실행 가능한 상태까지 만드는 12단계 절차</p>
+      <div class="hero-meta">
+        <span class="chip">🐍 Python 3.11+</span>
+        <span class="chip">🗄 PostgreSQL</span>
+        <span class="chip">📈 KRW-BTC</span>
+        <span class="chip">⚙ grid.properties</span>
+        <span class="chip">🚀 ./run.sh</span>
+      </div>
+    </div>
+
+    <!-- Quick-reference cards: what gets installed -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-title"><span class="card-icon">🐍</span>Python 가상환경</div>
+        <dl class="kv">
+          <dt>경로</dt><dd>.venv/</dd>
+          <dt>생성</dt><dd>python3 -m venv .venv</dd>
+          <dt>대체</dt><dd>uv venv --clear .venv</dd>
+          <dt>실행</dt><dd>.venv/bin/python</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="card-icon">🔑</span>환경 설정</div>
+        <dl class="kv">
+          <dt>샘플</dt><dd>.env_sample</dd>
+          <dt>대상</dt><dd>.env</dd>
+          <dt>읽기</dt><dd>app/config/settings.py</dd>
+          <dt>EC2</dt><dd>/home/ubuntu/auto/.env</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="card-icon">🗄</span>데이터베이스</div>
+        <dl class="kv">
+          <dt>엔진</dt><dd>postgres:18</dd>
+          <dt>스키마</dt><dd>auto_trading → PGSCHEMA</dd>
+          <dt>마이그</dt><dd>db/migrations/*.sql</dd>
+          <dt>상태키</dt><dd>STATE_BOT_KEY</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="card-icon">⚙</span>그리드 / 실행</div>
+        <dl class="kv">
+          <dt>설정</dt><dd>grid.properties</dd>
+          <dt>반영</dt><dd>scripts/apply_grid_properties_to_postgres.py</dd>
+          <dt>시작</dt><dd>./run.sh</dd>
+          <dt>종료</dt><dd>./stop.sh</dd>
+        </dl>
+      </div>
+    </div>
+
+    <!-- 문서 개요 -->
+    <section class="section" id="intro">
+      <h2>문서 개요</h2>
+      <p>이 문서는 이 저장소를 <strong>git clone 한 직후</strong> 처음 설치하고, PostgreSQL 기반으로 초기 실행 가능한 상태까지 만드는 절차를 정리한 가이드다.</p>
+
+      <h3>문서 역할</h3>
+      <ul>
+        <li>프로그램 로직 설명은 <code>README.md</code></li>
+        <li>EC2, git, 배포, 운영 인프라는 <code>docs/operations.html</code></li>
+      </ul>
+
+      <h3>기준 운영 방식</h3>
+      <table>
+        <thead><tr><th>항목</th><th>값</th></tr></thead>
+        <tbody>
+          <tr><td>거래소</td><td>업비트 <code>KRW-BTC</code></td></tr>
+          <tr><td>상태 저장</td><td>PostgreSQL</td></tr>
+          <tr><td>그리드 입력</td><td><code>grid.properties</code></td></tr>
+          <tr><td>그리드 반영</td><td><code>scripts/apply_grid_properties_to_postgres.py</code></td></tr>
+          <tr><td>봇 실행/종료</td><td><code>./run.sh</code>, <code>./stop.sh</code></td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout info">
+        <div class="callout-title">📂 저장소 폴더 구조</div>
+        <p>루트 업무 폴더는 <code>app/</code>, <code>scripts/</code>, <code>db/</code>, <code>docs/</code>, <code>tests/</code>로 정리되어 있다.</p>
+        <p>운영 구현은 <code>app/</code> 아래에 있고, 기존 명령 호환을 위해 루트 <code>main.py</code>, 루트 호환 alias 모듈, <code>scripts/</code> 경로는 유지한다.</p>
+      </div>
+
+      <div class="callout warn">
+        <div class="callout-title">⚠ 진행 전 확인</div>
+        <p>아래 12개 단계는 <strong>순서대로</strong> 진행한다. 각 단계 상단의 <span class="step-tag req" style="display:inline-block;margin:0 0.2rem;">필수</span> / <span class="step-tag opt" style="display:inline-block;margin:0 0.2rem;">선택</span> 태그로 건너뛸 수 있는 단계를 구분해 두었다.</p>
+      </div>
+    </section>
+
+    <!-- Step 1: 준비물 -->
+    <section class="section" id="step1">
+      <h2>1. 준비물</h2>
+      <div class="prereq-grid">
+        <div class="prereq req">
+          <h4>필수</h4>
+          <ul>
+            <li>Git</li>
+            <li>Python 3.11+</li>
+            <li>PostgreSQL 접속 정보</li>
+            <li>업비트 API 키</li>
+            <li>업비트 REST/WebSocket 엔드포인트로 나가는 네트워크 연결</li>
+          </ul>
+        </div>
+        <div class="prereq opt">
+          <h4>선택</h4>
+          <ul>
+            <li><code>uv</code> (<code>python3 -m venv .venv</code> 가 실패할 때 사용)</li>
+            <li>Docker (<code>postgres:18</code> 로 로컬 PostgreSQL을 빠르게 띄우고 싶을 때)</li>
+          </ul>
+        </div>
+      </div>
+      <div class="callout danger">
+        <div class="callout-title">🔐 API 키 사전 발급</div>
+        <p>업비트 API 키는 미리 발급받아 두자. 키는 <code>.env</code>에 들어가며, 절대 코드/문서/커밋에 복제하지 않는다.</p>
+      </div>
+    </section>
+
+    <!-- Step 2: 저장소 받기 -->
+    <section class="section" id="step2">
+      <div class="step-block">
+        <div class="step-head">
+          <div class="step-num">2</div>
+          <div class="step-title">저장소 받기</div>
+          <span class="step-tag req">필수</span>
+        </div>
+        <div class="step-body">
+          <p>SSH 키가 등록되어 있으면:</p>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>git clone git@github.com:yangyag/auto.git
+cd auto</code></pre>
+          </div>
+          <p>HTTPS를 쓰면:</p>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>git clone https://github.com/yangyag/auto.git
+cd auto</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 3: 가상환경 -->
+    <section class="section" id="step3">
+      <div class="step-block">
+        <div class="step-head">
+          <div class="step-num">3</div>
+          <div class="step-title">가상환경 생성</div>
+          <span class="step-tag req">필수</span>
+        </div>
+        <div class="step-body">
+          <p>기본 경로:</p>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>python3 -m venv .venv</code></pre>
+          </div>
+          <p><code>ensurepip</code> 오류로 실패하면:</p>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>~/.local/bin/uv venv --clear .venv
+~/.local/bin/uv pip install --python .venv/bin/python pip</code></pre>
+          </div>
+          <div class="callout info">
+            <div class="callout-title">💡 왜 uv?</div>
+            <p>일부 환경에서는 시스템 <code>python3 -m venv .venv</code> 가 <code>ensurepip</code> 부재로 실패한다. 이 때 <code>uv</code>로 가상환경을 만들면 우회된다.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 4: 의존성 설치 -->
+    <section class="section" id="step4">
+      <div class="step-block">
+        <div class="step-head">
+          <div class="step-num">4</div>
+          <div class="step-title">의존성 설치</div>
+          <span class="step-tag req">필수</span>
+        </div>
+        <div class="step-body">
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python -m pip install -r requirements.txt</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 5: .env 작성 -->
+    <section class="section" id="step5">
+      <div class="step-block">
+        <div class="step-head">
+          <div class="step-num">5</div>
+          <div class="step-title"><code>.env</code> 작성</div>
+          <span class="step-tag req">필수</span>
+        </div>
+        <div class="step-body">
+          <p>샘플 파일을 복사한 뒤 실제 값으로 채운다.</p>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>cp .env_sample .env</code></pre>
+          </div>
+          <p>최소 예시:</p>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">env</span><button class="copy-btn">Copy</button></div>
+<pre><code>UPBIT_ACCESS_KEY=YOUR_UPBIT_ACCESS_KEY
+UPBIT_SECRET_KEY=YOUR_UPBIT_SECRET_KEY
+
+UPBIT_WS_PUBLIC_ENABLED=true
+UPBIT_WS_EVENT_LOOP_ENABLED=true
+UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS=3
+
+STATE_BOT_KEY=krw-btc-live
+
+PGHOST=127.0.0.1
+PGPORT=5432
+PGDATABASE=yangyag
+PGUSER=yangyag
+PGPASSWORD=YOUR_DB_PASSWORD
+PGSCHEMA=auto_trading</code></pre>
+          </div>
+          <div class="callout warn">
+            <div class="callout-title">⚠ 주의사항</div>
+            <ul style="margin: 0.3rem 0;">
+              <li><code>app/config/settings.py</code>는 프로젝트 루트 <code>.env</code>를 읽는다.</li>
+              <li>현재가 루프는 기본적으로 public ticker WebSocket 이벤트 기반으로 동작한다.</li>
+              <li>WebSocket 장애, 이벤트 없음, 의존성 누락 시 기존 5초 REST polling 으로 fallback 한다.</li>
+              <li>같은 서버에 <code>/home/ubuntu/llm.env</code> 가 있어도 이 저장소 설정 파일이 아니다.</li>
+              <li>EC2 운영 서버 기준 자동매매 <code>.env</code> 경로는 <code>/home/ubuntu/auto/.env</code> 다.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 6: PostgreSQL 준비 -->
+    <section class="section" id="step6">
+      <div class="step-block">
+        <div class="step-head">
+          <div class="step-num">6</div>
+          <div class="step-title">PostgreSQL 준비</div>
+          <span class="step-tag opt">선택</span>
+        </div>
+        <div class="step-body">
+          <div class="callout info">
+            <div class="callout-title">📌 이미 PostgreSQL이 있으면</div>
+            <p>이 단계는 건너뛰고 <code>.env</code>만 맞춘다.</p>
+          </div>
+          <p>로컬 Docker 예시:</p>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>docker run -d \
+  --name auto-postgres \
+  -e POSTGRES_DB=yangyag \
+  -e POSTGRES_USER=yangyag \
+  -e POSTGRES_PASSWORD=YOUR_DB_PASSWORD \
+  -p 5432:5432 \
+  -v auto_postgres_data:/var/lib/postgresql/data \
+  postgres:18</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 7: 스키마 적용 -->
+    <section class="section" id="step7">
+      <div class="step-block">
+        <div class="step-head">
+          <div class="step-num">7</div>
+          <div class="step-title">스키마 적용</div>
+          <span class="step-tag req">필수</span>
+        </div>
+        <div class="step-body">
+          <p>프로젝트 루트에서:</p>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python - &lt;&lt;'PY'
+from pathlib import Path
+
+import psycopg
+
+import app.config.settings as cfg
+
+schema = cfg.PGSCHEMA
+migrations_dir = Path("db/migrations")
+
+with psycopg.connect(
+    host=cfg.PGHOST,
+    port=cfg.PGPORT,
+    dbname=cfg.PGDATABASE,
+    user=cfg.PGUSER,
+    password=cfg.PGPASSWORD,
+    autocommit=True,
+) as conn:
+    with conn.cursor() as cur:
+        for sql_path in sorted(migrations_dir.glob("*.sql")):
+            sql_text = sql_path.read_text(encoding="utf-8").replace("auto_trading", schema)
+            cur.execute(sql_text)
+            print(f"applied: {sql_path.name} -&gt; {schema}")
+PY</code></pre>
+          </div>
+          <div class="callout info">
+            <div class="callout-title">📌 마이그레이션 흐름</div>
+            <p><code>db/migrations/*.sql</code> 안의 <code>auto_trading</code> 스키마 이름이 <code>PGSCHEMA</code> 값으로 치환되어 순서대로 적용된다.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 8: grid.properties -->
+    <section class="section" id="step8">
+      <div class="step-block">
+        <div class="step-head">
+          <div class="step-num">8</div>
+          <div class="step-title"><code>grid.properties</code> 확인</div>
+          <span class="step-tag req">필수</span>
+        </div>
+        <div class="step-body">
+          <p>기본 예시:</p>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">properties</span><button class="copy-btn">Copy</button></div>
+<pre><code>MIN_BUY_PRICE=98000000
+MAX_BUY_PRICE=121000000
+TOTAL_BUDGET_KRW=2400000
+GRID_STEP_PCT=0.222165440322
+TP_MODEL=k
+TP_K_BASE=9.0
+TP_K_FLOOR=7.0</code></pre>
+          </div>
+          <div class="callout warn">
+            <div class="callout-title">⚠ 주의사항</div>
+            <ul style="margin: 0.3rem 0;">
+              <li><code>MIN_BUY_PRICE</code>, <code>MAX_BUY_PRICE</code>는 업비트 KRW 호가 단위에 맞아야 한다.</li>
+              <li><code>grid.properties</code>는 <code>GRID_COUNT</code> 또는 <code>GRID_STEP_PCT</code> 중 정확히 하나만 둔다.</li>
+              <li><code>main.py init-grid</code>는 슬롯 개수 기반이다.</li>
+              <li><code>TOTAL_BUDGET_KRW</code> 는 그리드 전체에 배정할 총예산이며, 시스템이 가중치 비율로 상단/중단/하단 가중치로 배분한다.</li>
+              <li><code>app/config/settings.py</code>의 <code>GRID_TP_K_BASE</code> 와 <code>grid.properties</code>의 <code>TP_K_BASE</code> 는 맞춰 두는 것이 안전하다.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 9: 비파괴 검증 -->
+    <section class="section" id="step9">
+      <div class="step-block">
+        <div class="step-head">
+          <div class="step-num">9</div>
+          <div class="step-title">비파괴 검증</div>
+          <span class="step-tag req">필수</span>
+        </div>
+        <div class="step-body">
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python -c "import main"
+.venv/bin/python -m unittest discover -s tests -v</code></pre>
+          </div>
+          <div class="callout ok">
+            <div class="callout-title">✅ 통과 기준</div>
+            <p><code>import main</code>이 오류 없이 끝나고 unittest 가 모두 통과하면 의존성/스키마/환경 설정이 모두 잘 들어간 것이다.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 10: 초기 그리드 -->
+    <section class="section" id="step10">
+      <div class="step-block">
+        <div class="step-head">
+          <div class="step-num">10</div>
+          <div class="step-title">초기 그리드 반영</div>
+          <span class="step-tag req">필수</span>
+        </div>
+        <div class="step-body">
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/apply_grid_properties_to_postgres.py --force</code></pre>
+          </div>
+          <p>상태 확인:</p>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/show_grid_state.py
+.venv/bin/python main.py balance</code></pre>
+          </div>
+          <div class="callout danger">
+            <div class="callout-title">⚠ --force 의 의미</div>
+            <p><code>scripts/apply_grid_properties_to_postgres.py --force</code> 는 같은 <code>STATE_BOT_KEY</code> 상태를 <strong>전체 덮어쓴다</strong>. 운영 중 봇이 돌고 있을 때는 사용하지 않는다.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 11: 실행 -->
+    <section class="section" id="step11">
+      <div class="step-block">
+        <div class="step-head">
+          <div class="step-num">11</div>
+          <div class="step-title">실행</div>
+          <span class="step-tag req">필수</span>
+        </div>
+        <div class="step-body">
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>PYTHON_BIN=.venv/bin/python ./run.sh
+./tail-latest-log.sh</code></pre>
+          </div>
+          <p>종료:</p>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>./stop.sh</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 12: 운영 체크 -->
+    <section class="section" id="step12">
+      <div class="step-block">
+        <div class="step-head">
+          <div class="step-num">12</div>
+          <div class="step-title">운영 체크</div>
+          <span class="step-tag req">필수</span>
+        </div>
+        <div class="step-body">
+          <ul>
+            <li>실제 주문 루프는 <code>.venv/bin/python main.py</code> 또는 <code>./run.sh</code> 경로에서만 돈다.</li>
+            <li>실거래 전에는 업비트 API 키와 PostgreSQL 접속 정보가 맞는지 먼저 확인한다.</li>
+            <li><code>scripts/show_grid_state.py</code>는 읽기 전용이다.</li>
+            <li><code>scripts/apply_grid_properties_to_postgres.py --force</code> 는 같은 <code>STATE_BOT_KEY</code> 상태를 전체 덮어쓴다.</li>
+            <li>운영 서버 배포는 아래 순서가 기본이다.</li>
+          </ul>
+          <h4>운영 서버 배포 순서</h4>
+          <ol class="stepper">
+            <li><code>git fetch</code></li>
+            <li><code>./stop.sh</code></li>
+            <li><code>git pull --ff-only origin main</code></li>
+            <li><code>PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh</code></li>
+          </ol>
+          <div class="callout danger">
+            <div class="callout-title">⚠ 실거래 주의</div>
+            <p>실거래 주문이 발생할 수 있는 루프 실행은 <strong>명시적으로 필요할 때만</strong> 한다. 키/DB/그리드를 모두 점검한 뒤 실행한다.</p>
+          </div>
+          <div class="callout info">
+            <div class="callout-title">📚 다음 단계</div>
+            <p>설치가 끝났으면 운영 절차와 손절 가이드는 <a href="operations.html">operations.html</a> 에서 이어 보면 된다.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      이 문서는 <code>docs/setup.md</code> 를 기반으로 자동 생성된 설치 대시보드입니다 · 최종 갱신 2026-05-18
+    </footer>
+  </main>
+</div>
+
+<script>
+  // ----- Copy buttons -----
+  document.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.closest('.code-wrap').querySelector('pre code').innerText;
+      navigator.clipboard.writeText(code).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1400);
+      });
+    });
+  });
+
+  // ----- TOC active highlight -----
+  const sections = document.querySelectorAll('section.section');
+  const tocLinks = document.querySelectorAll('nav.toc a');
+  const tocMap = {};
+  tocLinks.forEach(a => { tocMap[a.getAttribute('href').slice(1)] = a; });
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        tocLinks.forEach(a => a.classList.remove('active'));
+        const link = tocMap[e.target.id];
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+
+  // ----- Search filter -----
+  const search = document.getElementById('search');
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    if (!q) {
+      sections.forEach(s => s.classList.remove('hidden'));
+      tocLinks.forEach(a => a.parentElement.classList.remove('hidden'));
+      return;
+    }
+    sections.forEach(s => {
+      const match = s.textContent.toLowerCase().includes(q);
+      s.classList.toggle('hidden', !match);
+    });
+    tocLinks.forEach(a => {
+      const id = a.getAttribute('href').slice(1);
+      const target = document.getElementById(id);
+      const visible = target && !target.classList.contains('hidden');
+      a.parentElement.classList.toggle('hidden', !visible);
+    });
+  });
+
+  // ----- Theme toggle -----
+  const toggle = document.getElementById('themeToggle');
+  const themeLabel = document.getElementById('themeLabel');
+  const saved = localStorage.getItem('setup-theme');
+  if (saved === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    themeLabel.textContent = '🌙 Dark';
+  }
+  toggle.addEventListener('click', () => {
+    const cur = document.documentElement.getAttribute('data-theme');
+    if (cur === 'dark') {
+      document.documentElement.removeAttribute('data-theme');
+      themeLabel.textContent = '☀ Light';
+      localStorage.setItem('setup-theme', 'light');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      themeLabel.textContent = '🌙 Dark';
+      localStorage.setItem('setup-theme', 'dark');
+    }
+  });
+</script>
+</body>
+</html>

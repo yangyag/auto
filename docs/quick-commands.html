@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>auto 빠른 명령어 모음 · Cheat Sheet</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --panel: #ffffff;
+    --panel-2: #f1f3f5;
+    --text: #1f2328;
+    --muted: #5b6470;
+    --border: #e1e4e8;
+    --accent: #2f6feb;
+    --accent-soft: #dbe7ff;
+    --code-bg: #0d1117;
+    --code-fg: #e6edf3;
+    --code-comment: #8b949e;
+    --warn-bg: #fff8e1;
+    --warn-border: #f0c419;
+    --danger-bg: #ffebee;
+    --danger-border: #ef5350;
+    --ok-bg: #e8f5e9;
+    --ok-border: #66bb6a;
+    --info-bg: #e3f2fd;
+    --info-border: #42a5f5;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
+    --radius: 10px;
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2128;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --accent-soft: #1f2d4a;
+    --warn-bg: #2d2410;
+    --warn-border: #d4a017;
+    --danger-bg: #2d1414;
+    --danger-border: #d44a4a;
+    --ok-bg: #102a14;
+    --ok-border: #4ac26b;
+    --info-bg: #0f1f2e;
+    --info-border: #4493e0;
+    --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.2);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    min-height: 100vh;
+  }
+  /* ----- Sidebar ----- */
+  aside.sidebar {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 1.25rem 1rem;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+  }
+  .brand-mark {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #2f6feb 0%, #8a3ffc 100%);
+    display: grid; place-items: center;
+    color: white; font-weight: 700; font-size: 14px;
+  }
+  .brand-text { font-weight: 700; font-size: 0.95rem; }
+  .brand-sub { font-size: 0.75rem; color: var(--muted); }
+  .search-box {
+    width: 100%;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel-2);
+    color: var(--text);
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+  }
+  .search-box:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  nav.toc ul { list-style: none; padding: 0; margin: 0; }
+  nav.toc li a {
+    display: block;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 0.35rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.83rem;
+    border-left: 2px solid transparent;
+    margin-bottom: 1px;
+  }
+  nav.toc li a:hover { background: var(--panel-2); color: var(--text); }
+  nav.toc li a.active {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-left-color: var(--accent);
+    font-weight: 600;
+  }
+  nav.toc li.indent a { padding-left: 1.4rem; font-size: 0.78rem; }
+  .theme-toggle {
+    margin-top: 1rem;
+    padding: 0.5rem 0.75rem;
+    width: 100%;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .theme-toggle:hover { background: var(--accent-soft); }
+  /* ----- Main ----- */
+  main.content {
+    padding: 2rem 2.5rem 4rem;
+    max-width: 1100px;
+  }
+  .hero {
+    background: linear-gradient(135deg, #1c2541 0%, #3a506b 100%);
+    color: white;
+    padding: 1.5rem 1.75rem;
+    border-radius: var(--radius);
+    margin-bottom: 1.5rem;
+    box-shadow: var(--shadow);
+  }
+  .hero h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+  .hero p { margin: 0; opacity: 0.85; font-size: 0.9rem; }
+  .hero .hero-meta {
+    margin-top: 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-family: "SFMono-Regular", Consolas, monospace;
+  }
+  /* Quick-reference cards */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+    box-shadow: var(--shadow);
+  }
+  .card-title {
+    display: flex; align-items: center; gap: 0.5rem;
+    font-weight: 700; font-size: 0.85rem;
+    margin-bottom: 0.6rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .card-icon {
+    width: 22px; height: 22px;
+    display: grid; place-items: center;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 6px;
+    font-size: 0.75rem;
+  }
+  .kv { display: grid; grid-template-columns: 90px 1fr; gap: 0.25rem 0.6rem; font-size: 0.82rem; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; font-family: "SFMono-Regular", Consolas, monospace; word-break: break-all; }
+
+  h2 {
+    margin-top: 2.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 1.35rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 2px solid var(--border);
+    scroll-margin-top: 1rem;
+  }
+  h3 {
+    margin-top: 1.75rem;
+    margin-bottom: 0.5rem;
+    font-size: 1.1rem;
+    color: var(--text);
+    scroll-margin-top: 1rem;
+  }
+  h4 { margin-top: 1.25rem; margin-bottom: 0.4rem; font-size: 0.98rem; }
+  p { margin: 0.6rem 0; }
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: 0.2rem 0; }
+  a { color: var(--accent); }
+
+  /* Code blocks */
+  .code-wrap {
+    position: relative;
+    margin: 0.6rem 0;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .code-head {
+    display: flex; justify-content: space-between; align-items: center;
+    background: #1c2128;
+    color: #8b949e;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.72rem;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    border-bottom: 1px solid #30363d;
+  }
+  .code-lang { text-transform: uppercase; letter-spacing: 0.04em; }
+  .copy-btn {
+    background: transparent;
+    border: 1px solid #30363d;
+    color: #8b949e;
+    border-radius: 5px;
+    padding: 0.15rem 0.55rem;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .copy-btn:hover { color: #e6edf3; border-color: #58a6ff; }
+  .copy-btn.copied { color: #4ac26b; border-color: #4ac26b; }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 0.9rem 1rem;
+    margin: 0;
+    overflow-x: auto;
+    font-size: 0.83rem;
+    line-height: 1.55;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  pre code { background: transparent; padding: 0; color: inherit; }
+  p code, li code, td code, dd code {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    padding: 0.05em 0.4em;
+    border-radius: 4px;
+    font-size: 0.85em;
+    font-family: "SFMono-Regular", Consolas, monospace;
+  }
+
+  /* Callouts */
+  .callout {
+    border-left: 4px solid;
+    background: var(--panel);
+    border-radius: 0 8px 8px 0;
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    box-shadow: var(--shadow);
+  }
+  .callout-title { font-weight: 700; margin-bottom: 0.25rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem; }
+  .callout.warn { border-color: var(--warn-border); background: var(--warn-bg); }
+  .callout.danger { border-color: var(--danger-border); background: var(--danger-bg); }
+  .callout.ok { border-color: var(--ok-border); background: var(--ok-bg); }
+  .callout.info { border-color: var(--info-border); background: var(--info-bg); }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  /* Tables */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+    background: var(--panel);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 0.85rem;
+    box-shadow: var(--shadow);
+  }
+  th, td {
+    border-bottom: 1px solid var(--border);
+    padding: 0.55rem 0.75rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--panel-2); font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+  tbody tr:hover { background: var(--panel-2); }
+  td code { white-space: nowrap; }
+
+  /* Workflow stepper */
+  .stepper { counter-reset: step; padding: 0; list-style: none; margin: 1rem 0; }
+  .stepper li {
+    counter-increment: step;
+    position: relative;
+    padding: 0.6rem 0.75rem 0.6rem 2.5rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    font-size: 0.88rem;
+  }
+  .stepper li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0.6rem; top: 50%; transform: translateY(-50%);
+    width: 1.5rem; height: 1.5rem;
+    background: var(--accent); color: white;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 0.78rem;
+  }
+
+  /* Cheat-sheet specific: command tiles */
+  .cmd-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .cmd-tile {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.9rem 1rem 1rem;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+  }
+  .cmd-tile-title {
+    font-weight: 700;
+    font-size: 0.92rem;
+    margin: 0 0 0.5rem;
+    display: flex; align-items: center; gap: 0.5rem;
+  }
+  .cmd-tile-title .tag {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 0.66rem;
+    font-weight: 700;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .cmd-tile-desc {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin: 0 0 0.5rem;
+  }
+  .cmd-tile .code-wrap { margin-top: auto; margin-bottom: 0; }
+
+  /* TOC category labels */
+  nav.toc li.section-label {
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.75rem 0.6rem 0.25rem;
+  }
+
+  .section { scroll-margin-top: 1rem; }
+
+  .hidden { display: none !important; }
+
+  /* Highlight when sidebar TOC clicked */
+  .stat-row {
+    display: flex; flex-wrap: wrap; gap: 0.5rem;
+    margin: 0.75rem 0 0.25rem;
+  }
+  .stat-badge {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  .stat-badge strong { color: var(--text); font-weight: 700; }
+
+  footer {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+  }
+
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: 1fr; }
+    aside.sidebar { position: relative; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+    main.content { padding: 1.25rem 1rem 3rem; }
+    .cmd-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">A</div>
+      <div>
+        <div class="brand-text">auto · 명령어 모음</div>
+        <div class="brand-sub">Quick Commands Cheat Sheet</div>
+      </div>
+    </div>
+    <input type="text" id="search" class="search-box" placeholder="명령어 검색… (예: run.sh, balance, 손절)">
+    <nav class="toc" id="toc">
+      <ul>
+        <li class="section-label">TOP 4</li>
+        <li><a href="#favorites">제일 자주 쓸 명령 4개</a></li>
+        <li class="section-label">봇 운영</li>
+        <li><a href="#bot-control">봇 실행 / 종료 / 상태</a></li>
+        <li><a href="#logs">로그 보기</a></li>
+        <li><a href="#balance">업비트 잔고</a></li>
+        <li class="section-label">그리드 / 상태</li>
+        <li><a href="#apply-grid">grid.properties 반영</a></li>
+        <li><a href="#grid-state">그리드 슬롯 상태</a></li>
+        <li><a href="#realized-pnl">실현 손익 조회</a></li>
+        <li class="section-label">손절</li>
+        <li><a href="#stop-loss">손절 관련 명령</a></li>
+        <li class="indent"><a href="#sl-reset">└ reset-stop-loss</a></li>
+        <li class="indent"><a href="#sl-status">└ 상태 확인</a></li>
+        <li class="indent"><a href="#sl-params">└ 파라미터 변경</a></li>
+        <li class="section-label">테스트 / 설정</li>
+        <li><a href="#tests">테스트</a></li>
+        <li><a href="#settings-check">설정 확인</a></li>
+        <li class="section-label">유지보수</li>
+        <li><a href="#properties-example">grid.properties 예시</a></li>
+        <li><a href="#reset-live">KRW-BTC 라이브 리셋</a></li>
+      </ul>
+    </nav>
+    <button class="theme-toggle" id="themeToggle">
+      <span>테마</span>
+      <span id="themeLabel">☀ Light</span>
+    </button>
+  </aside>
+
+  <main class="content">
+    <div class="hero">
+      <h1>auto 빠른 명령어 모음</h1>
+      <p>자주 쓰는 운영 명령을 한곳에서 빠르게 복사 · 실행하기 위한 cheat sheet</p>
+      <div class="hero-meta">
+        <span class="chip">📂 /home/yangyag/auto</span>
+        <span class="chip">🐍 .venv/bin/python</span>
+        <span class="chip">⚡ Copy-ready</span>
+        <span class="chip">🔍 Filter by keyword</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-badge"><strong id="statCmds">·</strong> 명령</span>
+        <span class="stat-badge"><strong id="statSections">·</strong> 섹션</span>
+      </div>
+    </div>
+
+    <!-- Quick-reference cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-title"><span class="card-icon">📂</span>기준 위치</div>
+        <dl class="kv">
+          <dt>로컬</dt><dd>cd /home/yangyag/auto</dd>
+          <dt>EC2</dt><dd>cd /home/ubuntu/auto</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="card-icon">▶</span>봇 제어</div>
+        <dl class="kv">
+          <dt>실행</dt><dd>./run.sh</dd>
+          <dt>종료</dt><dd>./stop.sh</dd>
+          <dt>재시작</dt><dd>./stop.sh &amp;&amp; ./run.sh</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="card-icon">📜</span>로그</div>
+        <dl class="kv">
+          <dt>오늘</dt><dd>logs/trading-$(date +%F).log</dd>
+          <dt>최신</dt><dd>./tail-latest-log.sh</dd>
+          <dt>최저가</dt><dd>scripts/check_daily_low.py</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="card-icon">🛠</span>그리드</div>
+        <dl class="kv">
+          <dt>반영</dt><dd>apply_grid_properties_to_postgres.py</dd>
+          <dt>상태</dt><dd>show_grid_state.py</dd>
+          <dt>설정</dt><dd>grid.properties</dd>
+        </dl>
+      </div>
+    </div>
+
+    <!-- ============ TOP 4 ============ -->
+    <section class="section" id="favorites">
+      <h2>제일 자주 쓸 명령 4개</h2>
+      <p>실전에서 가장 빈도 높은 4개 명령. 다른 모든 섹션의 압축본이다.</p>
+      <div class="cmd-grid">
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">grid</span>그리드 반영</div>
+          <div class="cmd-tile-desc"><code>grid.properties</code> 기준으로 DB 그리드를 다시 만든다.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>python3 scripts/apply_grid_properties_to_postgres.py --force</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">state</span>현재 상태 보기</div>
+          <div class="cmd-tile-desc">DB의 슬롯/재고/계획매수금액 요약을 출력한다.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>python3 scripts/show_grid_state.py</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">log</span>로그 확인</div>
+          <div class="cmd-tile-desc">오늘 날짜의 운영 로그를 실시간 추적한다.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>tail -f logs/trading-$(date +%F).log</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">bot</span>재시작</div>
+          <div class="cmd-tile-desc">봇을 안전하게 종료한 뒤 곧바로 다시 띄운다.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>./stop.sh &amp;&amp; ./run.sh</code></pre>
+          </div>
+        </div>
+      </div>
+      <div class="callout info">
+        <div class="callout-title">📌 기준 위치</div>
+        <p>모든 명령은 기본적으로 작업 디렉터리에서 실행한다.</p>
+        <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>cd /home/yangyag/auto</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ BOT CONTROL ============ -->
+    <section class="section" id="bot-control">
+      <h2>현재 봇 실행 / 종료 / 상태</h2>
+      <div class="cmd-grid">
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">run</span>실행</div>
+          <div class="cmd-tile-desc">백그라운드로 봇을 띄운다.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>./run.sh</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">stop</span>종료</div>
+          <div class="cmd-tile-desc">백그라운드 봇을 정상 종료한다.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>./stop.sh</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">check</span>실행 중인지 확인</div>
+          <div class="cmd-tile-desc">PID 파일과 프로세스 패턴 둘 다 점검한다.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>test -f .auto-trading.pid &amp;&amp; cat .auto-trading.pid || true
+ps -eo pid,args | grep '[p]ython.*/home/yangyag/auto/main.py'</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ LOGS ============ -->
+    <section class="section" id="logs">
+      <h2>로그 보기</h2>
+      <div class="cmd-grid">
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">tail</span>오늘 로그 마지막 50줄</div>
+          <div class="cmd-tile-desc"><code>$(date +%F)</code> 로 오늘 날짜 로그 파일을 잡는다.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>tail -n 50 logs/trading-$(date +%F).log</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">follow</span>실시간 로그 보기</div>
+          <div class="cmd-tile-desc"><code>-f</code> 로 파일 끝에 붙어 추적한다.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>tail -f logs/trading-$(date +%F).log</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">latest</span>최신 날짜 로그 추적</div>
+          <div class="cmd-tile-desc">날짜를 직접 입력하지 않아도 최신 파일을 자동 선택한다.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>./tail-latest-log.sh</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">scan</span>날짜별 최저 현재가</div>
+          <div class="cmd-tile-desc">매수 라인 도달 여부를 빠르게 가늠할 때 쓴다. EC2에서는 <code>.venv/bin/python</code> 으로 실행.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>python3 scripts/check_daily_low.py</code></pre>
+          </div>
+        </div>
+      </div>
+      <div class="callout info">
+        <div class="callout-title">📌 동작</div>
+        <p><code>scripts/check_daily_low.py</code> 는 <code>logs/trading-YYYY-MM-DD.log</code> 파일들을 모두 스캔해서 날짜별 최저 현재가를 출력한다.</p>
+      </div>
+    </section>
+
+    <!-- ============ BALANCE ============ -->
+    <section class="section" id="balance">
+      <h2>업비트 잔고 확인</h2>
+      <div class="cmd-grid">
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">balance</span>주문 가능 KRW 잔고 1회 조회</div>
+          <div class="cmd-tile-desc">한 번 호출하고 종료한다.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>python3 main.py balance</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ APPLY GRID ============ -->
+    <section class="section" id="apply-grid">
+      <h2>grid.properties 기반으로 DB 그리드 반영</h2>
+      <div class="cmd-grid">
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">apply</span>기본 properties 사용</div>
+          <div class="cmd-tile-desc"><code>grid.properties</code> 작성 후 실행할 명령.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>python3 scripts/apply_grid_properties_to_postgres.py --force</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">custom</span>다른 properties 파일</div>
+          <div class="cmd-tile-desc"><code>--properties-file</code> 플래그로 경로 지정.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>python3 scripts/apply_grid_properties_to_postgres.py --properties-file my-grid.properties --force</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-title">📌 init-grid 와 차이</div>
+        <p><code>main.py init-grid</code> 는 슬롯 개수 기반이고, <code>grid.properties</code> 는 <code>GRID_COUNT</code> 또는 <code>GRID_STEP_PCT</code> 중 정확히 하나를 쓴다.</p>
+      </div>
+
+      <h3>이 명령이 사용하는 입력</h3>
+      <ul>
+        <li><code>grid.properties</code></li>
+        <li>현재 <code>.env</code> 의 <code>STATE_BOT_KEY</code></li>
+        <li>현재 <code>.env</code> 의 PostgreSQL 접속정보</li>
+      </ul>
+
+      <h3>Phase 2 하단 가중 배분 확인 항목</h3>
+      <ul>
+        <li><code>planned_buy_budget_total</code></li>
+        <li><code>top_slot_planned_buy_budget</code></li>
+        <li><code>bottom_slot_planned_buy_budget</code></li>
+      </ul>
+      <div class="callout ok">
+        <div class="callout-title">✅ 검증 기준</div>
+        <p>하단 가중이 적용된 새 그리드라면 보통 <code>bottom_slot_planned_buy_budget &gt; top_slot_planned_buy_budget</code> 이어야 한다.</p>
+      </div>
+    </section>
+
+    <!-- ============ GRID STATE ============ -->
+    <section class="section" id="grid-state">
+      <h2>현재 그리드 슬롯 상태 바로 보기</h2>
+      <div class="cmd-grid">
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">state</span>현재 DB 상태 출력</div>
+          <div class="cmd-tile-desc">슬롯별 buy/held/sell/planned/status 와 요약을 출력한다.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>python3 scripts/show_grid_state.py</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <h3>입력</h3>
+      <ul>
+        <li><code>.env</code> 의 <code>STATE_BOT_KEY</code></li>
+        <li><code>.env</code> 의 <code>PGSCHEMA</code></li>
+        <li>PostgreSQL 접속정보</li>
+      </ul>
+
+      <p>출력에는 조회 source, 슬롯별 <code>buy/held/sell/planned/planned_krw/status</code>, 총재고, 상단/하단/총 계획매수금액 요약이 포함된다.</p>
+    </section>
+
+    <!-- ============ REALIZED PNL ============ -->
+    <section class="section" id="realized-pnl">
+      <h2>실현 손익 조회 (KRW-BTC)</h2>
+      <p>업비트 API 기준 read-only 분석. 봇 주문 <code>identifier</code> 의 슬롯 번호를 기준으로 같은 슬롯 안에서만 BUY/SELL 을 FIFO 매칭해 수수료 차감 순손익을 산출한다.</p>
+
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/upbit_realized_pnl.py [--period d|w|m|y] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--reset-sell-uuid UUID] [--lookback DAYS]</code></pre>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-title">📌 기본 동작</div>
+        <p>옵션이 없으면 기본 최근 90일을 일/주/월/년/전체 섹션으로 모두 출력하고, lookback 30일을 사용한다. 업비트 <code>GET /v1/orders/closed</code> 와 <code>/v1/order</code> 만 사용한다.</p>
+        <p>글로벌 FIFO 가 아니며, 매칭되지 않는 매도(윈도우 시작 이전 매수분, identifier 패턴 불일치 등)는 별도 라인으로 분리한다. 기간은 2자리 연도 형식으로 표시하며, 주간 기간은 <code>26-04-20 ~ 26-04-26</code> 처럼 출력한다.</p>
+        <p>실현손익 표의 <code>매도주문수</code> 는 SELL 주문 UUID 기준이고, <code>체결건수</code> 는 업비트 <code>/v1/order</code> 의 <code>trades</code> 배열 기준 fill 수다.</p>
+      </div>
+
+      <h3>기간 옵션</h3>
+      <table>
+        <thead><tr><th>옵션</th><th>의미</th></tr></thead>
+        <tbody>
+          <tr><td><code>--period d</code></td><td>오늘</td></tr>
+          <tr><td><code>--period w</code></td><td>이번주(월요일~오늘)</td></tr>
+          <tr><td><code>--period m</code></td><td>이번달(1일~오늘)</td></tr>
+          <tr><td><code>--period y</code></td><td>이번년(1월 1일~오늘)</td></tr>
+          <tr><td><code>--from YYYY-MM-DD --to YYYY-MM-DD</code></td><td>직접 지정 기간 1개 합산 출력</td></tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        <div class="callout-title">⚠ 옵션 충돌</div>
+        <p><code>--period</code> 와 <code>--from/--to</code> 는 같이 쓰지 않는다. 특정 날짜/기간을 직접 지정할 때만 <code>--from/--to</code> 를 사용한다.</p>
+      </div>
+
+      <h3>--lookback 파라미터</h3>
+      <p>실현손익을 정확히 계산하려면 조회 기간 이전의 BUY 주문도 포함해야 한다. <code>--lookback</code> 은 표시 시작일 이전으로 추가 조회할 기간(일)이다.</p>
+      <ul>
+        <li><strong>API 호출 범위(fetch):</strong> <code>표시 시작일 - lookback ~ 표시 종료일</code> (모든 BUY/SELL 조회)</li>
+        <li><strong>출력 범위(display):</strong> <code>--period</code> 또는 <code>--from/--to</code> 로 정한 기간 (이 범위의 SELL만 표시)</li>
+        <li><strong>매칭 대상:</strong> fetch 범위 전체에서 FIFO 매칭 수행 (표시 범위 외 SELL도 과거 BUY 매칭에 사용)</li>
+      </ul>
+      <p>기본값은 30일이며, 실제 운영 데이터 분석 결과 30일부터 실현손익이 수렴하는 것을 확인했다.</p>
+
+      <div class="callout warn">
+        <div class="callout-title">⚠ 경고 메커니즘</div>
+        <p>fetch 범위 경계(<code>--from</code> 이후 1일)에 BUY 가 조회되면 "lookback 부족 위험" 경고를 출력한다. 이는 lookback 이 부족하여 더 오래된 BUY 를 누락했을 가능성을 의미하므로, 권장 값으로 재실행하면 정확도가 향상된다.</p>
+        <p><strong>한계:</strong> 경고는 fetch_start ~ +1일 사이 BUY 존재 여부 휴리스틱이므로, 일부 케이스에서 경고 없이도 lookback 이 실제로 부족할 수 있다. 의심되면 안전하게 lookback 을 더 늘려서 재실행하는 것이 권장된다.</p>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-title">📌 일별 버킷팅 기준</div>
+        <p>실현손익 표의 일별 그룹핑은 SELL 주문의 <code>_time_key</code>(= 업비트 <code>/v1/order</code> 의 <code>trades</code> 배열에서 최대 <code>created_at</code>, KST 시각)를 기준으로 한다. SELL 주문 생성 시각이 아니라 실제 체결 완료 시각을 의미하므로, 매도 다중 체결이나 시간대가 다른 매도 건들을 정확히 분류할 수 있다.</p>
+      </div>
+
+      <h3>사용 예</h3>
+      <div class="cmd-grid">
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">all</span>전체 조회</div>
+          <div class="cmd-tile-desc">최근 90일 일/주/월/년/전체 섹션 출력.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/upbit_realized_pnl.py</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">d</span>오늘 손익만</div>
+          <div class="cmd-tile-desc"><code>--period d</code></div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/upbit_realized_pnl.py --period d</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">w</span>이번주 손익만</div>
+          <div class="cmd-tile-desc"><code>--period w</code> (월요일~오늘)</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/upbit_realized_pnl.py --period w</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">m</span>이번달 손익만</div>
+          <div class="cmd-tile-desc"><code>--period m</code> (1일~오늘)</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/upbit_realized_pnl.py --period m</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">range</span>직접 지정 기간 + lookback 45일</div>
+          <div class="cmd-tile-desc">기간 1개 합산 출력 + 안전 마진.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/upbit_realized_pnl.py --from 2026-05-01 --to 2026-05-31 --lookback 45</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">safe</span>경고 시 안전 마진 재실행</div>
+          <div class="cmd-tile-desc">lookback 부족 경고가 나올 때.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/upbit_realized_pnl.py --from 2026-05-01 --to 2026-05-31 --lookback 60</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-title">📌 reset 청산 매칭</div>
+        <p><code>reset_krw_btc_live.py</code> 로 발생한 reset 전량 시장가 매도는 <code>{STATE_BOT_KEY}-reset-sell-...</code> identifier 로 자동 인식된다. reset 직전에 취소된 봇 TP SELL 주문들이 있으면 해당 슬롯/수량을 우선 사용해 청산 손익을 매칭한다.</p>
+        <p>코드 반영 전 발생한 과거 reset 매도처럼 identifier 가 없는 청산 주문도 직전 취소 TP SELL 수량으로 일부 자동 추론되며, 자동 추론이 애매한 경우는 <code>--reset-sell-uuid &lt;UUID&gt;</code> 를 반복 지정해서 reset 청산 경계로 포함한다.</p>
+      </div>
+    </section>
+
+    <!-- ============ STOP LOSS ============ -->
+    <section class="section" id="stop-loss">
+      <h2>손절 관련 명령</h2>
+
+      <h3 id="sl-reset">손절 해제 (reset-stop-loss)</h3>
+
+      <h4>L1 매수 차단 해제</h4>
+      <p>L1 손절이 발동된 후 매수 차단을 해제하려면:</p>
+      <div class="cmd-grid">
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">L1</span>로컬 / venv 활성</div>
+          <div class="cmd-tile-desc">기본 호출.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>python3 main.py reset-stop-loss</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">EC2</span>venv 없이 절대 경로</div>
+          <div class="cmd-tile-desc">SSH 직후 activate 생략하고 즉시 실행.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>/home/ubuntu/auto/.venv/bin/python /home/ubuntu/auto/main.py reset-stop-loss</code></pre>
+          </div>
+        </div>
+      </div>
+      <div class="callout ok">
+        <div class="callout-title">✅ 역할</div>
+        <ul style="margin: 0.3rem 0;">
+          <li>L1 청산 이후 남은 포지션의 TP 매도는 그대로 유지</li>
+          <li>L1 매수 영구 차단 상태를 해제</li>
+          <li><code>stop_loss_active</code> 상태를 false 로 복구</li>
+          <li>새로운 매수 신호에서 다시 매수 가능하게 복구</li>
+        </ul>
+      </div>
+
+      <h4>L2 강제 해제 (--force)</h4>
+      <p>L2 24시간 잠금을 강제 해제하려면 <code>--force</code> 옵션을 사용한다.</p>
+      <div class="cmd-grid">
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">L2</span>강제 해제</div>
+          <div class="cmd-tile-desc">긴급용. 24시간 대기 없이 즉시 봇 재시작 필요시.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>python3 main.py reset-stop-loss --force</code></pre>
+          </div>
+        </div>
+      </div>
+      <div class="callout warn">
+        <div class="callout-title">⚠ 역할 및 주의</div>
+        <ul style="margin: 0.3rem 0;">
+          <li><code>STOP_LOSS_RESTART_LOCKOUT_HOURS</code> 미경과 상태에서도 24시간 잠금 강제 해제</li>
+          <li>L2 이후 모든 포지션이 청산되었으므로 새 그리드 생성 후 매수 재개 가능</li>
+          <li><code>--force</code> 없이 호출 시, <code>STOP_LOSS_RESTART_LOCKOUT_HOURS</code> 미경과 상태면 <strong>exit 2</strong> 반환</li>
+          <li>L2 이후는 <code>init-grid --force</code> 로 새 그리드 생성 필수</li>
+        </ul>
+      </div>
+
+      <h3 id="sl-status">손절 상태 확인</h3>
+      <p>현재 손절 상태는 <code>scripts/show_grid_state.py</code> 의 상단 출력에 포함된다.</p>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>python3 scripts/show_grid_state.py</code></pre>
+      </div>
+      <p>출력에서 다음을 확인한다:</p>
+      <ul>
+        <li><code>stop_loss_active</code>: 현재 손절 발동 상태 (True/False)</li>
+        <li><code>armed_at</code>: 가장 최근 손절 armed 시간</li>
+        <li>각 슬롯의 <code>status</code> 컬럼 (L1/L2 발동시 일부 슬롯은 청산 상태)</li>
+      </ul>
+
+      <h3 id="sl-params">손절 파라미터 변경</h3>
+      <p>손절 매개변수는 <code>grid.properties</code> 또는 환경변수로 제어된다.</p>
+      <p>변경 후 봇 재시작:</p>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>./stop.sh
+# grid.properties 또는 .env 수정
+PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh</code></pre>
+      </div>
+
+      <h4>변경 가능한 파라미터</h4>
+      <table>
+        <thead><tr><th>파라미터</th><th>의미</th></tr></thead>
+        <tbody>
+          <tr><td><code>STOP_LOSS_MODE</code></td><td>활성화/비활성화 모드 (<code>band_multiple</code> / <code>fixed_pct</code> / <code>off</code>)</td></tr>
+          <tr><td><code>STOP_LOSS_BAND_MULTIPLE</code></td><td>그리드 폭 배수 (1.0 ~ 2.0)</td></tr>
+          <tr><td><code>STOP_LOSS_*_CONSECUTIVE_CLOSES</code></td><td>컨펌 캔들 개수</td></tr>
+          <tr><td><code>STOP_LOSS_*_ARM_HOLD_SECONDS</code></td><td>대기 시간</td></tr>
+          <tr><td><code>STOP_LOSS_L1_LIQUIDATE_RATIO</code></td><td>L1 청산 비율</td></tr>
+          <tr><td><code>STOP_LOSS_WEBHOOK_URL</code></td><td>외부 알림 Webhook URL (비어있으면 미발송)</td></tr>
+          <tr><td><code>STOP_LOSS_NOTIFICATION_ENABLED</code></td><td>외부 알림 활성화/비활성화 (True/False)</td></tr>
+        </tbody>
+      </table>
+      <div class="callout info">
+        <div class="callout-title">📌 참고</div>
+        <p>자세한 설명은 <a href="operations.html#stoploss">docs/operations.html</a> 의 손절 운영 가이드를 참조한다.</p>
+      </div>
+    </section>
+
+    <!-- ============ TESTS ============ -->
+    <section class="section" id="tests">
+      <h2>테스트</h2>
+      <div class="cmd-grid">
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">all</span>전체 테스트</div>
+          <div class="cmd-tile-desc"><code>tests/</code> 하위 모두 실행, verbose.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>python3 -m unittest discover -s tests -v</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">props</span>properties 관련만</div>
+          <div class="cmd-tile-desc">grid_properties + apply_grid_properties_script</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>python3 -m unittest tests.test_grid_properties tests.test_apply_grid_properties_script -v</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">pg</span>postgres 관련만</div>
+          <div class="cmd-tile-desc">grid / order repository + runtime_lock</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>python3 -m unittest tests.test_postgres_grid_repository tests.test_postgres_order_repository tests.test_postgres_runtime_lock -v</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">state</span>상태 조회 스크립트만</div>
+          <div class="cmd-tile-desc">show_grid_state 동작 검증.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>python3 -m unittest tests.test_show_grid_state_script -v</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SETTINGS CHECK ============ -->
+    <section class="section" id="settings-check">
+      <h2>설정 확인</h2>
+
+      <h3>현재 상태 저장 backend 확인</h3>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>python3 - &lt;&lt;'PY'
+import app.config.settings as cfg
+print(cfg.STATE_BOT_KEY)
+print(cfg.PGHOST, cfg.PGPORT, cfg.PGDATABASE, cfg.PGUSER, cfg.PGSCHEMA)
+PY</code></pre>
+      </div>
+
+      <h3>현재가 WebSocket 이벤트 루프 설정 확인</h3>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>python3 - &lt;&lt;'PY'
+import app.config.settings as cfg
+print("UPBIT_WS_PUBLIC_ENABLED=", cfg.UPBIT_WS_PUBLIC_ENABLED)
+print("UPBIT_WS_EVENT_LOOP_ENABLED=", cfg.UPBIT_WS_EVENT_LOOP_ENABLED)
+print("UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS=", cfg.UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS)
+print("PRICE_POLL_INTERVAL=", cfg.PRICE_POLL_INTERVAL)
+PY</code></pre>
+      </div>
+      <div class="callout info">
+        <div class="callout-title">📌 기본값</div>
+        <p>기본값은 public ticker WebSocket 이벤트 루프 사용, 전략 평가 최소 3초 간격, 장애 시 5초 REST polling fallback 이다.</p>
+      </div>
+    </section>
+
+    <!-- ============ PROPERTIES EXAMPLE ============ -->
+    <section class="section" id="properties-example">
+      <h2>grid.properties 예시</h2>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">properties</span><button class="copy-btn">Copy</button></div>
+<pre><code>MIN_BUY_PRICE=91623000
+MAX_BUY_PRICE=127886000
+TOTAL_BUDGET_KRW=4000000
+GRID_STEP_PCT=1.770527625862
+TP_MODEL=k
+TP_K_BASE=9.0
+TP_K_FLOOR=7.0</code></pre>
+      </div>
+
+      <h3>각 키의 의미</h3>
+      <table>
+        <thead><tr><th>키</th><th>의미</th></tr></thead>
+        <tbody>
+          <tr><td><code>MIN_BUY_PRICE</code></td><td>최하단 슬롯 buy_price</td></tr>
+          <tr><td><code>MAX_BUY_PRICE</code></td><td>최상단 슬롯 buy_price</td></tr>
+          <tr><td><code>TOTAL_BUDGET_KRW</code></td><td>그리드 전체에 배정할 총예산</td></tr>
+          <tr><td><code>GRID_COUNT</code></td><td>슬롯 개수</td></tr>
+          <tr><td><code>GRID_STEP_PCT</code></td><td>슬롯 간격 비율</td></tr>
+          <tr><td><code>TP_MODEL</code></td><td>TP 계산 모드, 현재 운영 기준은 <code>k</code></td></tr>
+          <tr><td><code>TP_K_BASE</code></td><td>기본 TP <code>k</code></td></tr>
+          <tr><td><code>TP_K_FLOOR</code></td><td>Age TP 최저 <code>k</code></td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn">
+        <div class="callout-title">⚠ 주의</div>
+        <ul style="margin: 0.3rem 0;">
+          <li><code>grid.properties</code> 는 <code>GRID_COUNT</code> 또는 <code>GRID_STEP_PCT</code> 중 정확히 하나만 둔다.</li>
+          <li><code>MIN_BUY_PRICE</code>, <code>MAX_BUY_PRICE</code> 는 업비트 호가 단위에 맞는 값으로 넣어야 한다.</li>
+          <li>안 맞으면 스크립트가 에러를 낸다.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ RESET LIVE ============ -->
+    <section class="section" id="reset-live">
+      <h2>KRW-BTC 라이브 리셋 후 새 그리드 반영</h2>
+      <div class="cmd-grid">
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">reset</span>전량 청산 + 그리드 재반영</div>
+          <div class="cmd-tile-desc">한 번에 정지/취소/매도/그리드 반영/상태 출력까지.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/reset_krw_btc_live.py</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <h3>이 명령이 수행하는 순서</h3>
+      <ol class="stepper">
+        <li><code>./stop.sh</code></li>
+        <li>업비트 <code>KRW-BTC</code> 미체결 주문 취소</li>
+        <li>BTC 전량 시장가 매도</li>
+        <li><code>grid.properties</code> 기준 DB 그리드 재반영</li>
+        <li>상태 출력</li>
+      </ol>
+
+      <div class="callout warn">
+        <div class="callout-title">⚠ 재시작은 자동이 아니다</div>
+        <p>재시작은 자동으로 하지 않는다. 결과 확인 후 필요하면 직접 실행한다.</p>
+        <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>./run.sh</code></pre>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-title">📌 reset identifier 자동 인식</div>
+        <p>전량 시장가 매도 주문에는 reset 전용 identifier 가 붙으므로, 이후 <code>scripts/upbit_realized_pnl.py</code> 에서 옵션 없이 reset 청산 손익에 포함된다.</p>
+      </div>
+    </section>
+
+    <footer>
+      이 문서는 <code>docs/quick-commands.md</code> 를 기반으로 자동 생성된 명령어 cheat sheet 입니다 · 최종 갱신 2026-05-18
+    </footer>
+  </main>
+</div>
+
+<script>
+  // ----- Copy buttons -----
+  document.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.closest('.code-wrap').querySelector('pre code').innerText;
+      navigator.clipboard.writeText(code).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1400);
+      });
+    });
+  });
+
+  // ----- Stat counters -----
+  const statCmds = document.getElementById('statCmds');
+  const statSections = document.getElementById('statSections');
+  if (statCmds) statCmds.textContent = document.querySelectorAll('.code-wrap').length;
+  if (statSections) statSections.textContent = document.querySelectorAll('section.section').length;
+
+  // ----- TOC active highlight -----
+  const sections = document.querySelectorAll('section.section');
+  const tocLinks = document.querySelectorAll('nav.toc a');
+  const tocMap = {};
+  tocLinks.forEach(a => { tocMap[a.getAttribute('href').slice(1)] = a; });
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        tocLinks.forEach(a => a.classList.remove('active'));
+        const link = tocMap[e.target.id];
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+
+  // ----- Search filter -----
+  const search = document.getElementById('search');
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    if (!q) {
+      sections.forEach(s => s.classList.remove('hidden'));
+      tocLinks.forEach(a => a.parentElement.classList.remove('hidden'));
+      return;
+    }
+    sections.forEach(s => {
+      const match = s.textContent.toLowerCase().includes(q);
+      s.classList.toggle('hidden', !match);
+    });
+    tocLinks.forEach(a => {
+      const id = a.getAttribute('href').slice(1);
+      const target = document.getElementById(id);
+      const visible = target && !target.classList.contains('hidden');
+      a.parentElement.classList.toggle('hidden', !visible);
+    });
+  });
+
+  // ----- Theme toggle -----
+  const toggle = document.getElementById('themeToggle');
+  const themeLabel = document.getElementById('themeLabel');
+  const saved = localStorage.getItem('ops-theme');
+  if (saved === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    themeLabel.textContent = '🌙 Dark';
+  }
+  toggle.addEventListener('click', () => {
+    const cur = document.documentElement.getAttribute('data-theme');
+    if (cur === 'dark') {
+      document.documentElement.removeAttribute('data-theme');
+      themeLabel.textContent = '☀ Light';
+      localStorage.setItem('ops-theme', 'light');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      themeLabel.textContent = '🌙 Dark';
+      localStorage.setItem('ops-theme', 'dark');
+    }
+  });
+</script>
+</body>
+</html>

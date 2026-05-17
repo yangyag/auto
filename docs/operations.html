@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>운영 / 인프라 가이드 · auto</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --panel: #ffffff;
+    --panel-2: #f1f3f5;
+    --text: #1f2328;
+    --muted: #5b6470;
+    --border: #e1e4e8;
+    --accent: #2f6feb;
+    --accent-soft: #dbe7ff;
+    --code-bg: #0d1117;
+    --code-fg: #e6edf3;
+    --code-comment: #8b949e;
+    --warn-bg: #fff8e1;
+    --warn-border: #f0c419;
+    --danger-bg: #ffebee;
+    --danger-border: #ef5350;
+    --ok-bg: #e8f5e9;
+    --ok-border: #66bb6a;
+    --info-bg: #e3f2fd;
+    --info-border: #42a5f5;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
+    --radius: 10px;
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2128;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --accent-soft: #1f2d4a;
+    --warn-bg: #2d2410;
+    --warn-border: #d4a017;
+    --danger-bg: #2d1414;
+    --danger-border: #d44a4a;
+    --ok-bg: #102a14;
+    --ok-border: #4ac26b;
+    --info-bg: #0f1f2e;
+    --info-border: #4493e0;
+    --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.2);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    min-height: 100vh;
+  }
+  /* ----- Sidebar ----- */
+  aside.sidebar {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 1.25rem 1rem;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+  }
+  .brand-mark {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #2f6feb 0%, #8a3ffc 100%);
+    display: grid; place-items: center;
+    color: white; font-weight: 700; font-size: 14px;
+  }
+  .brand-text { font-weight: 700; font-size: 0.95rem; }
+  .brand-sub { font-size: 0.75rem; color: var(--muted); }
+  .search-box {
+    width: 100%;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel-2);
+    color: var(--text);
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+  }
+  .search-box:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  nav.toc ul { list-style: none; padding: 0; margin: 0; }
+  nav.toc li a {
+    display: block;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 0.35rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.83rem;
+    border-left: 2px solid transparent;
+    margin-bottom: 1px;
+  }
+  nav.toc li a:hover { background: var(--panel-2); color: var(--text); }
+  nav.toc li a.active {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-left-color: var(--accent);
+    font-weight: 600;
+  }
+  nav.toc li.indent a { padding-left: 1.4rem; font-size: 0.78rem; }
+  .theme-toggle {
+    margin-top: 1rem;
+    padding: 0.5rem 0.75rem;
+    width: 100%;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .theme-toggle:hover { background: var(--accent-soft); }
+  /* ----- Main ----- */
+  main.content {
+    padding: 2rem 2.5rem 4rem;
+    max-width: 1100px;
+  }
+  .hero {
+    background: linear-gradient(135deg, #1c2541 0%, #3a506b 100%);
+    color: white;
+    padding: 1.5rem 1.75rem;
+    border-radius: var(--radius);
+    margin-bottom: 1.5rem;
+    box-shadow: var(--shadow);
+  }
+  .hero h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+  .hero p { margin: 0; opacity: 0.85; font-size: 0.9rem; }
+  .hero .hero-meta {
+    margin-top: 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-family: "SFMono-Regular", Consolas, monospace;
+  }
+  /* Quick-reference cards */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+    box-shadow: var(--shadow);
+  }
+  .card-title {
+    display: flex; align-items: center; gap: 0.5rem;
+    font-weight: 700; font-size: 0.85rem;
+    margin-bottom: 0.6rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .card-icon {
+    width: 22px; height: 22px;
+    display: grid; place-items: center;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 6px;
+    font-size: 0.75rem;
+  }
+  .kv { display: grid; grid-template-columns: 70px 1fr; gap: 0.25rem 0.6rem; font-size: 0.82rem; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; font-family: "SFMono-Regular", Consolas, monospace; word-break: break-all; }
+
+  h2 {
+    margin-top: 2.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 1.35rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 2px solid var(--border);
+    scroll-margin-top: 1rem;
+  }
+  h3 {
+    margin-top: 1.75rem;
+    margin-bottom: 0.5rem;
+    font-size: 1.1rem;
+    color: var(--text);
+    scroll-margin-top: 1rem;
+  }
+  h4 { margin-top: 1.25rem; margin-bottom: 0.4rem; font-size: 0.98rem; }
+  p { margin: 0.6rem 0; }
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: 0.2rem 0; }
+  a { color: var(--accent); }
+
+  /* Code blocks */
+  .code-wrap {
+    position: relative;
+    margin: 1rem 0;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .code-head {
+    display: flex; justify-content: space-between; align-items: center;
+    background: #1c2128;
+    color: #8b949e;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.72rem;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    border-bottom: 1px solid #30363d;
+  }
+  .code-lang { text-transform: uppercase; letter-spacing: 0.04em; }
+  .copy-btn {
+    background: transparent;
+    border: 1px solid #30363d;
+    color: #8b949e;
+    border-radius: 5px;
+    padding: 0.15rem 0.55rem;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .copy-btn:hover { color: #e6edf3; border-color: #58a6ff; }
+  .copy-btn.copied { color: #4ac26b; border-color: #4ac26b; }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 0.9rem 1rem;
+    margin: 0;
+    overflow-x: auto;
+    font-size: 0.83rem;
+    line-height: 1.55;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  pre code { background: transparent; padding: 0; color: inherit; }
+  p code, li code, td code {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    padding: 0.05em 0.4em;
+    border-radius: 4px;
+    font-size: 0.85em;
+    font-family: "SFMono-Regular", Consolas, monospace;
+  }
+
+  /* Callouts */
+  .callout {
+    border-left: 4px solid;
+    background: var(--panel);
+    border-radius: 0 8px 8px 0;
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    box-shadow: var(--shadow);
+  }
+  .callout-title { font-weight: 700; margin-bottom: 0.25rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem; }
+  .callout.warn { border-color: var(--warn-border); background: var(--warn-bg); }
+  .callout.danger { border-color: var(--danger-border); background: var(--danger-bg); }
+  .callout.ok { border-color: var(--ok-border); background: var(--ok-bg); }
+  .callout.info { border-color: var(--info-border); background: var(--info-bg); }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  /* Stop-loss level cards */
+  .sl-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+    margin: 1.25rem 0;
+  }
+  .sl-card {
+    border-radius: var(--radius);
+    padding: 1.1rem 1.25rem;
+    color: white;
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
+  .sl-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.1);
+    z-index: 0;
+  }
+  .sl-card > * { position: relative; z-index: 1; }
+  .sl-l0 { background: linear-gradient(135deg, #f9a825 0%, #f57c00 100%); }
+  .sl-l1 { background: linear-gradient(135deg, #ef6c00 0%, #d84315 100%); }
+  .sl-l2 { background: linear-gradient(135deg, #c62828 0%, #6a1b1a 100%); }
+  .sl-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; opacity: 0.85; }
+  .sl-name { font-size: 1.4rem; font-weight: 800; margin: 0.1rem 0 0.4rem; }
+  .sl-thresh { font-size: 0.85rem; opacity: 0.92; margin-bottom: 0.6rem; }
+  .sl-body { font-size: 0.83rem; line-height: 1.55; }
+  .sl-body strong { display: inline-block; margin-top: 0.3rem; }
+
+  /* Tables */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+    background: var(--panel);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 0.85rem;
+    box-shadow: var(--shadow);
+  }
+  th, td {
+    border-bottom: 1px solid var(--border);
+    padding: 0.55rem 0.75rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--panel-2); font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+  tbody tr:hover { background: var(--panel-2); }
+  td code { white-space: nowrap; }
+
+  /* Workflow stepper */
+  .stepper { counter-reset: step; padding: 0; list-style: none; margin: 1rem 0; }
+  .stepper li {
+    counter-increment: step;
+    position: relative;
+    padding: 0.6rem 0.75rem 0.6rem 2.5rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    font-size: 0.88rem;
+  }
+  .stepper li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0.6rem; top: 50%; transform: translateY(-50%);
+    width: 1.5rem; height: 1.5rem;
+    background: var(--accent); color: white;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 0.78rem;
+  }
+
+  .section { scroll-margin-top: 1rem; }
+
+  .hidden { display: none !important; }
+
+  footer {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+  }
+
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: 1fr; }
+    aside.sidebar { position: relative; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+    main.content { padding: 1.25rem 1rem 3rem; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">A</div>
+      <div>
+        <div class="brand-text">auto · 운영 가이드</div>
+        <div class="brand-sub">Operations &amp; Infra</div>
+      </div>
+    </div>
+    <input type="text" id="search" class="search-box" placeholder="섹션 검색… (예: 손절, EC2, venv)">
+    <nav class="toc" id="toc">
+      <ul>
+        <li><a href="#role">문서 역할</a></li>
+        <li><a href="#hosts">로컬 / EC2 고정 정보</a></li>
+        <li><a href="#files">운영 관련 파일</a></li>
+        <li><a href="#ssh">EC2 접속</a></li>
+        <li><a href="#deploy">Git / 배포</a></li>
+        <li><a href="#python">Python 환경</a></li>
+        <li class="indent"><a href="#python-ec2">└ EC2</a></li>
+        <li class="indent"><a href="#python-local">└ 로컬</a></li>
+        <li><a href="#ops-check">운영 점검 기준</a></li>
+        <li><a href="#orders">주문 용어</a></li>
+        <li><a href="#budget">예산 조정 주의</a></li>
+        <li><a href="#secrets">자격증명 원칙</a></li>
+        <li><a href="#stoploss">손절 운영 가이드</a></li>
+        <li class="indent"><a href="#sl-levels">└ L0/L1/L2 거동</a></li>
+        <li class="indent"><a href="#sl-env">└ ENV 파라미터</a></li>
+        <li class="indent"><a href="#sl-reset">└ reset-stop-loss</a></li>
+        <li class="indent"><a href="#sl-restart">└ L2 후 재시작</a></li>
+        <li class="indent"><a href="#sl-notify">└ 외부 알림</a></li>
+      </ul>
+    </nav>
+    <button class="theme-toggle" id="themeToggle">
+      <span>테마</span>
+      <span id="themeLabel">☀ Light</span>
+    </button>
+  </aside>
+
+  <main class="content">
+    <div class="hero">
+      <h1>운영 / 인프라 가이드</h1>
+      <p>auto 자동매매 봇의 EC2 운영, 배포, 점검, 손절 절차 한곳에서 보기</p>
+      <div class="hero-meta">
+        <span class="chip">📦 main 브랜치</span>
+        <span class="chip">🖥 EC2 43.202.113.123</span>
+        <span class="chip">🐍 .venv/bin/python</span>
+        <span class="chip">📂 /home/ubuntu/auto</span>
+      </div>
+    </div>
+
+    <!-- Quick-reference cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-title"><span class="card-icon">🖥</span>EC2 서버</div>
+        <dl class="kv">
+          <dt>IP</dt><dd>43.202.113.123</dd>
+          <dt>User</dt><dd>ubuntu</dd>
+          <dt>Key</dt><dd>/home/yangyag/auto/aws/test-keypair.pem</dd>
+          <dt>경로</dt><dd>/home/ubuntu/auto</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="card-icon">⚙</span>봇 런타임</div>
+        <dl class="kv">
+          <dt>Python</dt><dd>.venv/bin/python</dd>
+          <dt>Entry</dt><dd>main.py</dd>
+          <dt>.env</dt><dd>/home/ubuntu/auto/.env</dd>
+          <dt>로그</dt><dd>logs/trading-YYYY-MM-DD.log</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="card-icon">🚀</span>핵심 스크립트</div>
+        <dl class="kv">
+          <dt>시작</dt><dd>./run.sh</dd>
+          <dt>종료</dt><dd>./stop.sh</dd>
+          <dt>로그</dt><dd>./tail-latest-log.sh</dd>
+          <dt>점검</dt><dd>scripts/check_daily_low.py</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="card-icon">🔁</span>Git 원격</div>
+        <dl class="kv">
+          <dt>로컬</dt><dd>git@github.com:yangyag/auto.git</dd>
+          <dt>EC2</dt><dd>https://github.com/yangyag/auto.git</dd>
+          <dt>브랜치</dt><dd>main</dd>
+        </dl>
+      </div>
+    </div>
+
+    <!-- 문서 역할 -->
+    <section class="section" id="role">
+      <h2>문서 역할</h2>
+      <ul>
+        <li>이 문서는 이 저장소의 <strong>인프라, 운영, 배포 기준</strong>만 다룬다.</li>
+        <li>프로그램 로직과 전략 설명은 <code>README.md</code>를 본다.</li>
+        <li>처음 설치 절차는 <code>setup.html</code>를 본다.</li>
+      </ul>
+    </section>
+
+    <!-- 호스트 -->
+    <section class="section" id="hosts">
+      <h2>로컬 / EC2 고정 정보</h2>
+      <table>
+        <thead><tr><th>항목</th><th>로컬</th><th>EC2</th></tr></thead>
+        <tbody>
+          <tr><td>작업 디렉터리</td><td><code>/home/yangyag/auto</code></td><td><code>/home/ubuntu/auto</code></td></tr>
+          <tr><td>Git 원격</td><td><code>git@github.com:yangyag/auto.git</code></td><td><code>https://github.com/yangyag/auto.git</code></td></tr>
+          <tr><td>기본 브랜치</td><td><code>main</code></td><td><code>main</code></td></tr>
+          <tr><td>.env 경로</td><td><code>./.env</code></td><td><code>/home/ubuntu/auto/.env</code></td></tr>
+          <tr><td>가상환경 Python</td><td><code>.venv/bin/python</code></td><td><code>/home/ubuntu/auto/.venv/bin/python</code></td></tr>
+          <tr><td>봇 프로세스 패턴</td><td>—</td><td><code>.venv/bin/python /home/ubuntu/auto/main.py</code></td></tr>
+          <tr><td>SSH 키</td><td><code>/home/yangyag/auto/aws/test-keypair.pem</code></td><td>—</td></tr>
+          <tr><td>SSH 사용자</td><td>—</td><td><code>ubuntu</code></td></tr>
+          <tr><td>서버 IP</td><td>—</td><td><code>43.202.113.123</code></td></tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        <div class="callout-title">⚠ 혼동 주의</div>
+        <p>EC2의 <code>/home/ubuntu/llm.env</code> 는 다른 서비스용 파일이다. 자동매매 저장소 설정 파일로 착각하면 안 된다.</p>
+      </div>
+    </section>
+
+    <!-- 파일 -->
+    <section class="section" id="files">
+      <h2>운영 관련 파일</h2>
+      <table>
+        <thead><tr><th>파일</th><th>용도</th></tr></thead>
+        <tbody>
+          <tr><td><code>docs/setup.html</code></td><td>git clone 직후 설치 · 초기 설정 · 첫 실행 준비</td></tr>
+          <tr><td><code>README.md</code></td><td>프로그램 로직과 전략 설명</td></tr>
+          <tr><td><code>docs/quick-commands.html</code></td><td>자주 쓰는 운영 명령 모음</td></tr>
+          <tr><td><code>.env_sample</code></td><td>로컬 <code>.env</code> 작성 기준</td></tr>
+          <tr><td><code>run.sh</code></td><td>백그라운드 실행</td></tr>
+          <tr><td><code>stop.sh</code></td><td>백그라운드 종료</td></tr>
+          <tr><td><code>tail-latest-log.sh</code></td><td>최신 날짜 로그 추적</td></tr>
+          <tr><td><code>logs/trading-YYYY-MM-DD.log</code></td><td>운영 로그</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- SSH -->
+    <section class="section" id="ssh">
+      <h2>EC2 접속</h2>
+      <p>기본 SSH 절차:</p>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>chmod 600 /home/yangyag/auto/aws/test-keypair.pem
+ssh -o StrictHostKeyChecking=no -i /home/yangyag/auto/aws/test-keypair.pem ubuntu@43.202.113.123</code></pre>
+      </div>
+      <p>EC2에 붙은 뒤 기본 위치:</p>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>cd /home/ubuntu/auto</code></pre>
+      </div>
+    </section>
+
+    <!-- 배포 -->
+    <section class="section" id="deploy">
+      <h2>Git / 배포 기준</h2>
+      <div class="callout info">
+        <div class="callout-title">📝 커밋 메시지</div>
+        <p>사용자가 다른 언어를 명시하지 않는 한 <strong>한국어</strong>를 우선한다.</p>
+      </div>
+
+      <h3>EC2에서 먼저 확인할 것</h3>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>git branch -vv
+git status --short
+test -f /home/ubuntu/auto/.env &amp;&amp; echo env:present
+ps -eo pid,args | grep '[p]ython /home/ubuntu/auto/main.py' \
+  || ps -eo pid,args | grep '[p]ython3 /home/ubuntu/auto/main.py' \
+  || ps -eo pid,args | grep '[p].venv/bin/python /home/ubuntu/auto/main.py'</code></pre>
+      </div>
+
+      <h3>EC2 최신 커밋 반영 절차</h3>
+      <ol class="stepper">
+        <li><code>cd /home/ubuntu/auto</code></li>
+        <li><code>./stop.sh</code> 로 봇 정지</li>
+        <li><code>git fetch origin</code></li>
+        <li><code>git status --short</code> 로 tracked 변경 확인</li>
+        <li>필요 시 정리 후 <code>git pull --ff-only origin main</code></li>
+        <li><code>.venv/bin/python -c "import main"</code> 으로 venv 무결성 확인</li>
+        <li><code>PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh</code></li>
+        <li><code>./tail-latest-log.sh</code> 또는 <code>tail -n 50 logs/trading-$(date +%F).log</code></li>
+      </ol>
+
+      <div class="callout danger">
+        <div class="callout-title">🚫 절대 금지</div>
+        <p>EC2에 <code>.venv/</code>, export 결과 파일, 보조 스크립트 같은 untracked 파일이 남아 있을 수 있다. <strong><code>git clean -fd</code> 같은 파괴적 정리는 확인 없이 절대 실행하지 않는다.</strong></p>
+        <p>pull 이 tracked 변경과 충돌하면 무작정 되돌리지 말고 어떤 파일인지 먼저 확인한다.</p>
+      </div>
+    </section>
+
+    <!-- Python -->
+    <section class="section" id="python">
+      <h2>Python 실행 환경</h2>
+
+      <h3 id="python-ec2">EC2</h3>
+      <ul>
+        <li>EC2에는 <code>/home/ubuntu/auto/.venv</code> 가 이미 구성되어 있다. <strong>새로 만들지 말고 기존 venv 를 그대로 사용한다.</strong></li>
+        <li>쉘에서 직접 작업할 때는 activate 스크립트로 활성화한다.</li>
+      </ul>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>source /home/ubuntu/auto/.venv/bin/activate</code></pre>
+      </div>
+      <ul>
+        <li>배포 스크립트나 원격 명령처럼 activate 없이 실행할 때는 <code>.venv/bin/python</code> 절대 경로를 직접 호출한다.</li>
+        <li><code>run.sh</code> 도 <code>PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh</code> 형태로 넘긴다.</li>
+        <li><code>requirements.txt</code> 변경 시에도 <code>.venv</code> 를 재생성하지 말고 기존 venv 에 설치만 추가한다.</li>
+      </ul>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>/home/ubuntu/auto/.venv/bin/python -m pip install -r requirements.txt</code></pre>
+      </div>
+      <div class="callout warn">
+        <div class="callout-title">⚠ venv 보호</div>
+        <p><code>.venv/</code> 는 git untracked 상태가 정상이다. <code>git clean -fd</code> 같은 파괴적 정리 대상에서 반드시 제외한다.</p>
+        <p>venv 가 깨졌다고 판단되면 재생성 전에 먼저 <code>/home/ubuntu/auto/.venv/bin/python -c "import main"</code> 으로 실패 원인을 확인한다. import 가 되면 venv 자체 문제가 아니라 설정/의존성 문제일 가능성이 높다.</p>
+      </div>
+
+      <h3 id="python-local">로컬</h3>
+      <ul>
+        <li>이 작업 디렉터리는 시스템 <code>python3 -m venv .venv</code> 가 <code>ensurepip</code> 부재로 실패할 수 있다.</li>
+        <li>같은 문제가 다시 나오면 우선 <code>uv</code>로 가상환경을 만든다.</li>
+      </ul>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>~/.local/bin/uv venv --clear .venv
+~/.local/bin/uv pip install --python .venv/bin/python pip</code></pre>
+      </div>
+      <p>이후 의존성 설치와 검증은 가능하면 <code>.venv/bin/python</code> 기준으로 실행한다.</p>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -c "import main"
+.venv/bin/python -m unittest discover -s tests -v</code></pre>
+      </div>
+    </section>
+
+    <!-- 점검 -->
+    <section class="section" id="ops-check">
+      <h2>운영 점검 기준</h2>
+      <ul>
+        <li><code>.env</code>가 없다고 가정하지 말고 먼저 <code>/home/ubuntu/auto/.env</code> 존재 여부를 확인한다.</li>
+        <li>EC2에서 프로세스를 찾을 때 <code>python3 /home/ubuntu/auto/main.py</code>만 보지 말고 실제 경로인 <code>/home/ubuntu/auto/.venv/bin/python /home/ubuntu/auto/main.py</code> 패턴도 함께 본다.</li>
+        <li>백그라운드 실행/종료는 가능하면 <code>./run.sh</code>, <code>./stop.sh</code>를 우선 사용한다.</li>
+        <li>직접 <code>nohup python3 main.py</code>를 실행하면 PID 추적과 로그 해석이 꼬일 수 있다.</li>
+        <li>운영 로그는 <code>logs/trading-YYYY-MM-DD.log</code>를 기준으로 본다.</li>
+        <li>날짜별 최저 현재가는 <code>scripts/check_daily_low.py</code> 로 빠르게 확인할 수 있다 (매수 라인 도달 여부 점검용).</li>
+        <li>테스트 로그가 같은 날짜 파일에 남을 수 있으므로 로거 이름 <code>__main__</code> / <code>main</code> 도 함께 확인한다.</li>
+      </ul>
+      <div class="callout danger">
+        <div class="callout-title">⚠ 실거래 주의</div>
+        <p>실거래 주문이 발생할 수 있는 루프 실행은 <strong>명시적으로 필요할 때만</strong> 한다.</p>
+      </div>
+    </section>
+
+    <!-- 주문 용어 -->
+    <section class="section" id="orders">
+      <h2>주문 관련 용어</h2>
+      <div class="callout info">
+        <div class="callout-title">📌 quantity vs held_qty</div>
+        <p><code>orders</code> 테이블의 <code>quantity</code> 컬럼은 <strong>최초 발주량</strong>이다. 부분 체결 시 실제 체결량과 다를 수 있으므로 실 체결량은 <code>GridState.held_qty</code> 를 참조한다. 사고 분석 시 두 값을 함께 본다.</p>
+      </div>
+    </section>
+
+    <!-- 예산 -->
+    <section class="section" id="budget">
+      <h2>라이브 예산 조정 주의</h2>
+      <div class="callout warn">
+        <div class="callout-title">💰 adjust_budget_live.py</div>
+        <p><code>scripts/adjust_budget_live.py</code> 는 <strong>절대 총예산</strong>(<code>--target-budget</code>)으로 운영되며, 현재 그리드의 가격 구조와 보유 수량을 유지한 채 <strong>계획 수량만 재계산</strong>한다.</p>
+      </div>
+    </section>
+
+    <!-- 시크릿 -->
+    <section class="section" id="secrets">
+      <h2>자격증명 / 민감정보 원칙</h2>
+      <div class="callout danger">
+        <div class="callout-title">🔐 보안 규칙</div>
+        <ul style="margin: 0.3rem 0;">
+          <li>API 키는 환경변수 <code>UPBIT_ACCESS_KEY</code>, <code>UPBIT_SECRET_KEY</code> 로만 주입한다.</li>
+          <li>PostgreSQL 접속정보도 프로젝트 루트 <code>.env</code> 또는 EC2 <code>/home/ubuntu/auto/.env</code> 로만 관리한다.</li>
+          <li>민감정보를 문서, 샘플 파일, 커밋에 <strong>복제하지 않는다</strong>.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ STOP LOSS ============ -->
+    <section class="section" id="stoploss">
+      <h2>손절(Stop-Loss) 운영 가이드</h2>
+      <p>손절 기능은 현재가가 그리드 최하단 아래로 내려갔을 때 단계별 자동 대응을 제공한다. 설정된 임계값에 도달하고 컨펌 조건이 만족되면 자동으로 포지션을 청산한다. 자세한 설계와 이론은 <a href="stop-loss-design.md">docs/stop-loss-design.md</a> 를 참조한다.</p>
+
+      <h3>손절 모드 활성화</h3>
+      <p><code>grid.properties</code> 또는 환경변수로 제어된다. 기본값은 <code>band_multiple</code> 모드:</p>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">properties</span><button class="copy-btn">Copy</button></div>
+<pre><code># 모드: band_multiple (권장) | fixed_pct | off
+STOP_LOSS_MODE=band_multiple
+
+# band_multiple 모드: 그리드 폭 배수 기반 임계값 (권장)
+STOP_LOSS_BAND_MULTIPLE=1.5        # k값, 범위 1.0~2.0
+
+# fixed_pct 모드: 고정 퍼센트 기반 (백테스트/비교용)
+STOP_LOSS_L0_PCT=10
+STOP_LOSS_L1_PCT=20
+STOP_LOSS_L2_PCT=30</code></pre>
+      </div>
+
+      <!-- L0/L1/L2 visual cards -->
+      <h3 id="sl-levels">L0 / L1 / L2 트리거 시 봇 거동</h3>
+      <div class="sl-grid">
+        <div class="sl-card sl-l0">
+          <div class="sl-label">LEVEL 0 · 경계</div>
+          <div class="sl-name">L0</div>
+          <div class="sl-thresh">현재가 &lt; L0 임계값 (기본 −10%)</div>
+          <div class="sl-body">
+            신규 매수만 차단. 손절 본 흐름은 실행하지 않음. 기존 TP 매도는 정상 진행. <strong>가역적</strong>.<br>
+            <strong>재개:</strong> 현재가가 L0 위로 회복하면 자동 해제.
+          </div>
+        </div>
+        <div class="sl-card sl-l1">
+          <div class="sl-label">LEVEL 1 · 부분 청산</div>
+          <div class="sl-name">L1</div>
+          <div class="sl-thresh">현재가 &lt; L1 임계값 (기본 −20%)</div>
+          <div class="sl-body">
+            컨펌 후 <strong>1시간 대기</strong>하여 보유 BTC <strong>50%</strong>를 threshold 가격 지정가 매도. 매수 영구 차단.<br>
+            <strong>재개:</strong> <code>reset-stop-loss</code> CLI. lockout 미경과면 exit 2.
+          </div>
+        </div>
+        <div class="sl-card sl-l2">
+          <div class="sl-label">LEVEL 2 · 전량 청산</div>
+          <div class="sl-name">L2</div>
+          <div class="sl-thresh">현재가 &lt; L2 임계값 (기본 −30%)</div>
+          <div class="sl-body">
+            컨펌 후 <strong>30분 대기</strong>하여 잔여 100%를 시장가로 <strong>분할 청산</strong>. 봇 즉시 종료. 24시간 재시작 잠금.<br>
+            <strong>재개:</strong> 새 그리드로 <code>init-grid --force</code> 재구성.
+          </div>
+        </div>
+      </div>
+
+      <h3 id="sl-env">ENV 파라미터</h3>
+      <table>
+        <thead><tr><th>파라미터</th><th>기본값</th><th>의미</th><th>권장 범위</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td><code>STOP_LOSS_MODE</code></td><td><code>band_multiple</code></td><td>손절 모드</td><td><code>band_multiple</code> / <code>fixed_pct</code> / <code>off</code></td><td>band_multiple 권장</td></tr>
+          <tr><td><code>STOP_LOSS_BAND_MULTIPLE</code></td><td><code>1.5</code></td><td>그리드 폭 배수</td><td>1.0 ~ 2.0</td><td>임계값 = min × (1 − k × band_ratio)</td></tr>
+          <tr><td><code>STOP_LOSS_L0_PCT</code></td><td><code>10</code></td><td>L0 고정 %</td><td>5 ~ 15</td><td>band_multiple 모드에서 미사용</td></tr>
+          <tr><td><code>STOP_LOSS_L1_PCT</code></td><td><code>20</code></td><td>L1 고정 %</td><td>15 ~ 25</td><td>band_multiple 모드에서 미사용</td></tr>
+          <tr><td><code>STOP_LOSS_L2_PCT</code></td><td><code>30</code></td><td>L2 고정 %</td><td>25 ~ 35</td><td>band_multiple 모드에서 미사용</td></tr>
+          <tr><td><code>STOP_LOSS_CANDLE_UNIT</code></td><td><code>15</code></td><td>캔들 단위 (분)</td><td>5 ~ 60</td><td>손절 트리거 컨펌용 캔들 종가 분석</td></tr>
+          <tr><td><code>STOP_LOSS_L0_CONSECUTIVE_CLOSES</code></td><td><code>4</code></td><td>L0 연속 캔들</td><td>2 ~ 6</td><td>연속 종가가 임계 아래여야 트리거</td></tr>
+          <tr><td><code>STOP_LOSS_L1_CONSECUTIVE_CLOSES</code></td><td><code>4</code></td><td>L1 연속 캔들</td><td>2 ~ 6</td><td>—</td></tr>
+          <tr><td><code>STOP_LOSS_L2_CONSECUTIVE_CLOSES</code></td><td><code>2</code></td><td>L2 연속 캔들</td><td>1 ~ 4</td><td>L2는 위험하므로 더 빠르게 컨펌</td></tr>
+          <tr><td><code>STOP_LOSS_L1_ARM_HOLD_SECONDS</code></td><td><code>3600</code></td><td>L1 대기 (초)</td><td>600 ~ 3600</td><td>컨펌 후 손절 실행까지 (1시간)</td></tr>
+          <tr><td><code>STOP_LOSS_L2_ARM_HOLD_SECONDS</code></td><td><code>1800</code></td><td>L2 대기 (초)</td><td>300 ~ 1800</td><td>컨펌 후 손절 실행까지 (30분)</td></tr>
+          <tr><td><code>STOP_LOSS_L1_LIQUIDATE_RATIO</code></td><td><code>0.5</code></td><td>L1 청산 비율</td><td>0.3 ~ 0.7</td><td>0 = 0%, 1 = 100%</td></tr>
+          <tr><td><code>STOP_LOSS_RESTART_LOCKOUT_HOURS</code></td><td><code>24</code></td><td>L2 재시작 잠금</td><td>12 ~ 48</td><td>L2 후 자동 재시작 금지 시간</td></tr>
+          <tr><td><code>STOP_LOSS_WEBHOOK_URL</code></td><td>(없음)</td><td>외부 알림 Webhook</td><td>URL</td><td>Slack/Generic Webhook</td></tr>
+          <tr><td><code>STOP_LOSS_NOTIFICATION_ENABLED</code></td><td><code>True</code></td><td>외부 알림 활성화</td><td><code>True</code> / <code>False</code></td><td>False면 URL 있어도 미발송</td></tr>
+        </tbody>
+      </table>
+
+      <h3 id="sl-reset">reset-stop-loss CLI</h3>
+      <p>L1 발동 후 매수 차단을 해제하거나 L2 24시간 잠금을 강제 해제하려면 <code>reset-stop-loss</code> 명령을 사용한다.</p>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code># EC2에서 (venv 활성화 또는 절대 경로)
+cd /home/ubuntu/auto
+source .venv/bin/activate
+
+# L1 해제
+python main.py reset-stop-loss
+
+# L2 24시간 잠금 강제 해제
+python main.py reset-stop-loss --force
+
+# 절대 경로:
+/home/ubuntu/auto/.venv/bin/python /home/ubuntu/auto/main.py reset-stop-loss [--force]</code></pre>
+      </div>
+      <h4>역할</h4>
+      <ul>
+        <li><strong>기본 (L1 해제):</strong> 기존 포지션 상태 보존 / L1 매수 영구 차단 해제 / <code>stop_loss_active</code> false 복구</li>
+        <li><strong>--force (L2 강제 해제):</strong> <code>STOP_LOSS_RESTART_LOCKOUT_HOURS</code> 미경과 상태에서도 잠금 강제 해제. L2 후 새 그리드 없이 매수 재개 가능. 긴급용.</li>
+        <li><strong>운영 로그:</strong> <code>[STOP_LOSS] reset-stop-loss completed</code></li>
+      </ul>
+      <div class="callout warn">
+        <div class="callout-title">⚠ 주의</div>
+        <ul style="margin: 0.3rem 0;">
+          <li><code>--force</code> 없이 lockout 미경과 상태에서 호출하면 <strong>exit 2</strong> 실패</li>
+          <li>L2 이후는 포지션이 모두 청산되었으므로 <code>init-grid --force</code> 로 새 그리드를 생성해야 봇 재시작 가능</li>
+          <li><code>--force</code> 는 L2 강제 해제용 — L1 상태에서는 <code>--force</code> 없이 호출 권장</li>
+        </ul>
+      </div>
+
+      <h3 id="sl-restart">L2 후 재시작 절차</h3>
+      <p>L2 손절이 발동되면:</p>
+      <ol class="stepper">
+        <li>봇이 자동으로 종료된다 (프로세스 exit, 메인 루프 탈출)</li>
+        <li>모든 포지션이 청산된다 (시장가 분할 매도)</li>
+        <li><code>liquidated_at</code> 타임스탬프가 DB에 기록된다</li>
+        <li>24시간 동안 자동 재시작이 차단된다</li>
+        <li>손절 상태(<code>stop_loss_armed_at</code>, <code>stop_loss_active</code> 등)는 DB에 영속화되어 재시작 후 복원</li>
+      </ol>
+      <p>재시작 방법:</p>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>cd /home/ubuntu/auto
+./stop.sh
+git fetch origin &amp;&amp; git pull --ff-only origin main  # 필요시 코드 동기화
+.venv/bin/python main.py init-grid --force            # 새 그리드 생성 (기존 상태 초기화)
+PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh
+./tail-latest-log.sh</code></pre>
+      </div>
+      <div class="callout danger">
+        <div class="callout-title">⚠ init-grid --force 주의</div>
+        <p><code>init-grid --force</code> 는 <code>grid.properties</code> 기준으로 <strong>완전히 새로운 그리드</strong>를 생성한다. 손절 전 체결 이력은 모두 정리된다.</p>
+        <p>24시간 잠금을 강제 해제하려면 <code>reset-stop-loss --force</code> 를 먼저 실행한 후 <code>init-grid --force</code> 를 진행한다.</p>
+        <p>봇 재시작 후 손절 상태가 자동으로 복원되므로 별도의 손절 상태 초기화는 불필요하다.</p>
+      </div>
+
+      <h3>손절 이벤트 로그</h3>
+      <ul>
+        <li><strong>로그 파일:</strong> <code>logs/trading-YYYY-MM-DD.log</code></li>
+        <li><strong>로그 레벨:</strong> ERROR (CloudWatch, journalctl 연동)</li>
+        <li><strong>형식:</strong> <code>[STOP_LOSS] L{n} armed at ...</code> / <code>[STOP_LOSS] L{n} triggered</code></li>
+      </ul>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">log</span><button class="copy-btn">Copy</button></div>
+<pre><code>2026-05-06 10:30:45,123 [main] ERROR [STOP_LOSS] L1 armed at 2026-05-06T10:30:45+00:00 (threshold=87300000)
+2026-05-06 11:30:46,456 [main] ERROR [STOP_LOSS] L1 triggered: 50% liquidate (sold 0.0005 BTC)</code></pre>
+      </div>
+
+      <h3 id="sl-notify">외부 알림 (Slack / Webhook)</h3>
+      <p>손절 이벤트를 Slack 또는 Generic Webhook으로 즉시 알림받을 수 있다.</p>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">properties</span><button class="copy-btn">Copy</button></div>
+<pre><code># Slack Incoming Webhook URL 또는 Generic Webhook URL
+STOP_LOSS_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+
+# 알림 활성화/비활성화 (기본값: True)
+STOP_LOSS_NOTIFICATION_ENABLED=True</code></pre>
+      </div>
+      <table>
+        <thead><tr><th>이벤트</th><th>색상</th><th>트리거 시점</th><th>포함 정보</th></tr></thead>
+        <tbody>
+          <tr><td><strong>ARMED</strong></td><td>🟠 주황</td><td>손절 조건 충족 → 대기 시간 진입</td><td>현재가, 임계값, 하락률, 그리드 기준가</td></tr>
+          <tr><td><strong>EXECUTED</strong></td><td>🟢 초록</td><td>대기 시간 경과 → 청산 완료</td><td>현재가, 임계값, 청산수량</td></tr>
+          <tr><td><strong>FAILED</strong></td><td>🔴 빨강</td><td>청산 중 오류 발생</td><td>현재가, 임계값, 실패한 슬롯 정보</td></tr>
+        </tbody>
+      </table>
+      <div class="callout info">
+        <div class="callout-title">📌 알림 정책</div>
+        <ul style="margin: 0.3rem 0;">
+          <li>알림 송신 실패가 발생해도 손절 본 흐름(포지션 청산)은 계속 진행</li>
+          <li>Slack 형식은 attachments 페이로드로 전송</li>
+          <li>네트워크 단절이나 Webhook 서버 장애는 로그에 기록되지만 손절 흐름을 차단하지 않음</li>
+        </ul>
+      </div>
+
+      <h3>운영 중 설정 변경</h3>
+      <ol class="stepper">
+        <li>EC2에서 <code>./stop.sh</code> 로 봇 정지</li>
+        <li><code>grid.properties</code> 또는 <code>.env</code> 파일 수정</li>
+        <li><code>PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh</code> 로 재시작</li>
+      </ol>
+      <div class="callout ok">
+        <div class="callout-title">✅ 재시작으로 반영되는 파라미터</div>
+        <p><code>STOP_LOSS_MODE</code>, <code>STOP_LOSS_BAND_MULTIPLE</code>, 모든 <code>STOP_LOSS_*_CONSECUTIVE_CLOSES</code>, <code>STOP_LOSS_*_ARM_HOLD_SECONDS</code>, <code>STOP_LOSS_L1_LIQUIDATE_RATIO</code></p>
+      </div>
+      <div class="callout warn">
+        <div class="callout-title">⚠ 그리드 생성 시에만 반영</div>
+        <p><code>STOP_LOSS_CANDLE_UNIT</code> 은 이미 실행 중인 그리드는 이전 값으로 평가된다.</p>
+      </div>
+
+      <h3>손절 비활성화</h3>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">properties</span><button class="copy-btn">Copy</button></div>
+<pre><code>STOP_LOSS_MODE=off</code></pre>
+      </div>
+      <p>이 경우 봇은 현재가가 그리드 최하단 아래로 내려가도 아무 조치를 취하지 않는다. 모든 매수/매도는 정상 운영된다.</p>
+    </section>
+
+    <footer>
+      이 문서는 <code>docs/operations.md</code> 를 기반으로 자동 생성된 운영 대시보드입니다 · 최종 갱신 2026-05-18
+    </footer>
+  </main>
+</div>
+
+<script>
+  // ----- Copy buttons -----
+  document.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.closest('.code-wrap').querySelector('pre code').innerText;
+      navigator.clipboard.writeText(code).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1400);
+      });
+    });
+  });
+
+  // ----- TOC active highlight -----
+  const sections = document.querySelectorAll('section.section');
+  const tocLinks = document.querySelectorAll('nav.toc a');
+  const tocMap = {};
+  tocLinks.forEach(a => { tocMap[a.getAttribute('href').slice(1)] = a; });
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        tocLinks.forEach(a => a.classList.remove('active'));
+        const link = tocMap[e.target.id];
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+
+  // ----- Search filter -----
+  const search = document.getElementById('search');
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    if (!q) {
+      sections.forEach(s => s.classList.remove('hidden'));
+      tocLinks.forEach(a => a.parentElement.classList.remove('hidden'));
+      return;
+    }
+    sections.forEach(s => {
+      const match = s.textContent.toLowerCase().includes(q);
+      s.classList.toggle('hidden', !match);
+    });
+    tocLinks.forEach(a => {
+      const id = a.getAttribute('href').slice(1);
+      const target = document.getElementById(id);
+      const visible = target && !target.classList.contains('hidden');
+      a.parentElement.classList.toggle('hidden', !visible);
+    });
+  });
+
+  // ----- Theme toggle -----
+  const toggle = document.getElementById('themeToggle');
+  const themeLabel = document.getElementById('themeLabel');
+  const saved = localStorage.getItem('ops-theme');
+  if (saved === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    themeLabel.textContent = '🌙 Dark';
+  }
+  toggle.addEventListener('click', () => {
+    const cur = document.documentElement.getAttribute('data-theme');
+    if (cur === 'dark') {
+      document.documentElement.removeAttribute('data-theme');
+      themeLabel.textContent = '☀ Light';
+      localStorage.setItem('ops-theme', 'light');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      themeLabel.textContent = '🌙 Dark';
+      localStorage.setItem('ops-theme', 'dark');
+    }
+  });
+</script>
+</body>
+</html>

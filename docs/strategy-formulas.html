@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strategy Formulas · auto</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --panel: #ffffff;
+    --panel-2: #f1f3f5;
+    --text: #1f2328;
+    --muted: #5b6470;
+    --border: #e1e4e8;
+    --accent: #2f6feb;
+    --accent-soft: #dbe7ff;
+    --code-bg: #0d1117;
+    --code-fg: #e6edf3;
+    --code-comment: #8b949e;
+    --warn-bg: #fff8e1;
+    --warn-border: #f0c419;
+    --danger-bg: #ffebee;
+    --danger-border: #ef5350;
+    --ok-bg: #e8f5e9;
+    --ok-border: #66bb6a;
+    --info-bg: #e3f2fd;
+    --info-border: #42a5f5;
+    --formula-bg: #fafbfc;
+    --formula-border: #e1e4e8;
+    --formula-accent: #2f6feb;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
+    --radius: 10px;
+  }
+  html[data-theme="dark"] {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2128;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --accent-soft: #1f2d4a;
+    --warn-bg: #2d2410;
+    --warn-border: #d4a017;
+    --danger-bg: #2d1414;
+    --danger-border: #d44a4a;
+    --ok-bg: #102a14;
+    --ok-border: #4ac26b;
+    --info-bg: #0f1f2e;
+    --info-border: #4493e0;
+    --formula-bg: #1a1f27;
+    --formula-border: #30363d;
+    --formula-accent: #58a6ff;
+    --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.2);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    min-height: 100vh;
+  }
+  /* ----- Sidebar ----- */
+  aside.sidebar {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 1.25rem 1rem;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+  }
+  .brand-mark {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #2f6feb 0%, #8a3ffc 100%);
+    display: grid; place-items: center;
+    color: white; font-weight: 700; font-size: 14px;
+  }
+  .brand-text { font-weight: 700; font-size: 0.95rem; }
+  .brand-sub { font-size: 0.75rem; color: var(--muted); }
+  .search-box {
+    width: 100%;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel-2);
+    color: var(--text);
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+  }
+  .search-box:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  nav.toc ul { list-style: none; padding: 0; margin: 0; }
+  nav.toc li a {
+    display: block;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 0.35rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.83rem;
+    border-left: 2px solid transparent;
+    margin-bottom: 1px;
+  }
+  nav.toc li a:hover { background: var(--panel-2); color: var(--text); }
+  nav.toc li a.active {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-left-color: var(--accent);
+    font-weight: 600;
+  }
+  nav.toc li.indent a { padding-left: 1.4rem; font-size: 0.78rem; }
+  nav.toc li.group-label {
+    color: var(--muted);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.7rem 0.6rem 0.25rem;
+    font-weight: 700;
+  }
+  .theme-toggle {
+    margin-top: 1rem;
+    padding: 0.5rem 0.75rem;
+    width: 100%;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .theme-toggle:hover { background: var(--accent-soft); }
+  /* ----- Main ----- */
+  main.content {
+    padding: 2rem 2.5rem 4rem;
+    max-width: 1100px;
+  }
+  .hero {
+    background: linear-gradient(135deg, #1c2541 0%, #3a506b 100%);
+    color: white;
+    padding: 1.5rem 1.75rem;
+    border-radius: var(--radius);
+    margin-bottom: 1.5rem;
+    box-shadow: var(--shadow);
+  }
+  .hero h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+  .hero p { margin: 0; opacity: 0.85; font-size: 0.9rem; }
+  .hero .hero-meta {
+    margin-top: 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-family: "SFMono-Regular", Consolas, monospace;
+  }
+  /* Quick-reference cards */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+    box-shadow: var(--shadow);
+  }
+  .card-title {
+    display: flex; align-items: center; gap: 0.5rem;
+    font-weight: 700; font-size: 0.85rem;
+    margin-bottom: 0.6rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .card-icon {
+    width: 22px; height: 22px;
+    display: grid; place-items: center;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 6px;
+    font-size: 0.75rem;
+  }
+  .kv { display: grid; grid-template-columns: 90px 1fr; gap: 0.25rem 0.6rem; font-size: 0.82rem; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; font-family: "SFMono-Regular", Consolas, monospace; word-break: break-all; }
+
+  h2 {
+    margin-top: 2.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 1.35rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 2px solid var(--border);
+    scroll-margin-top: 1rem;
+  }
+  h3 {
+    margin-top: 1.75rem;
+    margin-bottom: 0.5rem;
+    font-size: 1.1rem;
+    color: var(--text);
+    scroll-margin-top: 1rem;
+  }
+  h4 { margin-top: 1.25rem; margin-bottom: 0.4rem; font-size: 0.98rem; }
+  p { margin: 0.6rem 0; }
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: 0.2rem 0; }
+  a { color: var(--accent); }
+
+  /* Code blocks */
+  .code-wrap {
+    position: relative;
+    margin: 1rem 0;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .code-head {
+    display: flex; justify-content: space-between; align-items: center;
+    background: #1c2128;
+    color: #8b949e;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.72rem;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    border-bottom: 1px solid #30363d;
+  }
+  .code-lang { text-transform: uppercase; letter-spacing: 0.04em; }
+  .copy-btn {
+    background: transparent;
+    border: 1px solid #30363d;
+    color: #8b949e;
+    border-radius: 5px;
+    padding: 0.15rem 0.55rem;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .copy-btn:hover { color: #e6edf3; border-color: #58a6ff; }
+  .copy-btn.copied { color: #4ac26b; border-color: #4ac26b; }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 0.9rem 1rem;
+    margin: 0;
+    overflow-x: auto;
+    font-size: 0.83rem;
+    line-height: 1.55;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  pre code { background: transparent; padding: 0; color: inherit; }
+  p code, li code, td code {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    padding: 0.05em 0.4em;
+    border-radius: 4px;
+    font-size: 0.85em;
+    font-family: "SFMono-Regular", Consolas, monospace;
+  }
+
+  /* Callouts */
+  .callout {
+    border-left: 4px solid;
+    background: var(--panel);
+    border-radius: 0 8px 8px 0;
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    box-shadow: var(--shadow);
+  }
+  .callout-title { font-weight: 700; margin-bottom: 0.25rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem; }
+  .callout.warn { border-color: var(--warn-border); background: var(--warn-bg); }
+  .callout.danger { border-color: var(--danger-border); background: var(--danger-bg); }
+  .callout.ok { border-color: var(--ok-border); background: var(--ok-bg); }
+  .callout.info { border-color: var(--info-border); background: var(--info-bg); }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  /* ===== Formula block ===== */
+  .formula {
+    background: var(--formula-bg);
+    border: 1px solid var(--formula-border);
+    border-left: 4px solid var(--formula-accent);
+    border-radius: 6px;
+    margin: 0.9rem 0;
+    padding: 0.95rem 1.1rem;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 1.02rem;
+    line-height: 1.9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow-x: auto;
+  }
+  .formula-body { text-align: center; flex: 1; min-width: 0; }
+  .formula-label {
+    position: absolute;
+    right: 0.7rem;
+    top: 0.45rem;
+    color: var(--muted);
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    background: var(--panel-2);
+    padding: 0.05rem 0.4rem;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+  /* Fractions */
+  .frac {
+    display: inline-flex;
+    flex-direction: column;
+    vertical-align: middle;
+    text-align: center;
+    margin: 0 0.2em;
+    line-height: 1.2;
+  }
+  .frac .num {
+    border-bottom: 1px solid currentColor;
+    padding: 0 0.4em 0.05em;
+  }
+  .frac .den { padding: 0.05em 0.4em 0; }
+  /* Cases / piecewise */
+  .cases {
+    display: inline-grid;
+    grid-template-columns: auto auto;
+    column-gap: 1.2em;
+    row-gap: 0.2em;
+    text-align: left;
+    vertical-align: middle;
+    padding-left: 0.6em;
+    border-left: 2px solid currentColor;
+    margin-left: 0.3em;
+  }
+  .cases .case-val { text-align: right; padding-right: 0.4em; }
+  .cases .case-cond { color: var(--muted); }
+  /* Inline math helpers */
+  .var {
+    font-style: italic;
+    font-family: "Cambria Math", Cambria, "Times New Roman", Times, serif;
+    font-weight: 500;
+  }
+  sub, sup { font-size: 0.7em; }
+  .big-op { font-size: 1.4em; vertical-align: middle; }
+  .symbol-table td.sym, .symbol-table th:first-child { font-family: "Cambria Math", Cambria, "Times New Roman", Times, serif; font-style: italic; }
+
+  /* Tables */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+    background: var(--panel);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 0.85rem;
+    box-shadow: var(--shadow);
+  }
+  th, td {
+    border-bottom: 1px solid var(--border);
+    padding: 0.55rem 0.75rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--panel-2); font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+  tbody tr:hover { background: var(--panel-2); }
+  td code { white-space: nowrap; }
+
+  /* Workflow stepper */
+  .stepper { counter-reset: step; padding: 0; list-style: none; margin: 1rem 0; }
+  .stepper li {
+    counter-increment: step;
+    position: relative;
+    padding: 0.6rem 0.75rem 0.6rem 2.5rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    font-size: 0.88rem;
+  }
+  .stepper li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0.6rem; top: 50%; transform: translateY(-50%);
+    width: 1.5rem; height: 1.5rem;
+    background: var(--accent); color: white;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 0.78rem;
+  }
+
+  /* Worked example details */
+  details.derivation {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem 0.85rem;
+    margin: 0.8rem 0;
+  }
+  details.derivation summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: var(--accent);
+    list-style: none;
+    user-select: none;
+  }
+  details.derivation summary::before {
+    content: "▶ ";
+    font-size: 0.7em;
+    transition: transform 0.15s;
+    display: inline-block;
+  }
+  details.derivation[open] summary::before {
+    transform: rotate(90deg);
+  }
+  details.derivation[open] summary { margin-bottom: 0.5rem; }
+
+  .section { scroll-margin-top: 1rem; }
+  .hidden { display: none !important; }
+
+  footer {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+  }
+
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: 1fr; }
+    aside.sidebar { position: relative; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+    main.content { padding: 1.25rem 1rem 3rem; }
+    .formula { font-size: 0.95rem; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">Σ</div>
+      <div>
+        <div class="brand-text">auto · 전략 수식</div>
+        <div class="brand-sub">Strategy Formulas</div>
+      </div>
+    </div>
+    <input type="text" id="search" class="search-box" placeholder="섹션 검색… (예: 매수, TP, 가드)">
+    <nav class="toc" id="toc">
+      <ul>
+        <li><a href="#symbols">기호</a></li>
+        <li class="group-label">그리드</li>
+        <li class="indent"><a href="#grid-count">└ 그리드 슬롯 수</a></li>
+        <li class="indent"><a href="#ladder">└ 매수 가격 사다리</a></li>
+        <li class="indent"><a href="#new-tp">└ 신규 TP 가격</a></li>
+        <li class="group-label">예산</li>
+        <li class="indent"><a href="#budget-weight">└ 예산 가중치</a></li>
+        <li class="indent"><a href="#inventory-allocated">└ 재고 원가 · 총 배정</a></li>
+        <li class="group-label">매수 로직</li>
+        <li class="indent"><a href="#buy-cross">└ 매수 교차 조건</a></li>
+        <li class="indent"><a href="#upward-reentry">└ 상승 재진입 조건</a></li>
+        <li class="indent"><a href="#active-window">└ 활성 매수 윈도우</a></li>
+        <li class="indent"><a href="#inventory-gate">└ Inventory Target Gate</a></li>
+        <li class="indent"><a href="#stale-guard">└ Stale Previous Price Guard</a></li>
+        <li class="group-label">매도 로직</li>
+        <li class="indent"><a href="#sell">└ 매도 조건</a></li>
+        <li class="indent"><a href="#age-tp">└ Age TP 압축</a></li>
+        <li class="group-label">가드 · 잔고</li>
+        <li class="indent"><a href="#breakout">└ 브레이크아웃 가드</a></li>
+        <li class="indent"><a href="#required-krw">└ 매수 필요 KRW 추정</a></li>
+        <li class="indent"><a href="#adjust-budget">└ 라이브 예산 조정</a></li>
+      </ul>
+    </nav>
+    <button class="theme-toggle" id="themeToggle">
+      <span>테마</span>
+      <span id="themeLabel">☀ Light</span>
+    </button>
+  </aside>
+
+  <main class="content">
+    <div class="hero">
+      <h1>Strategy Formulas</h1>
+      <p>auto 자동매매 봇의 전략 동작에 쓰이는 수식과 판정 조건을 코드 기준으로 정리</p>
+      <div class="hero-meta">
+        <span class="chip">Σ 16 섹션</span>
+        <span class="chip">📐 로그 간격 그리드</span>
+        <span class="chip">📦 KRW · BTC 단위</span>
+        <span class="chip">🐍 app/strategy + app/core</span>
+      </div>
+    </div>
+
+    <!-- Quick-reference cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-title"><span class="card-icon">𝓥</span>핵심 변수</div>
+        <dl class="kv">
+          <dt><span class="var">P</span></dt><dd>현재 평가 가격</dd>
+          <dt><span class="var">B<sub>i</sub></span></dt><dd>buy_price (KRW)</dd>
+          <dt><span class="var">S<sub>i</sub></span></dt><dd>sell_price (KRW)</dd>
+          <dt><span class="var">Q<sub>i</sub></span></dt><dd>planned_qty (BTC)</dd>
+          <dt><span class="var">H<sub>i</sub></span></dt><dd>held_qty (BTC)</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="card-icon">📦</span>사용 모듈</div>
+        <dl class="kv">
+          <dt>전략</dt><dd>app/strategy/grid_strategy.py</dd>
+          <dt>그리드</dt><dd>app/core/grid.py</dd>
+          <dt>설정</dt><dd>app/core/grid_properties.py</dd>
+          <dt>가드</dt><dd>app/strategy/breakout_guard.py</dd>
+          <dt>엔트리</dt><dd>app/main.py</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="card-icon">⚖</span>단위 규칙</div>
+        <dl class="kv">
+          <dt>가격</dt><dd>KRW (정수, 호가 단위)</dd>
+          <dt>수량</dt><dd>BTC, step 0.00000001</dd>
+          <dt>주문 금액</dt><dd>step 1 KRW</dd>
+          <dt>정규화</dt><dd>F<sub>norm</sub>(x)</dd>
+          <dt>내림</dt><dd>F<sub>step</sub>(x, s)</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="card-icon">🔧</span>핵심 상수</div>
+        <dl class="kv">
+          <dt>k<sub>base</sub></dt><dd>TP_K_BASE</dd>
+          <dt>k<sub>floor</sub></dt><dd>TP_K_FLOOR</dd>
+          <dt>p<sub>step</sub></dt><dd>GRID_STEP_PCT</dd>
+          <dt>n<sub>below</sub></dt><dd>ACTIVE_WINDOW_BELOW…</dd>
+          <dt>n<sub>above</sub></dt><dd>ACTIVE_WINDOW_ABOVE…</dd>
+        </dl>
+      </div>
+    </div>
+
+    <p>이 문서는 전략 동작에 쓰이는 수식과 판정 조건만 코드 기준으로 정리한다. 수식 안에는 긴 설정 키 문자열을 직접 넣지 않고, 아래 기호 표의 매핑으로 치환한다.</p>
+
+    <div class="callout info">
+      <div class="callout-title">📚 기준 구현</div>
+      <ul style="margin:0.3rem 0;">
+        <li><code>app/strategy/grid_strategy.py</code></li>
+        <li><code>app/core/grid.py</code></li>
+        <li><code>app/core/grid_properties.py</code></li>
+        <li><code>app/strategy/breakout_guard.py</code></li>
+        <li><code>app/main.py</code></li>
+      </ul>
+    </div>
+
+    <!-- ============ 기호 ============ -->
+    <section class="section" id="symbols">
+      <h2>기호</h2>
+      <p>수식에 등장하는 모든 기호와 매핑된 설정 키 / 함수다.</p>
+      <table class="symbol-table">
+        <thead><tr><th>기호</th><th>의미</th><th>설정 키 · 함수</th><th>단위 / 비고</th></tr></thead>
+        <tbody>
+          <tr><td class="sym">P<sub>prev</sub></td><td>직전 전략 평가 가격</td><td>—</td><td>KRW</td></tr>
+          <tr><td class="sym">P</td><td>현재 전략 평가 가격</td><td>—</td><td>KRW</td></tr>
+          <tr><td class="sym">B<sub>i</sub></td><td><span class="var">i</span>번 슬롯의 <code>buy_price</code></td><td>—</td><td>KRW</td></tr>
+          <tr><td class="sym">S<sub>i</sub></td><td><span class="var">i</span>번 슬롯의 저장된 <code>sell_price</code></td><td>—</td><td>KRW</td></tr>
+          <tr><td class="sym">Q<sub>i</sub></td><td><span class="var">i</span>번 슬롯의 <code>planned_qty</code></td><td>—</td><td>BTC</td></tr>
+          <tr><td class="sym">H<sub>i</sub></td><td><span class="var">i</span>번 슬롯의 <code>held_qty</code></td><td>—</td><td>BTC</td></tr>
+          <tr><td class="sym">L</td><td>그리드 하단 가격</td><td>—</td><td>KRW</td></tr>
+          <tr><td class="sym">U</td><td>그리드 상단 가격</td><td>—</td><td>KRW</td></tr>
+          <tr><td class="sym">N</td><td>슬롯 수</td><td>—</td><td>정수</td></tr>
+          <tr><td class="sym">I</td><td>가격 구간 수</td><td>—</td><td>정수, <span class="var">I = N − 1</span></td></tr>
+          <tr><td class="sym">F<sub>norm</sub>(x)</td><td>업비트 KRW 호가 단위 정규화</td><td><code>normalize_price(x)</code></td><td>KRW → KRW</td></tr>
+          <tr><td class="sym">F<sub>step</sub>(x, s)</td><td>지정 step <span class="var">s</span> 단위 내림</td><td><code>floor_step(x, s)</code></td><td>—</td></tr>
+          <tr><td class="sym">G<sub>N</sub></td><td>그리드 슬롯 수 직접 지정</td><td><code>GRID_COUNT</code></td><td>정수</td></tr>
+          <tr><td class="sym">p<sub>step</sub></td><td>그리드 간격 (%)</td><td><code>GRID_STEP_PCT</code></td><td>%</td></tr>
+          <tr><td class="sym">k<sub>base</sub></td><td>기본 TP 배수</td><td><code>TP_K_BASE</code></td><td>—</td></tr>
+          <tr><td class="sym">k<sub>floor</sub></td><td>최소 TP 배수</td><td><code>TP_K_FLOOR</code></td><td>—</td></tr>
+          <tr><td class="sym">B<sub>total</sub></td><td>총예산</td><td><code>TOTAL_BUDGET_KRW</code></td><td>KRW</td></tr>
+          <tr><td class="sym">n<sub>below</sub></td><td>현재가 이하 활성 슬롯 수</td><td><code>ACTIVE_WINDOW_BELOW_CURRENT_SLOTS</code></td><td>정수</td></tr>
+          <tr><td class="sym">n<sub>above</sub></td><td>현재가 위 재진입 활성 슬롯 수</td><td><code>ACTIVE_WINDOW_ABOVE_CURRENT_REENTRY_SLOTS</code></td><td>정수</td></tr>
+          <tr><td class="sym">B<sub>maxop</sub></td><td>최대 운영 예산</td><td><code>MAX_OPERATING_BUDGET_KRW</code></td><td>KRW</td></tr>
+          <tr><td class="sym">T<sub>stale</sub></td><td>직전 가격 stale 임계 (초)</td><td><code>STALE_PREVIOUS_PRICE_THRESHOLD_SECONDS</code></td><td>seconds</td></tr>
+          <tr><td class="sym">A<sub>min</sub></td><td>최소 주문 금액</td><td><code>MIN_KRW_ORDER_AMOUNT</code></td><td>KRW</td></tr>
+          <tr><td class="sym">f<sub>upbit</sub></td><td>업비트 수수료율</td><td><code>UPBIT_FEE_RATE</code></td><td>비율</td></tr>
+          <tr><td class="sym">A<sub>buffer</sub></td><td>수수료 버퍼</td><td><code>FEE_BUFFER_KRW</code></td><td>KRW</td></tr>
+          <tr><td class="sym">A<sub>reserve</sub></td><td>잔고 최소 유보</td><td><code>MIN_BALANCE_RESERVE</code></td><td>KRW</td></tr>
+          <tr><td class="sym">M</td><td>브레이크아웃 가드 연속 캔들 수</td><td><code>BREAKOUT_GUARD_CONSECUTIVE_CANDLES</code></td><td>정수</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============ 그리드 슬롯 수 ============ -->
+    <section class="section" id="grid-count">
+      <h2>그리드 슬롯 수</h2>
+      <h3>(1) <code>GRID_COUNT</code>를 직접 지정</h3>
+      <div class="formula">
+        <div class="formula-body"><span class="var">N</span> = <span class="var">G<sub>N</sub></span></div>
+        <span class="formula-label">[식 1]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">I</span> = <span class="var">N</span> − 1</div>
+        <span class="formula-label">[식 2]</span>
+      </div>
+
+      <h3>(2) <code>GRID_STEP_PCT</code>를 지정</h3>
+      <div class="formula">
+        <div class="formula-body">Δ<sub>log</sub> = ln(<span class="var">U</span> / <span class="var">L</span>)</div>
+        <span class="formula-label">[식 3]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body">δ<sub>log</sub> = ln(1 + <span class="var">p<sub>step</sub></span> / 100)</div>
+        <span class="formula-label">[식 4]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">I<sub>raw</sub></span> = <span class="frac"><span class="num">Δ<sub>log</sub></span><span class="den">δ<sub>log</sub></span></span></div>
+        <span class="formula-label">[식 5]</span>
+      </div>
+      <p>후보 구간 수:</p>
+      <div class="formula">
+        <div class="formula-body">𝓘<sub>cand</sub> = { ⌊<span class="var">I<sub>raw</sub></span>⌋, ⌈<span class="var">I<sub>raw</sub></span>⌉ }</div>
+        <span class="formula-label">[식 6]</span>
+      </div>
+      <p>각 후보의 오차:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">E</span>(<span class="var">j</span>) = | <span class="frac"><span class="num">Δ<sub>log</sub></span><span class="den"><span class="var">j</span></span></span> − δ<sub>log</sub> |</div>
+        <span class="formula-label">[식 7]</span>
+      </div>
+      <p>𝓘<sub>cand</sub> 안에서 <span class="var">E</span>(<span class="var">j</span>)가 가장 작은 후보를 <span class="var">I</span>로 선택한다. 오차가 같으면 더 큰 <span class="var">I</span>를 선택한다.</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">N</span> = <span class="var">I</span> + 1</div>
+        <span class="formula-label">[식 8]</span>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-title">🔢 워크드 예시 · p<sub>step</sub> = 1%, U = 100,000,000, L = 80,000,000</div>
+        <p>Δ<sub>log</sub> = ln(100,000,000 / 80,000,000) = ln(1.25) ≈ 0.22314</p>
+        <p>δ<sub>log</sub> = ln(1 + 0.01) ≈ 0.00995</p>
+        <p>I<sub>raw</sub> ≈ 0.22314 / 0.00995 ≈ 22.42</p>
+        <p>𝓘<sub>cand</sub> = { 22, 23 }</p>
+        <p>E(22) = | 0.22314 / 22 − 0.00995 | ≈ 0.00019</p>
+        <p>E(23) = | 0.22314 / 23 − 0.00995 | ≈ 0.00025</p>
+        <p>→ <span class="var">I</span> = 22, <span class="var">N</span> = 23</p>
+      </div>
+    </section>
+
+    <!-- ============ 매수 가격 사다리 ============ -->
+    <section class="section" id="ladder">
+      <h2>매수 가격 사다리</h2>
+      <p>상단에서 하단으로 내려가는 로그 간격 사다리다.</p>
+      <div class="formula">
+        <div class="formula-body">ℓ = <span class="frac"><span class="num">ln(<span class="var">U</span> / <span class="var">L</span>)</span><span class="den"><span class="var">N</span> − 1</span></span></div>
+        <span class="formula-label">[식 9]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">g</span> = <span class="var">e</span><sup>ℓ</sup></div>
+        <span class="formula-label">[식 10]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">B</span><sub>0</sub> = <span class="var">U</span></div>
+        <span class="formula-label">[식 11]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">B<sub>i</sub></span> = F<sub>norm</sub>( <span class="frac"><span class="num"><span class="var">U</span></span><span class="den"><span class="var">g</span><sup><span class="var">i</span></sup></span></span> ),&nbsp;&nbsp; 0 &lt; <span class="var">i</span> &lt; <span class="var">N</span> − 1</div>
+        <span class="formula-label">[식 12]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">B</span><sub><span class="var">N</span>−1</sub> = <span class="var">L</span></div>
+        <span class="formula-label">[식 13]</span>
+      </div>
+      <div class="callout warn">
+        <div class="callout-title">⚠ 중복 호가 실패</div>
+        <p>호가 단위 적용 후 <span class="var">B<sub>i</sub></span>가 중복되면 그리드 생성은 실패한다.</p>
+      </div>
+      <details class="derivation">
+        <summary>유도 메모 — 왜 로그 간격인가</summary>
+        <p>ℓ는 인접한 두 buy 가격 사이의 로그 거리다. <span class="var">B<sub>i+1</sub></span> / <span class="var">B<sub>i</sub></span> = 1/<span class="var">g</span> = <span class="var">e</span><sup>−ℓ</sup>로 일정하므로, 호가가 작은 하단도 같은 비율로 촘촘해진다. 결과적으로 각 슬롯의 매수 후 다음 슬롯까지의 하락폭(%)이 일정해진다.</p>
+      </details>
+    </section>
+
+    <!-- ============ 신규 TP 가격 ============ -->
+    <section class="section" id="new-tp">
+      <h2>신규 TP 가격</h2>
+      <p><code>k</code> 모델은 고정 퍼센트가 아니라 그리드 로그 간격을 <span class="var">k</span>배 적용하는 모델이다.</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">k<sub>eff</sub></span> = <span class="var">k<sub>base</sub></span></div>
+        <span class="formula-label">[식 14]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">S<sub>i</sub><sup>raw</sup></span> = <span class="var">B<sub>i</sub></span> · <span class="var">e</span><sup>ℓ · <span class="var">k<sub>eff</sub></span></sup></div>
+        <span class="formula-label">[식 15]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">S<sub>i</sub></span> = F<sub>norm</sub>(<span class="var">S<sub>i</sub><sup>raw</sup></span>)</div>
+        <span class="formula-label">[식 16]</span>
+      </div>
+      <h4>검증 조건</h4>
+      <div class="formula">
+        <div class="formula-body"><span class="var">S<sub>i</sub></span> &gt; <span class="var">B<sub>i</sub></span></div>
+        <span class="formula-label">[식 17]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">k<sub>base</sub></span> ≥ <span class="var">k<sub>floor</sub></span> &gt; 0</div>
+        <span class="formula-label">[식 18]</span>
+      </div>
+    </section>
+
+    <!-- ============ 예산 가중치 ============ -->
+    <section class="section" id="budget-weight">
+      <h2>예산 가중치</h2>
+      <p>슬롯 인덱스는 상단이 <span class="var">0</span>, 하단이 <span class="var">N</span> − 1이다.</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">b<sub>i</sub></span> = min( ⌊ <span class="frac"><span class="num">3<span class="var">i</span></span><span class="den"><span class="var">N</span> − 1</span></span> ⌋, 2 )</div>
+        <span class="formula-label">[식 19]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body">
+          <span class="var">w<sub>i</sub></span> =
+          <span class="cases">
+            <span class="case-val">0.7</span><span class="case-cond"><span class="var">b<sub>i</sub></span> = 0</span>
+            <span class="case-val">1.0</span><span class="case-cond"><span class="var">b<sub>i</sub></span> = 1</span>
+            <span class="case-val">1.3</span><span class="case-cond"><span class="var">b<sub>i</sub></span> = 2</span>
+          </span>
+        </div>
+        <span class="formula-label">[식 20]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">W</span> = <span class="big-op">Σ</span><sub><span class="var">i</span>=0</sub><sup><span class="var">N</span>−1</sup> <span class="var">w<sub>i</sub></span></div>
+        <span class="formula-label">[식 21]</span>
+      </div>
+      <p>슬롯별 예산 배분:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">B</span><sub>slot, <span class="var">i</span></sub> = <span class="var">B<sub>total</sub></span> · <span class="frac"><span class="num"><span class="var">w<sub>i</sub></span></span><span class="den"><span class="var">W</span></span></span></div>
+        <span class="formula-label">[식 22]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">Q<sub>i</sub></span> = F<sub>step</sub>( <span class="frac"><span class="num"><span class="var">B</span><sub>slot, <span class="var">i</span></sub></span><span class="den"><span class="var">B<sub>i</sub></span></span></span>, 0.00000001 BTC )</div>
+        <span class="formula-label">[식 23]</span>
+      </div>
+      <div class="callout info">
+        <div class="callout-title">🔢 워크드 예시 · N = 10</div>
+        <p><span class="var">b<sub>i</sub></span> = min(⌊3<span class="var">i</span>/9⌋, 2) → 인덱스 0..9에 대해: 0, 0, 0, 1, 1, 1, 2, 2, 2, 2</p>
+        <p>가중치: 상위 3슬롯 0.7, 중간 3슬롯 1.0, 하위 4슬롯 1.3</p>
+        <p>W = 3 × 0.7 + 3 × 1.0 + 4 × 1.3 = 2.1 + 3.0 + 5.2 = 10.3</p>
+        <p>하단(<span class="var">i</span> = 9)의 슬롯 예산 비율 = 1.3 / 10.3 ≈ 12.6% — 더 싼 가격대에 더 많은 KRW를 배정.</p>
+      </div>
+    </section>
+
+    <!-- ============ 재고 원가와 총 배정 ============ -->
+    <section class="section" id="inventory-allocated">
+      <h2>현재 재고 원가와 총 배정 금액</h2>
+      <p>현재 보유 재고 원가:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">C<sub>inventory</sub></span> = <span class="big-op">Σ</span><sub><span class="var">i</span> ∈ ℋ</sub> <span class="var">B<sub>i</sub></span> <span class="var">H<sub>i</sub></span></div>
+        <span class="formula-label">[식 24]</span>
+      </div>
+      <p>총 배정 금액:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">B<sub>allocated</sub></span> = <span class="big-op">Σ</span><sub><span class="var">i</span> ∈ ℋ</sub> <span class="var">B<sub>i</sub></span> <span class="var">H<sub>i</sub></span> + <span class="big-op">Σ</span><sub><span class="var">i</span> ∈ ℰ</sub> <span class="var">B<sub>i</sub></span> <span class="var">Q<sub>i</sub></span></div>
+        <span class="formula-label">[식 25]</span>
+      </div>
+      <p>여기서 ℋ는 holding 슬롯 집합, ℰ는 empty 슬롯 집합이다.</p>
+    </section>
+
+    <!-- ============ 매수 교차 조건 ============ -->
+    <section class="section" id="buy-cross">
+      <h2>매수 교차 조건</h2>
+      <p>하락 매수 후보:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">P<sub>prev</sub></span> &gt; <span class="var">B<sub>i</sub></span> ≥ <span class="var">P</span></div>
+        <span class="formula-label">[식 26]</span>
+      </div>
+      <h4>추가 조건</h4>
+      <ul>
+        <li>슬롯 <span class="var">i</span>가 empty 상태다.</li>
+        <li>슬롯 <span class="var">i</span>에 pending 주문이 없다.</li>
+        <li>슬롯 <span class="var">i</span>가 active buy window 안에 있다.</li>
+        <li>inventory target gate를 통과한다.</li>
+        <li>breakout guard가 비활성이다.</li>
+      </ul>
+      <div class="callout warn">
+        <div class="callout-title">⚠ 첫 스냅샷 처리</div>
+        <p>첫 가격 스냅샷에서는 <span class="var">P<sub>prev</sub></span> 기준선만 저장하고 신규 매수를 만들지 않는다.</p>
+      </div>
+    </section>
+
+    <!-- ============ 상승 재진입 ============ -->
+    <section class="section" id="upward-reentry">
+      <h2>상승 재진입 조건</h2>
+      <p>상승 매수 후보:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">P</span> &gt; <span class="var">P<sub>prev</sub></span></div>
+        <span class="formula-label">[식 27]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">P<sub>prev</sub></span> &lt; <span class="var">B<sub>i</sub></span> ≤ <span class="var">P</span></div>
+        <span class="formula-label">[식 28]</span>
+      </div>
+      <h4>추가 조건</h4>
+      <ul>
+        <li><code>UPWARD_BUY_ENABLED</code>가 true다.</li>
+        <li>전체 그리드 기준 burst guard: active/pending 필터 적용 전, 전체 그리드에서 교차하는 empty 슬롯이 <strong>정확히 1개</strong>다.</li>
+        <li>슬롯 <span class="var">i</span>에 pending 주문이 없다.</li>
+        <li>슬롯 <span class="var">i</span>가 active buy window 안에 있다.</li>
+        <li>inventory target gate를 통과한다.</li>
+        <li>breakout guard가 비활성이다.</li>
+      </ul>
+      <p>시장가 예산매수 금액:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">A<sub>spend</sub></span> = F<sub>step</sub>( <span class="var">B<sub>i</sub></span> <span class="var">Q<sub>i</sub></span>, 1 KRW )</div>
+        <span class="formula-label">[식 29]</span>
+      </div>
+      <p>사전 검증은 <code>app/main.py</code>의 <code>check_risk</code>가 <code>MIN_KRW_ORDER_AMOUNT</code>로 흡수한다 (<code>app/core/models.py</code>의 <code>Order.required_krw</code>가 시장가 매수 시 <code>spend_amount</code> 반환).</p>
+    </section>
+
+    <!-- ============ 활성 매수 윈도우 ============ -->
+    <section class="section" id="active-window">
+      <h2>활성 매수 윈도우</h2>
+      <p>기준 가격은 <span class="var">P<sub>prev</sub></span>다.</p>
+      <div class="formula">
+        <div class="formula-body">𝓑<sub>≤</sub> = { <span class="var">i</span> ∈ ℰ : <span class="var">B<sub>i</sub></span> ≤ <span class="var">P<sub>prev</sub></span> }</div>
+        <span class="formula-label">[식 30]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body">𝓑<sub>&gt;</sub> = { <span class="var">i</span> ∈ ℰ : <span class="var">B<sub>i</sub></span> &gt; <span class="var">P<sub>prev</sub></span> }</div>
+        <span class="formula-label">[식 31]</span>
+      </div>
+      <h4>정렬 기준</h4>
+      <ul>
+        <li>𝓑<sub>≤</sub>: <span class="var">B<sub>i</sub></span> 내림차순, <code>slot_index</code> 오름차순</li>
+        <li>𝓑<sub>&gt;</sub>: <span class="var">B<sub>i</sub></span> 오름차순, <code>slot_index</code> 오름차순</li>
+      </ul>
+      <p>활성 슬롯 집합:</p>
+      <div class="formula">
+        <div class="formula-body">𝓐 = first<sub><span class="var">n</span><sub>≤</sub></sub>(𝓑<sub>≤</sub>) ∪ first<sub><span class="var">n</span><sub>&gt;</sub></sub>(𝓑<sub>&gt;</sub>)</div>
+        <span class="formula-label">[식 32]</span>
+      </div>
+      <p>여기서:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">n</span><sub>≤</sub> = <span class="var">n<sub>below</sub></span></div>
+        <span class="formula-label">[식 33]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">n</span><sub>&gt;</sub> = <span class="var">n<sub>above</sub></span></div>
+        <span class="formula-label">[식 34]</span>
+      </div>
+      <div class="callout info">
+        <div class="callout-title">📌 윈도우 비활성</div>
+        <p>활성 윈도우가 꺼져 있으면 모든 empty 슬롯을 활성 후보로 본다.</p>
+      </div>
+    </section>
+
+    <!-- ============ Inventory Target Gate ============ -->
+    <section class="section" id="inventory-gate">
+      <h2>Inventory Target Gate</h2>
+      <p>운영 예산 분모:</p>
+      <div class="formula">
+        <div class="formula-body">
+          <span class="var">B<sub>op</sub></span> =
+          <span class="cases">
+            <span class="case-val"><span class="var">B<sub>maxop</sub></span></span><span class="case-cond"><span class="var">B<sub>maxop</sub></span> &gt; 0</span>
+            <span class="case-val"><span class="var">B<sub>allocated</sub></span></span><span class="case-cond"><span class="var">B<sub>maxop</sub></span> ≤ 0</span>
+          </span>
+        </div>
+        <span class="formula-label">[식 35]</span>
+      </div>
+      <p>현재 재고 비율은 같은 평가 사이클에서 이미 승인된 매수 후보까지 반영한 projected inventory 기준이다.</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">q<sub>current</sub></span> = <span class="frac"><span class="num"><span class="var">C<sub>projected</sub></span></span><span class="den"><span class="var">B<sub>op</sub></span></span></span></div>
+        <span class="formula-label">[식 36]</span>
+      </div>
+      <p>로그 밴드 위치:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">z<sub>raw</sub></span> = <span class="frac"><span class="num">ln(<span class="var">P</span>) − ln(<span class="var">L</span>)</span><span class="den">ln(<span class="var">U</span>) − ln(<span class="var">L</span>)</span></span></div>
+        <span class="formula-label">[식 37]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">z</span> = clamp(<span class="var">z<sub>raw</sub></span>, 0, 1)</div>
+        <span class="formula-label">[식 38]</span>
+      </div>
+      <p>목표 재고 비율:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">q<sub>target</sub></span>(<span class="var">z</span>) = <span class="var">q<sub>min</sub></span> + (<span class="var">q<sub>max</sub></span> − <span class="var">q<sub>min</sub></span>)(1 − <span class="var">z</span>)<sup>γ</sup></div>
+        <span class="formula-label">[식 39]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">q<sub>target</sub></span>(<span class="var">z</span>) = clamp(<span class="var">q<sub>target</sub></span>(<span class="var">z</span>), <span class="var">q<sub>min</sub></span>, <span class="var">q<sub>max</sub></span>)</div>
+        <span class="formula-label">[식 40]</span>
+      </div>
+      <p>통과 조건:</p>
+      <div class="formula">
+        <div class="formula-body">θ = max(<span class="var">q<sub>target</sub></span>(<span class="var">z</span>) − ε, 0)</div>
+        <span class="formula-label">[식 41]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">g<sub>pass</sub></span> = ( <span class="var">q<sub>current</sub></span> &lt; θ )</div>
+        <span class="formula-label">[식 42]</span>
+      </div>
+      <details class="derivation">
+        <summary>해석 메모 — z 와 q<sub>target</sub>의 관계</summary>
+        <p><span class="var">z</span>는 로그 가격대 안에서 현재가의 위치다. <span class="var">z</span> = 0 은 하단(<span class="var">L</span>), <span class="var">z</span> = 1 은 상단(<span class="var">U</span>).</p>
+        <p>(1 − <span class="var">z</span>)<sup>γ</sup> 항이 있으므로 가격이 낮을수록 <span class="var">q<sub>target</sub></span>은 <span class="var">q<sub>max</sub></span>에 가까워지고, 높을수록 <span class="var">q<sub>min</sub></span>에 가까워진다. → "쌀 때 더 많이 들고, 비쌀 때 줄여라."</p>
+      </details>
+    </section>
+
+    <!-- ============ Stale Previous Price Guard ============ -->
+    <section class="section" id="stale-guard">
+      <h2>Stale Previous Price Guard</h2>
+      <p>직전 평가 이후 경과 시간이 임계값을 초과하면 그 cycle의 신규 매수 평가는 스킵한다.</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">t<sub>elapsed</sub></span> = <span class="var">t<sub>monotonicNow</sub></span> − <span class="var">t<sub>previousPrice</sub></span></div>
+        <span class="formula-label">[식 43]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">s<sub>skip</sub></span> = ( <span class="var">t<sub>elapsed</sub></span> &gt; <span class="var">T<sub>stale</sub></span> )</div>
+        <span class="formula-label">[식 44]</span>
+      </div>
+      <p>이 경우:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">P<sub>prev</sub></span> ← <span class="var">P</span></div>
+        <span class="formula-label">[식 45]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">t<sub>previousPrice</sub></span> ← <span class="var">t<sub>monotonicNow</sub></span></div>
+        <span class="formula-label">[식 46]</span>
+      </div>
+      <div class="callout ok">
+        <div class="callout-title">✅ SELL 평가</div>
+        <p>SELL 평가는 계속 수행한다.</p>
+      </div>
+    </section>
+
+    <!-- ============ 매도 조건 ============ -->
+    <section class="section" id="sell">
+      <h2>매도 조건</h2>
+      <p>보유 슬롯의 매도 후보:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">P</span> ≥ <span class="var">S<sub>i</sub><sup>eff</sup></span></div>
+        <span class="formula-label">[식 47]</span>
+      </div>
+      <p>TP 주문 생성 최소 금액 조건:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">S<sub>i</sub><sup>eff</sup></span> <span class="var">H<sub>i</sub></span> ≥ <span class="var">A<sub>min</sub></span></div>
+        <span class="formula-label">[식 48]</span>
+      </div>
+    </section>
+
+    <!-- ============ Age TP 압축 ============ -->
+    <section class="section" id="age-tp">
+      <h2>Age TP 압축</h2>
+      <p>보유 시간:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">a</span> = <span class="var">t<sub>nowUtc</sub></span> − <span class="var">t<sub>filledUtc</sub></span></div>
+        <span class="formula-label">[식 49]</span>
+      </div>
+      <p><code>k</code> 압축량:</p>
+      <div class="formula">
+        <div class="formula-body">
+          <span class="var">d</span>(<span class="var">a</span>) =
+          <span class="cases">
+            <span class="case-val">1.0</span><span class="case-cond"><span class="var">a</span> ≥ 7 days</span>
+            <span class="case-val">0.5</span><span class="case-cond">48 hours ≤ <span class="var">a</span> &lt; 7 days</span>
+            <span class="case-val">0.0</span><span class="case-cond"><span class="var">a</span> &lt; 48 hours</span>
+          </span>
+        </div>
+        <span class="formula-label">[식 50]</span>
+      </div>
+      <p>유효 <span class="var">k</span>:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">k<sub>eff</sub></span> = max( <span class="var">k<sub>base</sub></span> − <span class="var">d</span>(<span class="var">a</span>), <span class="var">k<sub>floor</sub></span> )</div>
+        <span class="formula-label">[식 51]</span>
+      </div>
+      <p>압축 매도 가격:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">g<sub>base</sub></span> = ln( <span class="var">S<sub>i</sub></span> / <span class="var">B<sub>i</sub></span> )</div>
+        <span class="formula-label">[식 52]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">g<sub>compressed</sub></span> = <span class="var">g<sub>base</sub></span> · <span class="frac"><span class="num"><span class="var">k<sub>eff</sub></span></span><span class="den"><span class="var">k<sub>base</sub></span></span></span></div>
+        <span class="formula-label">[식 53]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span style="text-decoration: overline;"><span class="var">S<sub>i</sub></span></span> = F<sub>norm</sub>( <span class="var">B<sub>i</sub></span> · <span class="var">e</span><sup><span class="var">g<sub>compressed</sub></span></sup> )</div>
+        <span class="formula-label">[식 54]</span>
+      </div>
+      <p>최종 매도 가격:</p>
+      <div class="formula">
+        <div class="formula-body">
+          <span class="var">S<sub>i</sub><sup>eff</sup></span> =
+          <span class="cases">
+            <span class="case-val"><span style="text-decoration: overline;"><span class="var">S<sub>i</sub></span></span></span><span class="case-cond"><span class="var">B<sub>i</sub></span> &lt; <span style="text-decoration: overline;"><span class="var">S<sub>i</sub></span></span> &lt; <span class="var">S<sub>i</sub></span></span>
+            <span class="case-val"><span class="var">S<sub>i</sub></span></span><span class="case-cond">otherwise</span>
+          </span>
+        </div>
+        <span class="formula-label">[식 55]</span>
+      </div>
+      <div class="callout info">
+        <div class="callout-title">🔢 워크드 예시 · k<sub>base</sub> = 2.0, k<sub>floor</sub> = 1.0, a = 72h</div>
+        <p>a = 72h → 48h ≤ a &lt; 7d 이므로 <span class="var">d</span>(a) = 0.5</p>
+        <p><span class="var">k<sub>eff</sub></span> = max(2.0 − 0.5, 1.0) = 1.5</p>
+        <p>예: <span class="var">B<sub>i</sub></span> = 90,000,000, <span class="var">S<sub>i</sub></span> = 91,800,000</p>
+        <p><span class="var">g<sub>base</sub></span> = ln(91,800,000 / 90,000,000) ≈ 0.01980</p>
+        <p><span class="var">g<sub>compressed</sub></span> = 0.01980 × (1.5 / 2.0) ≈ 0.01485</p>
+        <p>e<sup>0.01485</sup> ≈ 1.01497 → 압축 매도가 ≈ 91,347,300 (정규화 전)</p>
+        <p><span class="var">B<sub>i</sub></span> &lt; 압축가 &lt; <span class="var">S<sub>i</sub></span> 이므로 <span class="var">S<sub>i</sub><sup>eff</sup></span> = 압축 매도가</p>
+      </div>
+      <div class="callout warn">
+        <div class="callout-title">⚠ 적용 조건</div>
+        <p>Age TP는 <code>k</code> 모델로 생성된 그리드이고 holding 슬롯에 <code>filled_at</code>이 있을 때만 적용된다.</p>
+      </div>
+    </section>
+
+    <!-- ============ 브레이크아웃 가드 ============ -->
+    <section class="section" id="breakout">
+      <h2>브레이크아웃 가드</h2>
+      <p>최근 완료 캔들 종가 <span class="var">C<sub>j</sub></span>를 최신순으로 <span class="var">M</span>개 본다.</p>
+      <p>상단 이탈:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">o<sub>upper</sub></span> = <span class="big-op">⋀</span><sub><span class="var">j</span>=1</sub><sup><span class="var">M</span></sup> ( <span class="var">C<sub>j</sub></span> &gt; <span class="var">U</span> )</div>
+        <span class="formula-label">[식 56]</span>
+      </div>
+      <p>하단 이탈:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">o<sub>lower</sub></span> = <span class="big-op">⋀</span><sub><span class="var">j</span>=1</sub><sup><span class="var">M</span></sup> ( <span class="var">C<sub>j</sub></span> &lt; <span class="var">L</span> )</div>
+        <span class="formula-label">[식 57]</span>
+      </div>
+      <p>가드 활성:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">b<sub>guard</sub></span> = <span class="var">o<sub>upper</sub></span> ∨ <span class="var">o<sub>lower</sub></span></div>
+        <span class="formula-label">[식 58]</span>
+      </div>
+      <div class="callout danger">
+        <div class="callout-title">🚫 가드 활성화 시</div>
+        <p>가드가 활성화되면 신규 BUY 후보는 제거하고 SELL 후보는 유지한다.</p>
+      </div>
+      <div class="callout info">
+        <div class="callout-title">📌 입력 실패 처리</div>
+        <p>캔들 조회 실패, 캔들 부족, invalid band 같은 입력 실패는 <code>app/main.py</code>의 failure policy에서 fail-open / fail-close로 처리한다.</p>
+      </div>
+    </section>
+
+    <!-- ============ 매수 필요 KRW 추정 ============ -->
+    <section class="section" id="required-krw">
+      <h2>매수 필요 KRW 추정</h2>
+      <p>BUY 주문 원금:</p>
+      <h4>시장가 예산매수</h4>
+      <div class="formula">
+        <div class="formula-body"><span class="var">A<sub>required</sub></span> = <span class="var">A<sub>spend</sub></span></div>
+        <span class="formula-label">[식 59]</span>
+      </div>
+      <h4>지정가 BUY</h4>
+      <div class="formula">
+        <div class="formula-body"><span class="var">A<sub>required</sub></span> = <span class="var">P<sub>order</sub></span> <span class="var">Q<sub>order</sub></span></div>
+        <span class="formula-label">[식 60]</span>
+      </div>
+      <p>수수료와 버퍼를 포함한 필요 금액:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">A<sub>estimated</sub></span> = <span class="var">A<sub>required</sub></span>(1 + <span class="var">f<sub>upbit</sub></span>) + <span class="var">A<sub>buffer</sub></span></div>
+        <span class="formula-label">[식 61]</span>
+      </div>
+      <p>잔고 통과 조건:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">A<sub>available</sub></span> ≥ <span class="var">A<sub>estimated</sub></span> + <span class="var">A<sub>reserve</sub></span></div>
+        <span class="formula-label">[식 62]</span>
+      </div>
+      <div class="callout info">
+        <div class="callout-title">📌 사이클 내 누적 차감</div>
+        <p>같은 cycle에서 여러 BUY를 검사할 때는 통과한 주문의 <span class="var">A<sub>estimated</sub></span>를 가용 잔고에서 선반영 차감한다.</p>
+      </div>
+      <div class="callout info">
+        <div class="callout-title">🔢 워크드 예시 · 지정가 BUY 100,000 KRW</div>
+        <p><span class="var">A<sub>required</sub></span> = 100,000 KRW</p>
+        <p><span class="var">f<sub>upbit</sub></span> = 0.0005, <span class="var">A<sub>buffer</sub></span> = 100 KRW</p>
+        <p><span class="var">A<sub>estimated</sub></span> = 100,000 × 1.0005 + 100 = 100,150 KRW</p>
+        <p><span class="var">A<sub>reserve</sub></span> = 10,000 KRW 라면 가용 잔고는 ≥ 110,150 KRW 이어야 통과.</p>
+      </div>
+    </section>
+
+    <!-- ============ 라이브 예산 조정 ============ -->
+    <section class="section" id="adjust-budget">
+      <h2>라이브 예산 조정</h2>
+      <p><code>scripts/adjust_budget_live.py --target-budget X</code>는 기존 ladder와 보유 수량을 유지하고 <span class="var">Q<sub>i</sub></span>만 다시 계산한다.</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">B<sub>total</sub></span> ← <span class="var">X</span></div>
+        <span class="formula-label">[식 63]</span>
+      </div>
+      <p>슬롯별 예산 재배분:</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">B</span><sub>slot, <span class="var">i</span></sub> = <span class="var">B<sub>total</sub></span> · <span class="frac"><span class="num"><span class="var">w<sub>i</sub></span></span><span class="den"><span class="var">W</span></span></span></div>
+        <span class="formula-label">[식 64]</span>
+      </div>
+      <div class="formula">
+        <div class="formula-body"><span class="var">Q<sub>i</sub><sup>new</sup></span> = F<sub>step</sub>( <span class="frac"><span class="num"><span class="var">B</span><sub>slot, <span class="var">i</span></sub></span><span class="den"><span class="var">B<sub>i</sub></span></span></span>, 0.00000001 BTC )</div>
+        <span class="formula-label">[식 65]</span>
+      </div>
+      <div class="callout ok">
+        <div class="callout-title">✅ 유지되는 값</div>
+        <p>보유 슬롯의 <span class="var">H<sub>i</sub></span>, <span class="var">S<sub>i</sub></span>, <code>filled_at</code>은 유지한다.</p>
+      </div>
+    </section>
+
+    <footer>
+      이 문서는 <code>docs/strategy-formulas.md</code> 를 기반으로 자동 생성된 전략 수식 대시보드입니다 · 최종 갱신 2026-05-18
+    </footer>
+  </main>
+</div>
+
+<script>
+  // ----- Copy buttons -----
+  document.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.closest('.code-wrap').querySelector('pre code').innerText;
+      navigator.clipboard.writeText(code).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1400);
+      });
+    });
+  });
+
+  // ----- TOC active highlight -----
+  const sections = document.querySelectorAll('section.section');
+  const tocLinks = document.querySelectorAll('nav.toc a');
+  const tocMap = {};
+  tocLinks.forEach(a => { tocMap[a.getAttribute('href').slice(1)] = a; });
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        tocLinks.forEach(a => a.classList.remove('active'));
+        const link = tocMap[e.target.id];
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+
+  // ----- Search filter -----
+  const search = document.getElementById('search');
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    if (!q) {
+      sections.forEach(s => s.classList.remove('hidden'));
+      tocLinks.forEach(a => a.parentElement.classList.remove('hidden'));
+      return;
+    }
+    sections.forEach(s => {
+      const match = s.textContent.toLowerCase().includes(q);
+      s.classList.toggle('hidden', !match);
+    });
+    tocLinks.forEach(a => {
+      const id = a.getAttribute('href').slice(1);
+      const target = document.getElementById(id);
+      const visible = target && !target.classList.contains('hidden');
+      a.parentElement.classList.toggle('hidden', !visible);
+    });
+  });
+
+  // ----- Theme toggle -----
+  const toggle = document.getElementById('themeToggle');
+  const themeLabel = document.getElementById('themeLabel');
+  const saved = localStorage.getItem('strategy-theme');
+  if (saved === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    themeLabel.textContent = '🌙 Dark';
+  }
+  toggle.addEventListener('click', () => {
+    const cur = document.documentElement.getAttribute('data-theme');
+    if (cur === 'dark') {
+      document.documentElement.removeAttribute('data-theme');
+      themeLabel.textContent = '☀ Light';
+      localStorage.setItem('strategy-theme', 'light');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      themeLabel.textContent = '🌙 Dark';
+      localStorage.setItem('strategy-theme', 'dark');
+    }
+  });
+</script>
+</body>
+</html>
