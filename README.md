@@ -56,7 +56,15 @@ tail -n 50 logs/trading-$(date +%F).log
 
 > **평균매수가 착시 주의**: 업비트의 `avg_buy_price * BTC 보유수량`은 계정 전체 평균매수가 기준 원가다. 그리드 봇은 슬롯별로 BUY/SELL을 따로 매칭하므로, 낮은 슬롯이 먼저 팔리고 높은 슬롯이 남으면 업비트 평균매수가 기준 BTC 원가와 봇 슬롯별 잔여 매수원가가 달라질 수 있다. `주문 가능 KRW + 업비트 평균매수가 기준 BTC 원가`를 봇 장부 원금으로 보지 않는다. 봇 기준 원금은 `scripts/upbit_realized_pnl.py`의 잔여 매수 큐 또는 슬롯별 잔여 원가 기준으로 확인한다.
 
-### 5. 봇 시작 / 종료
+### 5. 실제 전체 자산 확인
+
+```bash
+scripts/upbit_actual_assets.py
+```
+
+이 스크립트는 읽기 전용으로 업비트 KRW/BTC 잔고, 현재 평가액, 업비트 평균매수가 기준 원가, 봇 슬롯별 잔여 매수원가를 한 번에 비교한다. 기본 `--lookback-days` 는 120일이므로 평소에는 옵션 없이 실행하고, 수량 불일치가 표시될 때만 값을 늘려 재확인한다.
+
+### 6. 봇 시작 / 종료
 
 시작:
 
@@ -72,7 +80,7 @@ PYTHON_BIN=.venv/bin/python ./run.sh
 
 실행 후에는 `./tail-latest-log.sh` 로 로그가 계속 쌓이는지 확인한다.
 
-### 6. 실현 손익 확인
+### 7. 실현 손익 확인
 
 ```bash
 .venv/bin/python scripts/upbit_realized_pnl.py
@@ -178,6 +186,7 @@ L1 손절 이후 매수 차단을 해제할 때 사용한다. L2 24시간 잠금
 | | `check_daily_low.py` | `logs/trading-YYYY-MM-DD.log` 파일들을 스캔해 날짜별 최저 현재가를 출력. 매수 라인 도달 여부 빠른 점검용 |
 | | `apply_grid_properties_to_postgres.py` | `grid.properties` 파일의 설정을 DB의 그리드 테이블에 강제 반영 |
 | | `adjust_budget_live.py` | 현재 DB 그리드의 가격 구조와 보유 수량은 유지한 채 `planned_qty`만 재계산하여 예산을 보수적으로 증액/감액. `--target-budget` (절대 총액) 으로 지정 |
+| | `upbit_actual_assets.py` | 실행 권한이 있어 `scripts/upbit_actual_assets.py` 로 바로 실행 가능. 업비트 잔고와 현재가, `avg_buy_price` 기준 원가, 봇 슬롯별 잔여 BUY 원가를 비교해 BTC 보유 중 총자산 착시를 점검한다. 기본 lookback 은 120일이며 수량 불일치가 있을 때만 `--lookback-days` 를 늘린다 |
 | | `upbit_realized_pnl.py` | 업비트 `GET /v1/orders/closed` + `/v1/order` 로 KRW-BTC 실현 손익을 산출. 옵션 없이 실행하면 최근 90일을 일/주/월/년/전체로 모두 출력하고, `--period d/w/m/y` 로 오늘/이번주/이번달/이번년만 조회한다. 직접 지정 기간은 `--from/--to` 로 1개 범위를 합산 출력한다. 봇 주문 identifier의 슬롯 번호를 기준으로 같은 슬롯 안에서만 FIFO 매칭한다 (수수료 차감, read-only 분석). lookback 마진(기본 30일)으로 과거 BUY를 포함해 정확한 매칭을 보장한다. reset 청산 매도는 reset identifier 또는 직전 취소 TP SELL 수량으로 자동 인식하며, 과거 reset 주문은 `--reset-sell-uuid`로 지정 가능. 일별 버킷팅은 SELL `_time_key`(=최대 체결 시각, KST) 기준 |
 | **app/utils/** | `upbit_market.py` | 업비트 마켓의 최소 주문 단위, 호가 단위 등 시장 정보 관리 |
 | | `grid_reporting.py` | 수익률, 재고 현황 등 그리드 운영 성과 리포팅 유틸리티 |

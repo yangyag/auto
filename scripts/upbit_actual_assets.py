@@ -336,7 +336,7 @@ def print_summary(summary: ActualAssetSummary, *, lookback_days: int, diagnostic
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="python3 scripts/upbit_actual_assets.py",
+        prog="scripts/upbit_actual_assets.py",
         description="Upbit 잔고와 봇 슬롯별 잔여 BUY 원가를 함께 조회한다 (읽기 전용)",
     )
     parser.add_argument(

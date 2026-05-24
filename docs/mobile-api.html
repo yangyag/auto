@@ -930,7 +930,7 @@ export async function apiGet(path: string) {
           <div class="callout warn">
             <div class="callout-title">⚠ 원가 기준</div>
             <p>모바일 API나 앱에서 원금성 지표를 만들 때 업비트 <code>avg_buy_price</code> 를 봇 슬롯 원가로 대체하지 않는다. 업비트 평균매수가는 계정 전체 BTC 평균이고, 그리드 봇의 원가는 슬롯별 BUY/SELL 매칭 결과다.</p>
-            <p>낮은 슬롯이 먼저 매도되고 높은 슬롯이 남는 구간에서는 <code>주문 가능 KRW + avg_buy_price * BTC 수량</code> 이 봇 장부 기준 원금과 다르게 보일 수 있다. 봇 기준 원금/잔여 원가는 그리드 슬롯 상태와 실현손익 매칭 로직의 잔여 BUY 큐를 기준으로 해석한다.</p>
+            <p>낮은 슬롯이 먼저 매도되고 높은 슬롯이 남는 구간에서는 <code>주문 가능 KRW + avg_buy_price * BTC 수량</code> 이 봇 장부 기준 원금과 다르게 보일 수 있다. 봇 기준 원금/잔여 원가는 그리드 슬롯 상태와 실현손익 매칭 로직의 잔여 BUY 큐를 기준으로 해석하며, 운영 서버에서는 <code>scripts/upbit_actual_assets.py</code> 를 바로 실행해 확인한다.</p>
           </div>
           <h4>Request</h4>
           <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
@@ -1216,6 +1216,15 @@ systemctl --user restart auto-api.service</code></pre>
 awk -F= '/^(UPBIT_ACCESS_KEY|UPBIT_SECRET_KEY)=/ {print $1"=&lt;set&gt;"}' .env
 .venv/bin/python scripts/upbit_realized_pnl.py --period d</code></pre>
       </div>
+
+      <h3>총 평가액과 장부 원금이 다르게 보일 때</h3>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>cd /home/ubuntu/auto
+scripts/upbit_actual_assets.py
+# 수량 불일치가 표시될 때만:
+scripts/upbit_actual_assets.py --lookback-days 180</code></pre>
+      </div>
+      <p><code>--lookback-days</code> 기본값은 120일이다. 평소에는 옵션 없이 실행하고, 오래된 BUY가 누락된 것으로 보일 때만 늘린다.</p>
 
       <h3>앱에서 봇 시작/중지 명령이 실행되지 않을 때</h3>
       <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>

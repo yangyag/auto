@@ -1,15 +1,27 @@
+import stat
 import unittest
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import scripts.upbit_actual_assets as actual_assets
 
+SCRIPT_PATH = Path(actual_assets.__file__)
+
 
 class UpbitActualAssetsTest(unittest.TestCase):
     def test_parser_defaults_to_120_day_lookback(self):
-        args = actual_assets.build_parser().parse_args([])
+        parser = actual_assets.build_parser()
+        args = parser.parse_args([])
 
+        self.assertEqual(parser.prog, "scripts/upbit_actual_assets.py")
         self.assertEqual(args.lookback_days, 120)
+
+    def test_script_is_directly_executable(self):
+        first_line = SCRIPT_PATH.read_text(encoding="utf-8").splitlines()[0]
+
+        self.assertEqual(first_line, "#!/usr/bin/env python3")
+        self.assertTrue(SCRIPT_PATH.stat().st_mode & stat.S_IXUSR)
 
     def test_summary_uses_bot_lot_cost_separately_from_upbit_average_cost(self):
         accounts = [

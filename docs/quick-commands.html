@@ -430,6 +430,7 @@
         <li><a href="#bot-control">봇 실행 / 종료 / 상태</a></li>
         <li><a href="#logs">로그 보기</a></li>
         <li><a href="#balance">업비트 잔고</a></li>
+        <li><a href="#actual-assets">실제 전체 자산</a></li>
         <li class="section-label">그리드 / 상태</li>
         <li><a href="#apply-grid">grid.properties 반영</a></li>
         <li><a href="#grid-state">그리드 슬롯 상태</a></li>
@@ -631,7 +632,35 @@ ps -eo pid,args | grep '[p]ython.*/home/yangyag/auto/main.py'</code></pre>
       <div class="callout warn">
         <div class="callout-title">⚠ 평균매수가 착시</div>
         <p><code>main.py balance</code> 는 주문 가능 KRW 잔고만 보여준다. 업비트 <code>/v1/accounts</code> 의 <code>avg_buy_price * BTC 보유수량</code> 은 계정 전체 평균매수가 기준 원가이며, 봇이 관리하는 슬롯별 잔여 매수원가와 다를 수 있다.</p>
-        <p>그리드 봇은 슬롯별로 BUY/SELL 을 매칭한다. 낮은 가격 슬롯이 먼저 팔리고 높은 가격 슬롯이 남으면, <code>주문 가능 KRW + 업비트 평균매수가 기준 BTC 원가</code> 는 봇 장부 원금보다 낮거나 높게 보일 수 있다. 봇 장부 기준은 <code>scripts/upbit_realized_pnl.py</code> 의 잔여 매수 큐와 슬롯별 원가를 우선한다.</p>
+        <p>그리드 봇은 슬롯별로 BUY/SELL 을 매칭한다. 낮은 가격 슬롯이 먼저 팔리고 높은 가격 슬롯이 남으면, <code>주문 가능 KRW + 업비트 평균매수가 기준 BTC 원가</code> 는 봇 장부 원금보다 낮거나 높게 보일 수 있다. BTC 보유 중 실제 장부 기준 합계는 <code>scripts/upbit_actual_assets.py</code> 로 확인한다.</p>
+      </div>
+    </section>
+
+    <!-- ============ ACTUAL ASSETS ============ -->
+    <section class="section" id="actual-assets">
+      <h2>실제 전체 자산 확인</h2>
+      <p>업비트 계정 잔고와 봇 슬롯별 잔여 BUY 원가를 함께 조회하는 read-only 점검 명령이다. 파일에 실행 권한이 있으므로 가상환경이 준비된 프로젝트 루트에서 바로 실행한다.</p>
+
+      <div class="cmd-grid">
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">assets</span>기본 120일 조회</div>
+          <div class="cmd-tile-desc">평소에는 옵션 없이 실행한다.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>scripts/upbit_actual_assets.py</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">lookback</span>더 오래 조회</div>
+          <div class="cmd-tile-desc">수량 불일치가 표시될 때만 늘린다.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>scripts/upbit_actual_assets.py --lookback-days 180</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-title">📌 출력 해석</div>
+        <p><code>KRW + 봇 슬롯별 잔여 매수원가</code> 는 매수 당시 슬롯 장부 기준 합계이고, <code>KRW + 현재 평가액</code> 은 현재가 기준 평가 합계다. <code>Upbit 평균매수가 기준 원가</code> 는 계정 전체 평균이라 봇 장부 원가와 다를 수 있다.</p>
       </div>
     </section>
 
