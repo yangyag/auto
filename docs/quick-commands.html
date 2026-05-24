@@ -627,6 +627,12 @@ ps -eo pid,args | grep '[p]ython.*/home/yangyag/auto/main.py'</code></pre>
           </div>
         </div>
       </div>
+
+      <div class="callout warn">
+        <div class="callout-title">⚠ 평균매수가 착시</div>
+        <p><code>main.py balance</code> 는 주문 가능 KRW 잔고만 보여준다. 업비트 <code>/v1/accounts</code> 의 <code>avg_buy_price * BTC 보유수량</code> 은 계정 전체 평균매수가 기준 원가이며, 봇이 관리하는 슬롯별 잔여 매수원가와 다를 수 있다.</p>
+        <p>그리드 봇은 슬롯별로 BUY/SELL 을 매칭한다. 낮은 가격 슬롯이 먼저 팔리고 높은 가격 슬롯이 남으면, <code>주문 가능 KRW + 업비트 평균매수가 기준 BTC 원가</code> 는 봇 장부 원금보다 낮거나 높게 보일 수 있다. 봇 장부 기준은 <code>scripts/upbit_realized_pnl.py</code> 의 잔여 매수 큐와 슬롯별 원가를 우선한다.</p>
+      </div>
     </section>
 
     <!-- ============ APPLY GRID ============ -->
@@ -710,6 +716,12 @@ ps -eo pid,args | grep '[p]ython.*/home/yangyag/auto/main.py'</code></pre>
         <p>옵션이 없으면 기본 최근 90일을 일/주/월/년/전체 섹션으로 모두 출력하고, lookback 30일을 사용한다. 업비트 <code>GET /v1/orders/closed</code> 와 <code>/v1/order</code> 만 사용한다.</p>
         <p>글로벌 FIFO 가 아니며, 매칭되지 않는 매도(윈도우 시작 이전 매수분, identifier 패턴 불일치 등)는 별도 라인으로 분리한다. 기간은 2자리 연도 형식으로 표시하며, 주간 기간은 <code>26-04-20 ~ 26-04-26</code> 처럼 출력한다.</p>
         <p>실현손익 표의 <code>매도주문수</code> 는 SELL 주문 UUID 기준이고, <code>체결건수</code> 는 업비트 <code>/v1/order</code> 의 <code>trades</code> 배열 기준 fill 수다.</p>
+      </div>
+
+      <div class="callout warn">
+        <div class="callout-title">⚠ 실현손익과 총자산 비교</div>
+        <p>실현손익은 이미 매도된 슬롯의 확정 손익이다. 총 보유자산이나 원금 장부와 비교할 때는 현재 남아 있는 BTC의 원가 기준을 분리해서 본다. 업비트 평균매수가 기준 잔여 원가와 봇 슬롯별 잔여 BUY 원가는 같은 값이 아닐 수 있다.</p>
+        <p>전량 매도 후에는 KRW 잔고로 최종 정산되지만, BTC 보유 중에는 <code>avg_buy_price</code> 기준 합계가 봇의 슬롯 장부를 그대로 대표하지 않는다. 의심되면 이 스크립트의 <code>잔여 매수</code> 섹션을 확인하고, 필요한 경우 lookback 을 충분히 늘려 잔여 BUY 큐가 안정적으로 수렴하는지 비교한다.</p>
       </div>
 
       <h3>기간 옵션</h3>

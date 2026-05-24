@@ -54,6 +54,8 @@ tail -n 50 logs/trading-$(date +%F).log
 .venv/bin/python main.py balance
 ```
 
+> **평균매수가 착시 주의**: 업비트의 `avg_buy_price * BTC 보유수량`은 계정 전체 평균매수가 기준 원가다. 그리드 봇은 슬롯별로 BUY/SELL을 따로 매칭하므로, 낮은 슬롯이 먼저 팔리고 높은 슬롯이 남으면 업비트 평균매수가 기준 BTC 원가와 봇 슬롯별 잔여 매수원가가 달라질 수 있다. `주문 가능 KRW + 업비트 평균매수가 기준 BTC 원가`를 봇 장부 원금으로 보지 않는다. 봇 기준 원금은 `scripts/upbit_realized_pnl.py`의 잔여 매수 큐 또는 슬롯별 잔여 원가 기준으로 확인한다.
+
 ### 5. 봇 시작 / 종료
 
 시작:
