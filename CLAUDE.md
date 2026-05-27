@@ -14,5 +14,3 @@
 ## 커밋 메시지
 커밋 메시지는 한글로 작성한다.
 
-## 멀티 에이전트 운영
-이 프로젝트의 `.claude/settings.json` 은 팀 모드 (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, `teammateMode: in-process`) 가 켜져 있다. 사용자가 "팀", "병렬", "여러 에이전트" 등으로 멀티 에이전트 작업을 요청하면 일회성 Agent 호출 대신 `TeamCreate` → `TaskCreate` (의존성 포함) → named teammate spawn → `SendMessage` 조율 → `shutdown_request` 종료 흐름을 사용한다.
