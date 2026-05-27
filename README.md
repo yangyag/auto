@@ -8,10 +8,10 @@ Python 기반 그리드 자동매매 시스템이다. 구현은 업비트 `KRW-B
 
 이 README는 프로그램의 전체 구조와 핵심 로직을 설명하는 기준 문서다. 초보 운영자가 매일 봐야 하는 내용은 아래 **초보 운영자 빠른 시작**부터 확인하면 된다.
 
-- 처음 설치하거나 `.env`, PostgreSQL, 가상환경을 준비해야 하면 [docs/setup.html](docs/setup.html)를 먼저 본다.
-- EC2 접속, 배포, 운영 서버 기준은 [docs/operations.html](docs/operations.html)를 본다.
-- 명령어만 빠르게 찾고 싶으면 [docs/quick-commands.html](docs/quick-commands.html)를 본다.
-- 전략 수식과 세부 판정 조건은 [docs/strategy-formulas.html](docs/strategy-formulas.html)를 본다.
+- 처음 설치하거나 `.env`, PostgreSQL, 가상환경을 준비해야 하면 [docs/setup.md](docs/setup.md)를 먼저 본다.
+- EC2 접속, 배포, 운영 서버 기준은 [docs/operations.md](docs/operations.md)를 본다.
+- 명령어만 빠르게 찾고 싶으면 [docs/quick-commands.md](docs/quick-commands.md)를 본다.
+- 전략 수식과 세부 판정 조건은 [docs/strategy-formulas.md](docs/strategy-formulas.md)를 본다.
 
 ## 초보 운영자 빠른 시작
 
@@ -129,7 +129,7 @@ PYTHON_BIN=.venv/bin/python ./run.sh
 
 ## 위험 명령
 
-아래 명령들은 운영 상태를 크게 바꿀 수 있으므로 실행 전에 [docs/operations.html](docs/operations.html)와 [docs/quick-commands.html](docs/quick-commands.html)의 해당 절차를 먼저 확인한다.
+아래 명령들은 운영 상태를 크게 바꿀 수 있으므로 실행 전에 [docs/operations.md](docs/operations.md)와 [docs/quick-commands.md](docs/quick-commands.md)의 해당 절차를 먼저 확인한다.
 
 ### 라이브 리셋
 
@@ -153,7 +153,7 @@ PYTHON_BIN=.venv/bin/python ./run.sh
 .venv/bin/python main.py reset-stop-loss
 ```
 
-L1 손절 이후 매수 차단을 해제할 때 사용한다. L2 24시간 잠금을 강제로 해제해야 하는 상황은 `--force`가 필요하므로 [docs/operations.html](docs/operations.html#stoploss)를 먼저 확인한다.
+L1 손절 이후 매수 차단을 해제할 때 사용한다. L2 24시간 잠금을 강제로 해제해야 하는 상황은 `--force`가 필요하므로 [docs/operations.md](docs/operations.md#stoploss)를 먼저 확인한다.
 
 ## 문제가 생기면 먼저 볼 것
 
@@ -220,7 +220,7 @@ L1 손절 이후 매수 차단을 해제할 때 사용한다. L2 24시간 잠금
 - BUY 체결이 확정되면 해당 슬롯의 TP 지정가 SELL 주문을 즉시 제출하고, 이미 열린 SELL pending 주문이 있으면 같은 슬롯에 중복 매도를 만들지 않는다.
 - 매도 기준은 저장된 `sell_price` 하나로 고정되지 않고, 보유 기간에 따라 압축되는 `effective_sell_price`를 사용할 수 있다.
 
-수학적 판정 조건과 계산식은 [docs/strategy-formulas.html](docs/strategy-formulas.html)에 별도로 정리했다.
+수학적 판정 조건과 계산식은 [docs/strategy-formulas.md](docs/strategy-formulas.md)에 별도로 정리했다.
 
 > **쉽게 말하면**: "가격이 닿았다고 무조건 사지 않는다" 가 핵심. 세 가지 필터가 더 붙어 있다 —  
 > ① **활성 윈도우**: 현재가에서 너무 멀리 떨어진 슬롯은 스킵 (극단에 쌓지 않음)  
@@ -239,7 +239,7 @@ L1 손절 이후 매수 차단을 해제할 때 사용한다. L2 24시간 잠금
 - 보유 슬롯은 가능하면 항상 대응하는 TP SELL pending 주문을 하나씩 갖는 구조를 기본으로 한다.
 
 ## 매수 로직
-빈 슬롯은 직전 평가 가격에서 현재가로 내려오며 매수선을 하락 교차했을 때 매수 후보가 된다. 첫 가격 스냅샷에서는 신규 매수를 만들지 않고, 이후 전략 평가 사이클부터 하락 교차한 empty 슬롯만 매수 후보가 된다. 정확한 불등식은 [Strategy Formulas](docs/strategy-formulas.html#buy-cross)에 정리되어 있다.
+빈 슬롯은 직전 평가 가격에서 현재가로 내려오며 매수선을 하락 교차했을 때 매수 후보가 된다. 첫 가격 스냅샷에서는 신규 매수를 만들지 않고, 이후 전략 평가 사이클부터 하락 교차한 empty 슬롯만 매수 후보가 된다. 정확한 불등식은 [Strategy Formulas](docs/strategy-formulas.md#buy-cross)에 정리되어 있다.
 
 > **쉽게 말하면**: 단순히 "현재가 < 매수가" 가 아니라 **"방금 그 매수가 선을 가로지르며 내려왔다"** 를 요구한다. 예) 매수가 1억인 슬롯 — 직전 가격 1억 50만, 지금 9,999만 → 라인을 지나쳤으니 매수 후보 ✅. 직전 가격도 이미 9,500만이었다면 이미 아래라 후보 ❌.
 
@@ -251,7 +251,7 @@ L1 손절 이후 매수 차단을 해제할 때 사용한다. L2 24시간 잠금
 
 > **쉽게 말하면**: 현재가 근처 슬롯들만 매수 대상. 멀리 있는 슬롯은 그 가격에 진짜 도달한 뒤에 다뤄진다 (먼 곳으로 미리 채우지 않는다).
 
-inventory-target gate 도 함께 적용된다. 현재 보유 재고 원가가 현재 밴드 위치에서 허용되는 목표 재고 비율보다 낮을 때만 신규 매수를 허용한다. `q_current`, `z`, `q_target` 계산식과 통과 조건은 [Strategy Formulas](docs/strategy-formulas.html#inventory-gate)에 정리되어 있다.
+inventory-target gate 도 함께 적용된다. 현재 보유 재고 원가가 현재 밴드 위치에서 허용되는 목표 재고 비율보다 낮을 때만 신규 매수를 허용한다. `q_current`, `z`, `q_target` 계산식과 통과 조건은 [Strategy Formulas](docs/strategy-formulas.md#inventory-gate)에 정리되어 있다.
 
 > **쉽게 말하면**: 가격이 바닥 쪽이면 공격적으로 더 사고, 천장 쪽이면 수비적으로 덜 산다. 같은 가격에 매수 라인이 닿아도 이미 많이 실렸으면 쉰다.
 
@@ -267,7 +267,7 @@ inventory-target gate 도 함께 적용된다. 현재 보유 재고 원가가 �
 - 직전 가격에서 현재가로 올라오며 정확히 `1`개 empty 슬롯의 매수선을 상향 교차할 때만 후보가 된다
 - 업비트 `ord_type=price` 시장가 예산매수를 쓴다
 - `UPWARD_BUY_ENABLED=True` 일 때 켜지고, 기본값은 `ON` 이다
-- 정확한 판정식은 [Strategy Formulas](docs/strategy-formulas.html#upward-reentry)에 정리되어 있다.
+- 정확한 판정식은 [Strategy Formulas](docs/strategy-formulas.md#upward-reentry)에 정리되어 있다.
 
 기본 경로는 이 기능을 켜 둔 상승 재진입 경로다.
 
@@ -290,7 +290,7 @@ BUY 체결이 확인되면 해당 슬롯의 `effective_sell_price` 기준 지정
 
 `effective_sell_price` 기본값은 저장된 `sell_price`지만, `k` 기반 holding 슬롯은 `filled_at` 경과 시간에 따라 더 낮아질 수 있다.
 
-Age TP 압축 규칙과 `effective_sell_price` 계산식은 [Strategy Formulas](docs/strategy-formulas.html#age-tp)에 정리되어 있다.
+Age TP 압축 규칙과 `effective_sell_price` 계산식은 [Strategy Formulas](docs/strategy-formulas.md#age-tp)에 정리되어 있다.
 
 > **쉽게 말하면**: `k` 는 고정 퍼센트가 아니라 그리드 로그 간격 기준의 TP 폭이다. 그 가격에 도달하지 못하고 오래 들고 있으면 점점 낮은 TP 폭을 허용하되, `k_floor` 밑으로는 내리지 않는다. "안 팔리고 쥐고만 있지 말자" 는 취지다.
 
@@ -381,9 +381,9 @@ rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단
 - `UPBIT_WS_CANDLE_ENABLED`, `UPBIT_WS_ASSET_ENABLED`, `UPBIT_WS_ORDER_ENABLED`: 캔들/자산/주문 상태 WebSocket 캐시 사용 여부를 제어한다. 주문 생성과 취소는 계속 REST만 사용한다. `UPBIT_WS_ORDER_ENABLED=true` 여도 주문 상태의 terminal 판정은 반드시 `GET /v1/order` REST 재조회 기준이며, WS myOrder 캐시는 관측/힌트 용도다.
 
 ## 참고 문서
-- [docs/setup.html](docs/setup.html)
-- [docs/operations.html](docs/operations.html)
-- [docs/quick-commands.html](docs/quick-commands.html)
-- [docs/mobile-api.html](docs/mobile-api.html)
-- [docs/strategy-formulas.html](docs/strategy-formulas.html)
-- [docs/UPBIT_API_REFERENCE.html](docs/UPBIT_API_REFERENCE.html)
+- [docs/setup.md](docs/setup.md)
+- [docs/operations.md](docs/operations.md)
+- [docs/quick-commands.md](docs/quick-commands.md)
+- [docs/mobile-api.md](docs/mobile-api.md)
+- [docs/strategy-formulas.md](docs/strategy-formulas.md)
+- [docs/UPBIT_API_REFERENCE.md](docs/UPBIT_API_REFERENCE.md)
