@@ -39,7 +39,25 @@ warnings.filterwarnings(
 )
 
 DEFAULT_LOOKBACK_DAYS = 120
-QTY_TOLERANCE = Decimal("0.00000001")
+
+
+def _compile_slot_pattern(bot_key: str):
+    import re
+    return re.compile(rf'^{re.escape(bot_key)}-(buy|sell)-(\d+)-')
+
+
+def _compile_reset_pattern(bot_key: str):
+    import re
+    return re.compile(rf'^{re.escape(bot_key)}-reset-sell-')
+
+
+def _extract_slot_with_key(identifier: str | None, pattern) -> int | None:
+    if not identifier:
+        return None
+    m = pattern.match(identifier)
+    if not m:
+        return None
+    return int(m.group(2))
 
 
 @dataclass(frozen=True)
@@ -79,6 +97,7 @@ def fetch_open_orders(api_key: str, api_secret: str, market: str) -> list[dict]:
 def match_open_sells_to_buy_lots(
     open_orders: list[dict],
     queues_by_slot: dict[int, list[dict]],
+    slot_pattern,
 ) -> dict[str, Decimal | None]:
     """Return mapping from order_uuid -> buy_unit_cost (or None if unmatched)."""
     result: dict[str, Decimal | None] = {}
@@ -86,7 +105,7 @@ def match_open_sells_to_buy_lots(
         uid = order.get("uuid", "")
         if not uid:
             continue
-        slot = pnl.extract_slot_index(order.get("identifier"))
+        slot = _extract_slot_with_key(order.get("identifier"), slot_pattern)
         if slot is None:
             result[uid] = None
             continue
@@ -102,6 +121,7 @@ def build_open_sell_rows(
     open_orders: list[dict],
     buy_cost_map: dict[str, Decimal | None],
     current_price: Decimal,
+    slot_pattern,
 ) -> list[OpenSellRow]:
     """Convert raw orders + matched costs into display rows."""
     rows: list[OpenSellRow] = []
@@ -119,7 +139,7 @@ def build_open_sell_rows(
             unrealized = (current_price - buy_cost) * qty
 
         gap = sell_limit - current_price
-        slot = pnl.extract_slot_index(order.get("identifier"))
+        slot = _extract_slot_with_key(order.get("identifier"), slot_pattern)
 
         rows.append(OpenSellRow(
             slot_index=slot,
@@ -140,21 +160,36 @@ def fetch_remaining_buy_queues(
     market: str,
     lookback_days: int,
     reset_sell_uuids: set[str],
+    bot_key: str,
+    slot_pattern,
 ) -> dict[int, list[dict]]:
     """Fetch closed orders, run FIFO matching, return queues_by_slot."""
     now_kst = datetime.now(pnl.KST)
     start_dt = now_kst - timedelta(days=lookback_days)
 
     original_get = pnl._get
+    original_slot_pattern = pnl.SLOT_PATTERN
+    original_reset_pattern = pnl.RESET_SELL_PATTERN
     pnl._get = get_with_retry
+    pnl.SLOT_PATTERN = slot_pattern
+    pnl.RESET_SELL_PATTERN = _compile_reset_pattern(bot_key)
     try:
         raw_orders = pnl.fetch_closed_orders(api_key, api_secret, market, start_dt, now_kst)
         valid_orders = _prepare_valid_orders(api_key, api_secret, raw_orders)
+        sorted_orders = sorted(valid_orders, key=lambda o: (o["_time_key"], o["uuid"]))
+        (
+            _realized_lines,
+            _unmatched_lines,
+            _unparseable_buys,
+            _unparseable_sells,
+            queues_by_slot,
+            _reset_residuals,
+        ) = pnl.run_fifo(sorted_orders, reset_sell_uuids)
     finally:
         pnl._get = original_get
+        pnl.SLOT_PATTERN = original_slot_pattern
+        pnl.RESET_SELL_PATTERN = original_reset_pattern
 
-    sorted_orders = sorted(valid_orders, key=lambda o: (o["_time_key"], o["uuid"]))
-    queues_by_slot, *_ = pnl.run_fifo(sorted_orders, reset_sell_uuids)
     return queues_by_slot
 
 
@@ -256,6 +291,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--bot-key",
+        default=None,
+        help=(
+            "identifier 에서 사용하는 bot key prefix. "
+            f"기본값은 cfg.STATE_BOT_KEY ({cfg.STATE_BOT_KEY})"
+        ),
+    )
+    parser.add_argument(
         "--reset-sell-uuid",
         action="append",
         default=[],
@@ -276,6 +319,9 @@ def main(argv: list[str] | None = None) -> int:
         print("오류: UPBIT_ACCESS_KEY / UPBIT_SECRET_KEY 환경변수를 먼저 설정하세요.", file=sys.stderr)
         return 1
 
+    bot_key = args.bot_key or cfg.STATE_BOT_KEY
+    slot_pattern = _compile_slot_pattern(bot_key)
+
     try:
         current_price_data = requests.get(
             f"{pnl.BASE_URL}/v1/ticker",
@@ -295,10 +341,12 @@ def main(argv: list[str] | None = None) -> int:
             market=args.market,
             lookback_days=args.lookback_days,
             reset_sell_uuids=set(args.reset_sell_uuid),
+            bot_key=bot_key,
+            slot_pattern=slot_pattern,
         )
 
-        buy_cost_map = match_open_sells_to_buy_lots(open_orders, queues_by_slot)
-        rows = build_open_sell_rows(open_orders, buy_cost_map, current_price)
+        buy_cost_map = match_open_sells_to_buy_lots(open_orders, queues_by_slot, slot_pattern)
+        rows = build_open_sell_rows(open_orders, buy_cost_map, current_price, slot_pattern)
 
     except Exception as exc:
         print(f"오류: 매도 대기 주문 조회 실패: {exc}", file=sys.stderr)
