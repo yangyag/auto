@@ -431,6 +431,7 @@
         <li><a href="#logs">로그 보기</a></li>
         <li><a href="#balance">업비트 잔고</a></li>
         <li><a href="#actual-assets">실제 전체 자산</a></li>
+        <li><a href="#open-sell-monitor">매도 대기 주문</a></li>
         <li class="section-label">그리드 / 상태</li>
         <li><a href="#apply-grid">grid.properties 반영</a></li>
         <li><a href="#grid-state">그리드 슬롯 상태</a></li>
@@ -661,6 +662,61 @@ ps -eo pid,args | grep '[p]ython.*/home/yangyag/auto/main.py'</code></pre>
       <div class="callout info">
         <div class="callout-title">📌 출력 해석</div>
         <p><code>KRW + 봇 슬롯별 잔여 매수원가</code> 는 매수 당시 슬롯 장부 기준 합계이고, <code>KRW + 현재 평가액</code> 은 현재가 기준 평가 합계다. <code>Upbit 평균매수가 기준 원가</code> 는 계정 전체 평균이라 봇 장부 원가와 다를 수 있다.</p>
+      </div>
+    </section>
+
+    <!-- ============ OPEN SELL MONITOR ============ -->
+    <section class="section" id="open-sell-monitor">
+      <h2>매도 대기 주문 실시간 현황</h2>
+      <p>현재 걸려있는 모든 미체결 매도 주문을 봇 슬롯별 실제 매수원가와 매칭해, 현재가 기준 미실현 손익을 한눈에 보여주는 read-only 점검 명령이다.</p>
+      <p>업비트는 평균매수가 하나만 보여주지만, 이 스크립트는 각 슬롯의 실제 매수원가를 기준으로 한다.</p>
+
+      <div class="cmd-grid">
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">monitor</span>기본 실행</div>
+          <div class="cmd-tile-desc">현재 열려있는 모든 매도 대기 주문과 슬롯별 손익을 출력한다.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/upbit_open_sell_monitor.py</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">bot-key</span>다른 봇 키 지정</div>
+          <div class="cmd-tile-desc">로컬 STATE_BOT_KEY가 거래소 identifier prefix와 다를 때.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/upbit_open_sell_monitor.py --bot-key krw-btc-live</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">lookback</span>조회 기간 늘리기</div>
+          <div class="cmd-tile-desc">매수원가 매칭이 안 될 때 lookback을 늘려 재확인.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/upbit_open_sell_monitor.py --lookback-days 180</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <h3>출력 컬럼 설명</h3>
+      <table>
+        <thead><tr><th>컬럼</th><th>의미</th></tr></thead>
+        <tbody>
+          <tr><td><code>slot</code></td><td>그리드 슬롯 번호. <code>-</code> 이면 봇 identifier가 없는 수동 주문</td></tr>
+          <tr><td><code>qty(BTC)</code></td><td>매도 대기 중인 BTC 수량</td></tr>
+          <tr><td><code>매수원가</code></td><td>해당 슬롯의 실제 BUY 체결 원가 (봇 기준). <code>-</code> 이면 매칭 실패</td></tr>
+          <tr><td><code>매도지정가</code></td><td>현재 걸려있는 SELL 지정가</td></tr>
+          <tr><td><code>현재가</code></td><td>업비트 현재 시세</td></tr>
+          <tr><td><code>미실현손익</code></td><td>(현재가 - 매수원가) × 수량. 양수=수익권, 음수=손실권</td></tr>
+          <tr><td><code>도달까지</code></td><td>매도지정가 - 현재가. 체결까지 얼마나 남았는지</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout info">
+        <div class="callout-title">📌 진단 정보</div>
+        <p>하단 진단 줄에서 <code>matched</code>/<code>unmatched</code> 비율을 확인한다. <code>unmatched</code>가 있으면 수동 주문이거나 <code>--lookback-days</code>가 부족한 것이다.</p>
+      </div>
+
+      <div class="callout warn">
+        <div class="callout-title">⚠ 업비트 평균매수가와의 차이</div>
+        <p>업비트 <code>avg_buy_price</code>는 계정 전체 평균이므로, 낮은 슬롯이 먼저 팔리고 높은 슬롯이 남으면 실제 각 슬롯의 매수원가와 다르게 보인다. 이 스크립트는 그 착시를 제거하고 슬롯별 실제 원가로 보여준다.</p>
       </div>
     </section>
 
