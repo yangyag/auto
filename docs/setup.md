@@ -1,208 +1,125 @@
 # 설치 / 초기 설정 가이드
 
-git clone 한 직후 PostgreSQL 기반으로 초기 실행 가능한 상태까지 만드는 12단계 절차
+[auto](file:///C:/dev/mobileAuto/auto) 자동매매 봇을 `git clone`한 직후 PostgreSQL 기반으로 초기 실행 가능한 상태까지 만드는 12단계 절차입니다.
 
-🐍 Python 3.11+
-🗄 PostgreSQL
-📈 KRW-BTC
-⚙ grid.properties
-🚀 ./run.sh
+---
 
-🐍Python 가상환경
+## 📌 런타임 & 환경 요약
 
-경로
-:   .venv/
+| 항목 | Python 가상환경 (`.venv`) | 환경 설정 (`.env`) | 데이터베이스 (PostgreSQL) | 그리드 설정 & 제어 |
+| :--- | :--- | :--- | :--- | :--- |
+| **기본 경로** | `.venv/` | [.env](file:///C:/dev/mobileAuto/auto/.env) | `postgres:18` | [grid.properties](file:///C:/dev/mobileAuto/auto/grid.properties) |
+| **생성/설정** | `python3 -m venv .venv` | cp [.env_sample](file:///C:/dev/mobileAuto/auto/.env_sample) [.env](file:///C:/dev/mobileAuto/auto/.env) | 스키마: `auto_trading` (또는 `PGSCHEMA`) | [apply_grid_properties_to_postgres.py](file:///C:/dev/mobileAuto/auto/scripts/apply_grid_properties_to_postgres.py) |
+| **대체/참조** | `uv venv --clear .venv` | [settings.py](file:///C:/dev/mobileAuto/auto/app/config/settings.py) | 마이그: [db/migrations/](file:///C:/dev/mobileAuto/auto/db/migrations) | [run.sh](file:///C:/dev/mobileAuto/auto/run.sh) / [stop.sh](file:///C:/dev/mobileAuto/auto/stop.sh) |
+| **실행/주입** | `.venv/bin/python` | EC2: `/home/ubuntu/auto/.env` | 키: `STATE_BOT_KEY` | [tail-latest-log.sh](file:///C:/dev/mobileAuto/auto/tail-latest-log.sh) |
 
-생성
-:   python3 -m venv .venv
-
-대체
-:   uv venv --clear .venv
-
-실행
-:   .venv/bin/python
-
-🔑환경 설정
-
-샘플
-:   .env\_sample
-
-대상
-:   .env
-
-읽기
-:   app/config/settings.py
-
-EC2
-:   /home/ubuntu/auto/.env
-
-🗄데이터베이스
-
-엔진
-:   postgres:18
-
-스키마
-:   auto\_trading → PGSCHEMA
-
-마이그
-:   db/migrations/\*.sql
-
-상태키
-:   STATE\_BOT\_KEY
-
-⚙그리드 / 실행
-
-설정
-:   grid.properties
-
-반영
-:   scripts/apply\_grid\_properties\_to\_postgres.py
-
-시작
-:   ./run.sh
-
-종료
-:   ./stop.sh
+---
 
 ## 문서 개요
 
-이 문서는 이 저장소를 **git clone 한 직후** 처음 설치하고, PostgreSQL 기반으로 초기 실행 가능한 상태까지 만드는 절차를 정리한 가이드다.
+이 문서는 이 저장소를 **git clone 한 직후** 처음 설치하고, PostgreSQL 기반으로 초기 실행 가능한 상태까지 만드는 절차를 정리한 가이드입니다.
 
-### 문서 역할
-
-- 프로그램 로직 설명은 `README.md`
-- EC2, git, 배포, 운영 인프라는 `docs/operations.md`
+### 문서 역할 분담
+- **프로그램 로직 및 전략 설명**: [README.md](file:///C:/dev/mobileAuto/auto/README.md)
+- **EC2, git, 배포, 운영 인프라**: [operations.md](file:///C:/dev/mobileAuto/auto/docs/operations.md)
 
 ### 기준 운영 방식
 
 | 항목 | 값 |
-| --- | --- |
-| 거래소 | 업비트 `KRW-BTC` |
-| 상태 저장 | PostgreSQL |
-| 그리드 입력 | `grid.properties` |
-| 그리드 반영 | `scripts/apply_grid_properties_to_postgres.py` |
-| 봇 실행/종료 | `./run.sh`, `./stop.sh` |
+| :--- | :--- |
+| **거래소** | 업비트 `KRW-BTC` |
+| **상태 저장** | PostgreSQL |
+| **그리드 입력** | [grid.properties](file:///C:/dev/mobileAuto/auto/grid.properties) |
+| **그리드 반영** | [apply_grid_properties_to_postgres.py](file:///C:/dev/mobileAuto/auto/scripts/apply_grid_properties_to_postgres.py) |
+| **봇 실행/종료** | [run.sh](file:///C:/dev/mobileAuto/auto/run.sh) / [stop.sh](file:///C:/dev/mobileAuto/auto/stop.sh) |
 
-📂 저장소 폴더 구조
+> [!IMPORTANT]
+> 아래 12개 단계는 **순서대로** 진행해야 합니다. 각 단계별 필수/선택 여부를 확인하세요.
 
-루트 업무 폴더는 `app/`, `scripts/`, `db/`, `docs/`, `tests/`로 정리되어 있다.
+---
 
-운영 구현은 `app/` 아래에 있고, 기존 명령 호환을 위해 루트 `main.py`, 루트 호환 alias 모듈, `scripts/` 경로는 유지한다.
+## 1단계. 준비물
 
-⚠ 진행 전 확인
+### 필수 항목
+- **Git**
+- **Python 3.11+**
+- **PostgreSQL 접속 정보** (호스트, 포트, DB명, 사용자, 비밀번호)
+- **업비트 API 키** (Access Key, Secret Key)
+- **네트워크**: 업비트 REST/WebSocket 엔드포인트로 나가는 outbound 연결 허용
 
-아래 12개 단계는 **순서대로** 진행한다. 각 단계 상단의 필수 / 선택 태그로 건너뛸 수 있는 단계를 구분해 두었다.
+### 선택 항목
+- `uv` (가상환경 생성이 안 될 때 대비)
+- **Docker** (`postgres:18`을 로컬에 신속하게 띄우고 싶을 때)
 
-## 1. 준비물
+> [!WARNING]
+> **API 키 사전 발급**: 업비트 API 키는 미리 발급해 두어야 하며, 절대 코드, 문서, Git 커밋 등에 노출하거나 복사해 넣어서는 안 됩니다.
 
-#### 필수
+---
 
-- Git
-- Python 3.11+
-- PostgreSQL 접속 정보
-- 업비트 API 키
-- 업비트 REST/WebSocket 엔드포인트로 나가는 네트워크 연결
+## 2단계. 저장소 받기 `[필수]`
 
-#### 선택
-
-- `uv` (`python3 -m venv .venv` 가 실패할 때 사용)
-- Docker (`postgres:18` 로 로컬 PostgreSQL을 빠르게 띄우고 싶을 때)
-
-🔐 API 키 사전 발급
-
-업비트 API 키는 미리 발급받아 두자. 키는 `.env`에 들어가며, 절대 코드/문서/커밋에 복제하지 않는다.
-
-2
-
-저장소 받기
-
-필수
-
-SSH 키가 등록되어 있으면:
-
-bash
-
-```
+SSH 키가 등록되어 있는 경우:
+```bash
 git clone git@github.com:yangyag/auto.git
 cd auto
 ```
 
-HTTPS를 쓰면:
-
-bash
-
-```
+HTTPS를 사용하는 경우:
+```bash
 git clone https://github.com/yangyag/auto.git
 cd auto
 ```
 
-3
+---
 
-가상환경 생성
+## 3단계. 가상환경 생성 `[필수]`
 
-필수
-
-기본 경로:
-
-bash
-
-```
+기본 Python venv 생성:
+```bash
 python3 -m venv .venv
 ```
 
-`ensurepip` 오류로 실패하면:
-
-bash
-
-```
+만약 `ensurepip` 오류 등으로 생성이 실패할 경우, `uv`를 사용해 생성할 수 있습니다:
+```bash
 ~/.local/bin/uv venv --clear .venv
 ~/.local/bin/uv pip install --python .venv/bin/python pip
 ```
 
-💡 왜 uv?
+> [!TIP]
+> 우분투 등의 환경에서 시스템 venv 생성이 안 될 때는 `uv`를 사용하면 별도의 설정 없이 가상환경을 깨끗하게 구축할 수 있습니다.
 
-일부 환경에서는 시스템 `python3 -m venv .venv` 가 `ensurepip` 부재로 실패한다. 이 때 `uv`로 가상환경을 만들면 우회된다.
+---
 
-4
+## 4단계. 의존성 설치 `[필수]`
 
-의존성 설치
-
-필수
-
-bash
-
-```
+생성된 가상환경에 필요한 패키지들을 설치합니다.
+```bash
 .venv/bin/python -m pip install -r requirements.txt
 ```
 
-5
+---
 
-`.env` 작성
+## 5단계. `.env` 작성 `[필수]`
 
-필수
-
-샘플 파일을 복사한 뒤 실제 값으로 채운다.
-
-bash
-
-```
+샘플 설정 파일을 복사하여 실제 환경 설정 값을 반영한 [.env](file:///C:/dev/mobileAuto/auto/.env) 파일을 생성합니다.
+```bash
 cp .env_sample .env
 ```
 
-최소 예시:
-
-env
-
-```
+**최소 환경 변수 설정 예시**:
+```env
 UPBIT_ACCESS_KEY=YOUR_UPBIT_ACCESS_KEY
 UPBIT_SECRET_KEY=YOUR_UPBIT_SECRET_KEY
 
+# WebSocket 설정
 UPBIT_WS_PUBLIC_ENABLED=true
 UPBIT_WS_EVENT_LOOP_ENABLED=true
 UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS=3
 
+# 봇 식별 고유 키
 STATE_BOT_KEY=krw-btc-live
 
+# PostgreSQL 연결 정보
 PGHOST=127.0.0.1
 PGPORT=5432
 PGDATABASE=yangyag
@@ -211,29 +128,19 @@ PGPASSWORD=YOUR_DB_PASSWORD
 PGSCHEMA=auto_trading
 ```
 
-⚠ 주의사항
+> [!WARNING]
+> - [settings.py](file:///C:/dev/mobileAuto/auto/app/config/settings.py)는 프로젝트 루트의 [.env](file:///C:/dev/mobileAuto/auto/.env)를 기준으로 설정을 읽습니다.
+> - 실시간 가격은 Public Ticker WebSocket 이벤트를 기본으로 사용하며, WebSocket 장애나 이벤트가 들어오지 않을 경우 5초 주기 REST 폴링 방식으로 자동 Fallback 됩니다.
+> - EC2 운영 서버 기준 자동매매 봇의 `.env` 경로는 `/home/ubuntu/auto/.env` 입니다.
 
-- `app/config/settings.py`는 프로젝트 루트 `.env`를 읽는다.
-- 현재가 루프는 기본적으로 public ticker WebSocket 이벤트 기반으로 동작한다.
-- WebSocket 장애, 이벤트 없음, 의존성 누락 시 기존 5초 REST polling 으로 fallback 한다.
-- 같은 서버에 `/home/ubuntu/llm.env` 가 있어도 이 저장소 설정 파일이 아니다.
-- EC2 운영 서버 기준 자동매매 `.env` 경로는 `/home/ubuntu/auto/.env` 다.
+---
 
-6
+## 6단계. PostgreSQL 준비 `[선택]`
 
-PostgreSQL 준비
+이미 사용할 수 있는 PostgreSQL 서버가 있다면 이 단계를 건너뛰고 [.env](file:///C:/dev/mobileAuto/auto/.env) 파일의 연결 정보만 수정하면 됩니다.
 
-선택
-
-📌 이미 PostgreSQL이 있으면
-
-이 단계는 건너뛰고 `.env`만 맞춘다.
-
-로컬 Docker 예시:
-
-bash
-
-```
+만약 로컬 환경에서 Docker를 사용하여 빠르게 DB를 구성하고 싶다면 아래 명령어를 실행합니다.
+```bash
 docker run -d \
   --name auto-postgres \
   -e POSTGRES_DB=yangyag \
@@ -244,22 +151,16 @@ docker run -d \
   postgres:18
 ```
 
-7
+---
 
-스키마 적용
+## 7단계. 스키마 적용 `[필수]`
 
-필수
+데이터베이스 접속 상태를 확인하고 필요한 테이블을 마이그레이션합니다. 프로젝트 루트에서 아래 파이썬 인라인 스크립트를 실행합니다.
 
-프로젝트 루트에서:
-
-bash
-
-```
+```bash
 .venv/bin/python - <<'PY'
 from pathlib import Path
-
 import psycopg
-
 import app.config.settings as cfg
 
 schema = cfg.PGSCHEMA
@@ -277,25 +178,21 @@ with psycopg.connect(
         for sql_path in sorted(migrations_dir.glob("*.sql")):
             sql_text = sql_path.read_text(encoding="utf-8").replace("auto_trading", schema)
             cur.execute(sql_text)
-            print(f"applied: {sql_path.name} -> {schema}")
+            print(f"Applied: {sql_path.name} -> {schema}")
 PY
 ```
 
-📌 마이그레이션 흐름
+> [!NOTE]
+> [db/migrations/](file:///C:/dev/mobileAuto/auto/db/migrations) 경로의 SQL 파일 내 `auto_trading` 스키마 이름이 [.env](file:///C:/dev/mobileAuto/auto/.env)에 명시된 `PGSCHEMA` 값으로 치환되어 순차 적용됩니다.
 
-`db/migrations/*.sql` 안의 `auto_trading` 스키마 이름이 `PGSCHEMA` 값으로 치환되어 순서대로 적용된다.
+---
 
-8
+## 8단계. `grid.properties` 확인 `[필수]`
 
-`grid.properties` 확인
+봇이 구동 시 로드할 그리드 설정 파일을 확인하고 조정합니다.
 
-필수
-
-기본 예시:
-
-properties
-
-```
+**기본 구성 예시 ([grid.properties](file:///C:/dev/mobileAuto/auto/grid.properties))**:
+```properties
 MIN_BUY_PRICE=98000000
 MAX_BUY_PRICE=121000000
 TOTAL_BUDGET_KRW=2400000
@@ -305,100 +202,75 @@ TP_K_BASE=9.0
 TP_K_FLOOR=7.0
 ```
 
-⚠ 주의사항
+> [!WARNING]
+> - `MIN_BUY_PRICE`와 `MAX_BUY_PRICE`는 업비트 KRW 호가 단위에 일치해야 합니다.
+> - 그리드 슬롯 계산을 위해 `GRID_COUNT` 혹은 `GRID_STEP_PCT` 중 **반드시 하나만** 명시해야 합니다.
+> - `TOTAL_BUDGET_KRW`는 가동 예산이며, 하단 가중치 배분 규칙에 따라 상/중/하단 슬롯에 비례 배분됩니다.
+> - [settings.py](file:///C:/dev/mobileAuto/auto/app/config/settings.py)의 `GRID_TP_K_BASE`와 [grid.properties](file:///C:/dev/mobileAuto/auto/grid.properties)의 `TP_K_BASE` 설정 값은 일치시켜 두는 것이 권장됩니다.
 
-- `MIN_BUY_PRICE`, `MAX_BUY_PRICE`는 업비트 KRW 호가 단위에 맞아야 한다.
-- `grid.properties`는 `GRID_COUNT` 또는 `GRID_STEP_PCT` 중 정확히 하나만 둔다.
-- `main.py init-grid`는 슬롯 개수 기반이다.
-- `TOTAL_BUDGET_KRW` 는 그리드 전체에 배정할 총예산이며, 시스템이 가중치 비율로 상단/중단/하단 가중치로 배분한다.
-- `app/config/settings.py`의 `GRID_TP_K_BASE` 와 `grid.properties`의 `TP_K_BASE` 는 맞춰 두는 것이 안전하다.
+---
 
-9
+## 9단계. 비파괴 검증 `[필수]`
 
-비파괴 검증
-
-필수
-
-bash
-
-```
+의존성 패키지와 테스트 스위트가 정상 동작하는지 확인합니다.
+```bash
 .venv/bin/python -c "import main"
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-✅ 통과 기준
+> [!NOTE]
+> `import main` 과정에서 에러가 없고 모든 단위 테스트(unittest)가 통과하면 런타임 환경과 DB 스키마가 정상 구성된 것입니다.
 
-`import main`이 오류 없이 끝나고 unittest 가 모두 통과하면 의존성/스키마/환경 설정이 모두 잘 들어간 것이다.
+---
 
-10
+## 10단계. 초기 그리드 반영 `[필수]`
 
-초기 그리드 반영
-
-필수
-
-bash
-
-```
+설정된 [grid.properties](file:///C:/dev/mobileAuto/auto/grid.properties) 내용을 데이터베이스 그리드 테이블에 강제 주입합니다.
+```bash
 .venv/bin/python scripts/apply_grid_properties_to_postgres.py --force
 ```
 
-상태 확인:
-
-bash
-
-```
+현재 저장된 그리드 상태와 업비트 잔고 확인:
+```bash
 .venv/bin/python scripts/show_grid_state.py
 .venv/bin/python main.py balance
 ```
 
-⚠ --force 의 의미
+> [!CAUTION]
+> `--force` 플래그는 동일한 `STATE_BOT_KEY`를 가진 기존 그리드 상태를 **완전히 초기화하고 덮어씁니다**. 봇이 실제 운영 중일 때는 절대 단독 실행해선 안 됩니다.
 
-`scripts/apply_grid_properties_to_postgres.py --force` 는 같은 `STATE_BOT_KEY` 상태를 **전체 덮어쓴다**. 운영 중 봇이 돌고 있을 때는 사용하지 않는다.
+---
 
-11
+## 11단계. 실행 `[필수]`
 
-실행
-
-필수
-
-bash
-
-```
+봇을 백그라운드로 구동하고 실시간 로그를 확인합니다.
+```bash
 PYTHON_BIN=.venv/bin/python ./run.sh
 ./tail-latest-log.sh
 ```
 
-종료:
-
-bash
-
-```
+가동 중인 백그라운드 봇 프로세스 종료:
+```bash
 ./stop.sh
 ```
 
-12
+---
 
-운영 체크
+## 12단계. 운영 체크 `[필수]`
 
-필수
+- **주문 실행**: 실제 주문이 나가는 메인 루프는 [main.py](file:///C:/dev/mobileAuto/auto/main.py) 혹은 [run.sh](file:///C:/dev/mobileAuto/auto/run.sh)를 통해서만 가동됩니다.
+- **실거래 가동 검증**: 실거래 실행 직전 업비트 API 키와 DB 테이블 정합성을 다시 한 번 점검하세요.
+- **조회 명령어**: [show_grid_state.py](file:///C:/dev/mobileAuto/auto/scripts/show_grid_state.py)는 DB를 조회만 하는 안전한 Read-Only 스크립트입니다.
+- **운영 중 덮어쓰기 주의**: [apply_grid_properties_to_postgres.py](file:///C:/dev/mobileAuto/auto/scripts/apply_grid_properties_to_postgres.py)의 `--force` 옵션은 가동 중인 봇의 매수 기록을 유실시킬 수 있습니다.
 
-- 실제 주문 루프는 `.venv/bin/python main.py` 또는 `./run.sh` 경로에서만 돈다.
-- 실거래 전에는 업비트 API 키와 PostgreSQL 접속 정보가 맞는지 먼저 확인한다.
-- `scripts/show_grid_state.py`는 읽기 전용이다.
-- `scripts/apply_grid_properties_to_postgres.py --force` 는 같은 `STATE_BOT_KEY` 상태를 전체 덮어쓴다.
-- 운영 서버 배포는 아래 순서가 기본이다.
-
-#### 운영 서버 배포 순서
-
+### 🔄 운영 서버 표준 배포 절차
 1. `git fetch`
-2. `./stop.sh`
-3. `git pull --ff-only origin main`
-4. `PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh`
+2. `./stop.sh` (봇 정지)
+3. `git pull --ff-only origin main` (코드 업데이트)
+4. `PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh` (봇 재부팅)
+5. `./tail-latest-log.sh` (정상 가동 로그 확인)
 
-⚠ 실거래 주의
+---
 
-실거래 주문이 발생할 수 있는 루프 실행은 **명시적으로 필요할 때만** 한다. 키/DB/그리드를 모두 점검한 뒤 실행한다.
-
-📚 다음 단계
-
-설치가 끝났으면 운영 절차와 손절 가이드는 <operations.html> 에서 이어 보면 된다.
+📚 **다음 단계**:
+가본 설치와 동작 점검이 끝났다면 [operations.md](file:///C:/dev/mobileAuto/auto/docs/operations.md) 문서를 통해 실 운영 관리 및 손절(Stop-loss) 가이드를 이어서 살펴보세요.

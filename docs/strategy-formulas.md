@@ -1,629 +1,293 @@
 # Strategy Formulas
 
-auto 자동매매 봇의 전략 동작에 쓰이는 수식과 판정 조건을 코드 기준으로 정리
+[auto](file:///C:/dev/mobileAuto/auto) 자동매매 봇의 전략 동작에 사용되는 수식과 판정 조건을 실제 파이썬 코드 구현을 기준으로 정리한 기술 문서입니다.
 
-Σ 16 섹션
-📐 로그 간격 그리드
-📦 KRW · BTC 단위
-🐍 app/strategy + app/core
+---
 
-𝓥핵심 변수
+## 📌 전략 인프라 요약
 
-P
-:   현재 평가 가격
+### 📐 핵심 전략 모듈
+- **전략 평가 엔진**: [grid_strategy.py](file:///C:/dev/mobileAuto/auto/app/strategy/grid_strategy.py)
+- **그리드 구조 연산**: [grid.py](file:///C:/dev/mobileAuto/auto/app/core/grid.py)
+- **그리드 속성 파싱**: [grid_properties.py](file:///C:/dev/mobileAuto/auto/app/core/grid_properties.py)
+- **이탈 가드 (Breakout Guard)**: [breakout_guard.py](file:///C:/dev/mobileAuto/auto/app/strategy/breakout_guard.py)
+- **전체 제어 진입점**: [main.py](file:///C:/dev/mobileAuto/auto/app/main.py)
 
-Bi
-:   buy\_price (KRW)
+### ⚖ 수량 및 가격 단위 규칙
+- **가격 (Price)**: 원화(KRW) 기준 (정수, 업비트 호가 단위 정규화 반영)
+- **수량 (Quantity)**: BTC 단위 (최소 소수점 8자리, Step `0.00000001` 지정)
+- **주문 금액**: 최소 원화 1원 단위
+- **호가 단위 정규화**: $F_{norm}(x)$ (업비트 가격 규칙에 맞춤)
+- **소수점 단위 내림**: $F_{step}(x, s)$ (지정 단위 $s$ 기준 내림 연산)
 
-Si
-:   sell\_price (KRW)
+---
 
-Qi
-:   planned\_qty (BTC)
+## 기호 설명 및 환경변수 매핑
 
-Hi
-:   held\_qty (BTC)
+수식에 등장하는 변수 및 봇 설정 변수의 매핑 인덱스 테이블입니다.
 
-📦사용 모듈
+| 기호 | 용도 및 의미 | 매핑된 설정 변수 / 함수 | 단위 및 비고 |
+| :--- | :--- | :--- | :---: |
+| $P$ | 현재 전략 평가 주기 시세 | — | KRW |
+| $P_{prev}$ | 직전 평가 주기 시세 | — | KRW |
+| $B_i$ | $i$번 그리드 슬롯의 매수 기준가 | `buy_price` | KRW |
+| $S_i$ | $i$번 그리드 슬롯의 매도 기준가 | `sell_price` | KRW |
+| $S_i^{eff}$ | 이익 실현(TP)이 적용된 최종 매도가 | `effective_sell_price` | KRW |
+| $Q_i$ | $i$번 슬롯의 목표 매수량 | `planned_qty` | BTC |
+| $H_i$ | $i$번 슬롯의 체결 재고량 | `held_qty` | BTC |
+| $L$ | 그리드 최하단 한계 가격 | `MIN_BUY_PRICE` | KRW |
+| $U$ | 그리드 최상단 한계 가격 | `MAX_BUY_PRICE` | KRW |
+| $N$ | 그리드 슬롯 총 개수 | `GRID_COUNT` | 정수 |
+| $I$ | 그리드 가격 구간 개수 | $I = N - 1$ | 정수 |
+| $p_{step}$ | 슬롯 간의 고정 간격 비율 (%) | `GRID_STEP_PCT` | % |
+| $k_{base}$ | 기준 이익 실현(TP) 배수 | `TP_K_BASE` | 실수 (가중치) |
+| $k_{floor}$ | 최하단 이익 실현(TP) 제한 배수 | `TP_K_FLOOR` | 실수 (가중치) |
+| $B_{total}$ | 봇 구동 가용 총예산 | `TOTAL_BUDGET_KRW` | KRW |
+| $B_{maxop}$ | 최대 가용 예산 제한값 | `MAX_OPERATING_BUDGET_KRW` | KRW |
+| $n_{below}$ | 현재가 이하 활성화할 슬롯 수 | `ACTIVE_WINDOW_BELOW_CURRENT_SLOTS` | 정수 |
+| $n_{above}$ | 현재가 위 활성화할 재진입 슬롯 수 | `ACTIVE_WINDOW_ABOVE_CURRENT_REENTRY_SLOTS` | 정수 |
+| $T_{stale}$ | 직전 시세 갱신 지연 감지 임계점 | `STALE_PREVIOUS_PRICE_THRESHOLD_SECONDS` | 초 (Seconds) |
+| $A_{min}$ | 업비트 최소 주문 가능 금액 | `MIN_KRW_ORDER_AMOUNT` | KRW (기본 5,000) |
+| $f_{upbit}$ | 업비트 거래 수수료율 | `UPBIT_FEE_RATE` | 비율 (기본 0.0005) |
+| $A_{buffer}$ | 주문 예비 수수료 버퍼 | `FEE_BUFFER_KRW` | KRW |
+| $A_{reserve}$ | 계정 최소 안전 유보금 | `MIN_BALANCE_RESERVE` | KRW |
+| $M$ | 브레이크아웃 가드 분석 캔들 개수 | `BREAKOUT_GUARD_CONSECUTIVE_CANDLES` | 정수 |
 
-전략
-:   app/strategy/grid\_strategy.py
+---
 
-그리드
-:   app/core/grid.py
+## 1. 그리드 슬롯 수 연산
 
-설정
-:   app/core/grid\_properties.py
+그리드의 가격 계단 개수($N$)를 결정하는 방식은 두 가지가 있습니다.
 
-가드
-:   app/strategy/breakout\_guard.py
+### (1) `GRID_COUNT` 값을 직접 고정 주입하는 경우
+$$N = G_{N} \tag{식 1}$$
+$$I = N - 1 \tag{식 2}$$
 
-엔트리
-:   app/main.py
+### (2) `GRID_STEP_PCT` (슬롯 간격 비율)를 지정하는 경우
+그리드 범위 내의 총 로그 변동률과 지정 간격의 로그 변동률을 비교하여 최적의 정수 구간 수 $I$를 산출합니다.
 
-⚖단위 규칙
+$$\Delta_{log} = \ln\left(\frac{U}{L}\right) \tag{식 3}$$
+$$\delta_{log} = \ln\left(1 + \frac{p_{step}}{100}\right) \tag{식 4}$$
+$$I_{raw} = \frac{\Delta_{log}}{\delta_{log}} \tag{식 5}$$
 
-가격
-:   KRW (정수, 호가 단위)
+구간 수는 정수여야 하므로 올림과 내림을 후보군으로 잡습니다:
+$$\mathcal{I}_{cand} = \{ \lfloor I_{raw} \rfloor, \lceil I_{raw} \rceil \} \tag{식 6}$$
 
-수량
-:   BTC, step 0.00000001
+각 정수 후보 $j \in \mathcal{I}_{cand}$에 대해 실제 계산되는 격자 간격과 목표 간격 간의 절대 오차 $E(j)$를 구합니다:
+$$E(j) = \left| \frac{\Delta_{log}}{j} - \delta_{log} \right| \tag{식 7}$$
 
-주문 금액
-:   step 1 KRW
+오차 $E(j)$를 최소화하는 정수를 최종 구간 수 $I$로 채택하며, 오차가 같을 경우 안전마진 확보를 위해 더 큰 값을 선택합니다. 슬롯 수 $N$은 다음과 같습니다:
+$$N = I + 1 \tag{식 8}$$
 
-정규화
-:   Fnorm(x)
+---
 
-내림
-:   Fstep(x, s)
+## 2. 매수 가격 사다리 구성
 
-🔧핵심 상수
+상단 경계($U$)에서 하단 경계($L$)로 내려가는 로그 간격 사다리를 생성합니다.
 
-kbase
-:   TP\_K\_BASE
+$$\ell = \frac{\ln(U / L)}{N - 1} \tag{식 9}$$
+$$g = e^\ell \tag{식 10}$$
+$$B_0 = U \tag{식 11}$$
+$$B_i = F_{norm}\left( \frac{U}{g^i} \right), \quad 0 < i < N - 1 \tag{식 12}$$
+$$B_{N-1} = L \tag{식 13}$$
 
-kfloor
-:   TP\_K\_FLOOR
+> [!WARNING]
+> **중복 호가 생성 예방**: 
+> 업비트 호가 정규화 함수 $F_{norm}$을 거친 후, 인접한 슬롯 가격 $B_i$와 $B_{i+1}$이 동일한 가격으로 수렴(중복)하면 그리드 생성 스크립트는 안전을 위해 실패 처리됩니다.
 
-pstep
-:   GRID\_STEP\_PCT
+---
 
-nbelow
-:   ACTIVE\_WINDOW\_BELOW…
+## 3. 이익 실현 (Take-Profit) 매도 가격 결정
 
-nabove
-:   ACTIVE\_WINDOW\_ABOVE…
+`k` 모델은 단순 고정 비율이 아닌, 그리드 슬롯 간의 로그 거리인 $\ell$을 바탕으로 하여 $k$배수 영역에 매도를 등록합니다.
 
-이 문서는 전략 동작에 쓰이는 수식과 판정 조건만 코드 기준으로 정리한다. 수식 안에는 긴 설정 키 문자열을 직접 넣지 않고, 아래 기호 표의 매핑으로 치환한다.
+$$k_{eff} = k_{base} \tag{식 14}$$
+$$S_{i, raw} = B_i \cdot e^{\ell \cdot k_{eff}} \tag{식 15}$$
+$$S_i = F_{norm}(S_{i, raw}) \tag{식 16}$$
 
-📚 기준 구현
+정상 등록 검증 조건:
+$$S_i > B_i \tag{식 17}$$
+$$k_{base} \ge k_{floor} > 0 \tag{식 18}$$
 
-- `app/strategy/grid_strategy.py`
-- `app/core/grid.py`
-- `app/core/grid_properties.py`
-- `app/strategy/breakout_guard.py`
-- `app/main.py`
+---
 
-## 기호
+## 4. 슬롯별 예산 가중치 배분
 
-수식에 등장하는 모든 기호와 매핑된 설정 키 / 함수다.
+하단으로 내려갈수록 더 큰 예산을 투입하는 **하단 가중 분배 방식**을 적용합니다. 슬롯 인덱스 $i$는 상단이 $0$, 최하단이 $N-1$입니다.
 
-| 기호 | 의미 | 설정 키 · 함수 | 단위 / 비고 |
-| --- | --- | --- | --- |
-| Pprev | 직전 전략 평가 가격 | — | KRW |
-| P | 현재 전략 평가 가격 | — | KRW |
-| Bi | i번 슬롯의 `buy_price` | — | KRW |
-| Si | i번 슬롯의 저장된 `sell_price` | — | KRW |
-| Qi | i번 슬롯의 `planned_qty` | — | BTC |
-| Hi | i번 슬롯의 `held_qty` | — | BTC |
-| L | 그리드 하단 가격 | — | KRW |
-| U | 그리드 상단 가격 | — | KRW |
-| N | 슬롯 수 | — | 정수 |
-| I | 가격 구간 수 | — | 정수, I = N − 1 |
-| Fnorm(x) | 업비트 KRW 호가 단위 정규화 | `normalize_price(x)` | KRW → KRW |
-| Fstep(x, s) | 지정 step s 단위 내림 | `floor_step(x, s)` | — |
-| GN | 그리드 슬롯 수 직접 지정 | `GRID_COUNT` | 정수 |
-| pstep | 그리드 간격 (%) | `GRID_STEP_PCT` | % |
-| kbase | 기본 TP 배수 | `TP_K_BASE` | — |
-| kfloor | 최소 TP 배수 | `TP_K_FLOOR` | — |
-| Btotal | 총예산 | `TOTAL_BUDGET_KRW` | KRW |
-| nbelow | 현재가 이하 활성 슬롯 수 | `ACTIVE_WINDOW_BELOW_CURRENT_SLOTS` | 정수 |
-| nabove | 현재가 위 재진입 활성 슬롯 수 | `ACTIVE_WINDOW_ABOVE_CURRENT_REENTRY_SLOTS` | 정수 |
-| Bmaxop | 최대 운영 예산 | `MAX_OPERATING_BUDGET_KRW` | KRW |
-| Tstale | 직전 가격 stale 임계 (초) | `STALE_PREVIOUS_PRICE_THRESHOLD_SECONDS` | seconds |
-| Amin | 최소 주문 금액 | `MIN_KRW_ORDER_AMOUNT` | KRW |
-| fupbit | 업비트 수수료율 | `UPBIT_FEE_RATE` | 비율 |
-| Abuffer | 수수료 버퍼 | `FEE_BUFFER_KRW` | KRW |
-| Areserve | 잔고 최소 유보 | `MIN_BALANCE_RESERVE` | KRW |
-| M | 브레이크아웃 가드 연속 캔들 수 | `BREAKOUT_GUARD_CONSECUTIVE_CANDLES` | 정수 |
+$$b_i = \min\left( \left\lfloor \frac{3i}{N-1} \right\rfloor, 2 \right) \tag{식 19}$$
 
-## 그리드 슬롯 수
+각 구간 변수 $b_i$에 따른 매칭 가중치 $w_i$:
+$$w_i = \begin{cases} 0.7 & \text{if } b_i = 0 \quad (\text{상단 } 1/3) \\ 1.0 & \text{if } b_i = 1 \quad (\text{중단 } 1/3) \\ 1.3 & \text{if } b_i = 2 \quad (\text{하단 } 1/3) \end{cases} \tag{식 20}$$
 
-### (1) `GRID_COUNT`를 직접 지정
+전체 그리드 가중치 합산 $W$:
+$$W = \sum_{i=0}^{N-1} w_i \tag{식 21}$$
 
-N = GN
+슬롯별 할당 예산 $B_{slot, i}$ 및 목표 매수량 $Q_i$:
+$$B_{slot, i} = B_{total} \cdot \frac{w_i}{W} \tag{식 22}$$
+$$Q_i = F_{step}\left( \frac{B_{slot, i}}{B_i}, 0.00000001 \text{ BTC} \right) \tag{식 23}$$
 
-[식 1]
+---
 
-I = N − 1
+## 5. 현재 보유 재고 및 가용 자산 연산
 
-[식 2]
+현재 가동 중인 봇의 재고 원가($C_{inventory}$)와 총 할당 예산($B_{allocated}$):
 
-### (2) `GRID_STEP_PCT`를 지정
+$$C_{inventory} = \sum_{i \in \mathcal{H}} B_i H_i \tag{식 24}$$
+$$B_{allocated} = \sum_{i \in \mathcal{H}} B_i H_i + \sum_{i \in \mathcal{E}} B_i Q_i \tag{식 25}$$
 
-Δlog = ln(U / L)
+- $\mathcal{H}$: 코인을 보유 중인 활성 슬롯 집합 (Holding)
+- $\mathcal{E}$: 코인을 들고 있지 않은 빈 슬롯 집합 (Empty)
 
-[식 3]
+---
 
-δlog = ln(1 + pstep / 100)
+## 6. 매수 판정 조건
 
-[식 4]
+### 6-1. 하락 매수 조건 (기본)
+최근 시세 흐름이 가격 장벽을 하향 돌파할 때 매수합니다.
+$$P_{prev} > B_i \ge P \tag{식 26}$$
 
-Iraw = Δlogδlog
+**추가 통과 조건**:
+1. 슬롯 $i$가 비어 있어야 함 ($i \in \mathcal{E}$)
+2. 슬롯 $i$에 거래소 pending(미체결) 주문이 없어야 함
+3. 슬롯 $i$가 활성 매수 윈도우($\mathcal{A}$) 내에 포함되어야 함
+4. **Inventory Target Gate** 자산 통제 조건을 통과해야 함
+5. **Breakout Guard** 이탈 방지가 작동하지 않아야 함
 
-[식 5]
+### 6-2. 상승 재진입 매수 조건
+상승 돌파 시 추격 매수하는 로직입니다.
+$$P > P_{prev} \tag{식 27}$$
+$$P_{prev} < B_i \le P \tag{식 28}$$
 
-후보 구간 수:
+**추가 통과 조건**:
+1. `UPWARD_BUY_ENABLED = true` 설정 상태여야 함
+2. **Burst Guard** (동시 다발 체결 가드): 전략 주기 내에 감지된 상승 교차 슬롯이 **오직 1개**여야 함 (급등 시 동시 다수 슬롯 매수 진입 방지)
+3. 지정가 매수가 아닌 시장가 예산 집행 주문으로 발주:
+   $$A_{spend} = F_{step}(B_i Q_i, 1 \text{ KRW}) \tag{식 29}$$
 
-𝓘cand = { ⌊Iraw⌋, ⌈Iraw⌉ }
+---
 
-[식 6]
+## 7. 활성 매수 윈도우 (Active Window)
 
-각 후보의 오차:
+현재가 주변 슬롯만 주문 가능 상태로 제한하여 예산 쏠림 및 미체결 잠김을 예방하는 윈도우 규칙입니다.
 
-E(j) = | Δlogj − δlog |
+기준점은 직전 주기 가격인 $P_{prev}$입니다.
+$$\mathcal{B}_{\le} = \{ i \in \mathcal{E} : B_i \le P_{prev} \} \quad (\text{하위 가격 빈 슬롯}) \tag{식 30}$$
+$$\mathcal{B}_{>} = \{ i \in \mathcal{E} : B_i > P_{prev} \} \quad (\text{상위 가격 빈 슬롯}) \tag{식 31}$$
 
-[식 7]
+- 정렬 기준:
+  - $\mathcal{B}_{\le}$: 가격 내림차순 (인덱스 오름차순)
+  - $\mathcal{B}_{>}$: 가격 오름차순 (인덱스 오름차순)
 
-𝓘cand 안에서 E(j)가 가장 작은 후보를 I로 선택한다. 오차가 같으면 더 큰 I를 선택한다.
+최종 가동할 슬롯 집합 $\mathcal{A}$는 다음과 같이 부분 슬롯 수 $n_{\le}$ 및 $n_{>}$ 개수만큼만 절단하여 활성화합니다:
+$$\mathcal{A} = firstn_{\le}(\mathcal{B}_{\le}) \cup firstn_{>}(\mathcal{B}_{>}) \tag{식 32}$$
+$$n_{\le} = n_{below} \tag{식 33}$$
+$$n_{>} = n_{above} \tag{식 34}$$
 
-N = I + 1
+---
 
-[식 8]
+## 8. Inventory Target Gate (재고 통제 조건)
 
-🔢 워크드 예시 · pstep = 1%, U = 100,000,000, L = 80,000,000
+시세의 밴드상 위치에 따라 안전 재고 비율을 차등 부여하는 알고리즘입니다.
 
-Δlog = ln(100,000,000 / 80,000,000) = ln(1.25) ≈ 0.22314
+최대 운영 예산 기준 분모 $B_{op}$:
+$$B_{op} = \begin{cases} B_{maxop} & \text{if } B_{maxop} > 0 \\ B_{allocated} & \text{if } B_{maxop} \le 0 \end{cases} \tag{식 35}$$
 
-δlog = ln(1 + 0.01) ≈ 0.00995
+현재 가격 사이클에서의 누적 가상 재고 비율 $q_{current}$:
+$$q_{current} = \frac{C_{projected}}{B_{op}} \tag{식 36}$$
 
-Iraw ≈ 0.22314 / 0.00995 ≈ 22.42
+현재 가격의 밴드 내 로그 위치 비율 $z$:
+$$z_{raw} = \frac{\ln(P) - \ln(L)}{\ln(U) - \ln(L)} \tag{식 37}$$
+$$z = clamp(z_{raw}, 0, 1) \tag{식 38}$$
 
-𝓘cand = { 22, 23 }
+실시간 목표 재고 비중 한도 $q_{target}(z)$:
+$$q_{target}(z) = q_{min} + (q_{max} - q_{min})(1 - z)^\gamma \tag{식 39}$$
+$$q_{target}(z) = clamp(q_{target}(z), q_{min}, q_{max}) \tag{식 40}$$
 
-E(22) = | 0.22314 / 22 − 0.00995 | ≈ 0.00019
+최종 매수 통과 조건:
+$$\theta = \max(q_{target}(z) - \epsilon, 0) \tag{식 41}$$
+$$g_{pass} = (q_{current} < \theta) \tag{식 42}$$
 
-E(23) = | 0.22314 / 23 − 0.00995 | ≈ 0.00025
+> [!NOTE]
+> **전략적 핵심 개념**:
+> 식 39에서 $(1-z)^\gamma$ 연산 구조에 의해, 시세 위치 $z$가 $0$(하단)에 가까울수록 목표 재고량 한도는 $q_{max}$로 상향되고, $1$(상단)에 가까울수록 $q_{min}$으로 차단됩니다. 즉, **"가격이 내려갈수록 최대한 사고, 올라갈수록 신규 진입을 억제하여 위험을 낮추는"** 안전망 역할을 수행합니다.
 
-→ I = 22, N = 23
+---
 
-## 매수 가격 사다리
+## 9. Stale Previous Price Guard (시세 지연 보호)
 
-상단에서 하단으로 내려가는 로그 간격 사다리다.
+네트워크 지연 등으로 인해 시세 데이터 업데이트가 임계 시간($T_{stale}$)을 초과한 경우, 오작동 방지를 위해 신규 매수 판단을 한 주기 보류합니다.
 
-ℓ = ln(U / L)N − 1
+$$t_{elapsed} = t_{monotonicNow} - t_{previousPrice} \tag{식 43}$$
+$$s_{skip} = (t_{elapsed} > T_{stale}) \tag{식 44}$$
 
-[식 9]
+만약 시세가 지연되었을 경우, 다음 연산 주기를 위해 직전 가격과 시간을 즉시 현 시점으로 초기화합니다:
+$$P_{prev} \leftarrow P \tag{식 45}$$
+$$t_{previousPrice} \leftarrow t_{monotonicNow} \tag{식 46}$$
 
-g = eℓ
+---
 
-[식 10]
+## 10. 이익 실현 (Take-Profit) 연령 압축 (Age TP)
 
-B0 = U
+체결 재고의 보유 시간($a$)이 길어질 경우 자금 고착을 막기 위해 목표 매도가를 하향 압축하여 탈출을 돕습니다.
 
-[식 11]
+보유 시간 연산 (현재시각 - 체결 완료 시각):
+$$a = t_{nowUtc} - t_{filledUtc} \tag{식 49}$$
 
-Bi = Fnorm( Ugi ),   0 < i < N − 1
+보유 연령에 따른 $k$ 감쇄 변량 $d(a)$:
+$$d(a) = \begin{cases} 1.0 & \text{if } a \ge 7 \text{ days} \\ 0.5 & \text{if } 48 \text{ hours} \le a < 7 \text{ days} \\ 0.0 & \text{if } a < 48 \text{ hours} \end{cases} \tag{식 50}$$
 
-[식 12]
+감쇄가 반영된 유효 배수 $k_{eff}$:
+$$k_{eff} = \max(k_{base} - d(a), k_{floor}) \tag{식 51}$$
 
-BN−1 = L
+압축 매도 가격 산출:
+$$g_{base} = \ln\left(\frac{S_i}{B_i}\right) \tag{식 52}$$
+$$g_{compressed} = g_{base} \cdot \frac{k_{eff}}{k_{base}} \tag{식 53}$$
+$$S_i' = F_{norm}(B_i \cdot e^{g_{compressed}}) \tag{식 54}$$
 
-[식 13]
+최종 적용할 매도 호가 $S_i^{eff}$:
+$$S_i^{eff} = \begin{cases} S_i' & \text{if } B_i < S_i' < S_i \\ S_i & \text{otherwise} \end{cases} \tag{식 55}$$
 
-⚠ 중복 호가 실패
+---
 
-호가 단위 적용 후 Bi가 중복되면 그리드 생성은 실패한다.
+## 11. Breakout Guard (추세 이탈 감지)
 
-유도 메모 — 왜 로그 간격인가
+직전 완성된 $M$개의 분봉 캔들의 종가($C_j$)를 분석하여 급변침 상황 시 진입을 일시적으로 차단합니다.
 
-ℓ는 인접한 두 buy 가격 사이의 로그 거리다. Bi+1 / Bi = 1/g = e−ℓ로 일정하므로, 호가가 작은 하단도 같은 비율로 촘촘해진다. 결과적으로 각 슬롯의 매수 후 다음 슬롯까지의 하락폭(%)이 일정해진다.
+- **상단 이탈**: $M$개 연속 캔들이 그리드 상단 $U$ 위에서 마감
+  $$o_{upper} = \bigwedge_{j=1}^M (C_j > U) \tag{식 56}$$
+- **하단 이탈**: $M$개 연속 캔들이 그리드 하단 $L$ 아래에서 마감
+  $$o_{lower} = \bigwedge_{j=1}^M (C_j < L) \tag{식 57}$$
 
-## 신규 TP 가격
+가드 작동 판정:
+$$b_{guard} = o_{upper} \lor o_{lower} \tag{식 58}$$
 
-`k` 모델은 고정 퍼센트가 아니라 그리드 로그 간격을 k배 적용하는 모델이다.
+> [!WARNING]
+> 가드가 활성화($b_{guard} = true$)되면 **신규 매수(BUY) 주문 제출은 전면 차단**되며, 이미 진입해 있는 재고의 청산(SELL)은 정상 유지됩니다.
 
-keff = kbase
+---
 
-[식 14]
+## 12. 매수 주문 필요 예산 정밀 산출
 
-Siraw = Bi · eℓ · keff
+주문 체결에 필요한 실 가용 원화 잔고 평가식입니다.
 
-[식 15]
+- **시장가 매수 시 필요 원금**:
+  $$A_{required} = A_{spend} \tag{식 59}$$
+- **지정가 매수 시 필요 원금**:
+  $$A_{required} = P_{order} Q_{order} \tag{식 60}$$
 
-Si = Fnorm(Siraw)
+수수료 및 안전 버퍼를 감안한 예상 투입 금액 $A_{estimated}$:
+$$A_{estimated} = A_{required}(1 + f_{upbit}) + A_{buffer} \tag{식 61}$$
 
-[식 16]
+최종 잔고 가용성 조건 검증:
+$$A_{available} \ge A_{estimated} + A_{reserve} \tag{식 62}$$
 
-#### 검증 조건
+---
 
-Si > Bi
+## 13. 라이브 가동 예산 조정 공식
 
-[식 17]
+운영 중 예산 개편 명령 발생 시 호출되는 로직입니다. 보유 수량($H_i$)은 고정하고, 빈 슬롯의 목표량($Q_{i, new}$)만 재산출합니다.
 
-kbase ≥ kfloor > 0
-
-[식 18]
-
-## 예산 가중치
-
-슬롯 인덱스는 상단이 0, 하단이 N − 1이다.
-
-bi = min( ⌊ 3iN − 1 ⌋, 2 )
-
-[식 19]
-
-wi =
-0.7bi = 0
-1.0bi = 1
-1.3bi = 2
-
-[식 20]
-
-W = Σi=0N−1 wi
-
-[식 21]
-
-슬롯별 예산 배분:
-
-Bslot, i = Btotal · wiW
-
-[식 22]
-
-Qi = Fstep( Bslot, iBi, 0.00000001 BTC )
-
-[식 23]
-
-🔢 워크드 예시 · N = 10
-
-bi = min(⌊3i/9⌋, 2) → 인덱스 0..9에 대해: 0, 0, 0, 1, 1, 1, 2, 2, 2, 2
-
-가중치: 상위 3슬롯 0.7, 중간 3슬롯 1.0, 하위 4슬롯 1.3
-
-W = 3 × 0.7 + 3 × 1.0 + 4 × 1.3 = 2.1 + 3.0 + 5.2 = 10.3
-
-하단(i = 9)의 슬롯 예산 비율 = 1.3 / 10.3 ≈ 12.6% — 더 싼 가격대에 더 많은 KRW를 배정.
-
-## 현재 재고 원가와 총 배정 금액
-
-현재 보유 재고 원가:
-
-Cinventory = Σi ∈ ℋ Bi Hi
-
-[식 24]
-
-총 배정 금액:
-
-Ballocated = Σi ∈ ℋ Bi Hi + Σi ∈ ℰ Bi Qi
-
-[식 25]
-
-여기서 ℋ는 holding 슬롯 집합, ℰ는 empty 슬롯 집합이다.
-
-## 매수 교차 조건
-
-하락 매수 후보:
-
-Pprev > Bi ≥ P
-
-[식 26]
-
-#### 추가 조건
-
-- 슬롯 i가 empty 상태다.
-- 슬롯 i에 pending 주문이 없다.
-- 슬롯 i가 active buy window 안에 있다.
-- inventory target gate를 통과한다.
-- breakout guard가 비활성이다.
-
-⚠ 첫 스냅샷 처리
-
-첫 가격 스냅샷에서는 Pprev 기준선만 저장하고 신규 매수를 만들지 않는다.
-
-## 상승 재진입 조건
-
-상승 매수 후보:
-
-P > Pprev
-
-[식 27]
-
-Pprev < Bi ≤ P
-
-[식 28]
-
-#### 추가 조건
-
-- `UPWARD_BUY_ENABLED`가 true다.
-- 전체 그리드 기준 burst guard: active/pending 필터 적용 전, 전체 그리드에서 교차하는 empty 슬롯이 **정확히 1개**다.
-- 슬롯 i에 pending 주문이 없다.
-- 슬롯 i가 active buy window 안에 있다.
-- inventory target gate를 통과한다.
-- breakout guard가 비활성이다.
-
-시장가 예산매수 금액:
-
-Aspend = Fstep( Bi Qi, 1 KRW )
-
-[식 29]
-
-사전 검증은 `app/main.py`의 `check_risk`가 `MIN_KRW_ORDER_AMOUNT`로 흡수한다 (`app/core/models.py`의 `Order.required_krw`가 시장가 매수 시 `spend_amount` 반환).
-
-## 활성 매수 윈도우
-
-기준 가격은 Pprev다.
-
-𝓑≤ = { i ∈ ℰ : Bi ≤ Pprev }
-
-[식 30]
-
-𝓑> = { i ∈ ℰ : Bi > Pprev }
-
-[식 31]
-
-#### 정렬 기준
-
-- 𝓑≤: Bi 내림차순, `slot_index` 오름차순
-- 𝓑>: Bi 오름차순, `slot_index` 오름차순
-
-활성 슬롯 집합:
-
-𝓐 = firstn≤(𝓑≤) ∪ firstn>(𝓑>)
-
-[식 32]
-
-여기서:
-
-n≤ = nbelow
-
-[식 33]
-
-n> = nabove
-
-[식 34]
-
-📌 윈도우 비활성
-
-활성 윈도우가 꺼져 있으면 모든 empty 슬롯을 활성 후보로 본다.
-
-## Inventory Target Gate
-
-운영 예산 분모:
-
-Bop =
-BmaxopBmaxop > 0
-BallocatedBmaxop ≤ 0
-
-[식 35]
-
-현재 재고 비율은 같은 평가 사이클에서 이미 승인된 매수 후보까지 반영한 projected inventory 기준이다.
-
-qcurrent = CprojectedBop
-
-[식 36]
-
-로그 밴드 위치:
-
-zraw = ln(P) − ln(L)ln(U) − ln(L)
-
-[식 37]
-
-z = clamp(zraw, 0, 1)
-
-[식 38]
-
-목표 재고 비율:
-
-qtarget(z) = qmin + (qmax − qmin)(1 − z)γ
-
-[식 39]
-
-qtarget(z) = clamp(qtarget(z), qmin, qmax)
-
-[식 40]
-
-통과 조건:
-
-θ = max(qtarget(z) − ε, 0)
-
-[식 41]
-
-gpass = ( qcurrent < θ )
-
-[식 42]
-
-해석 메모 — z 와 qtarget의 관계
-
-z는 로그 가격대 안에서 현재가의 위치다. z = 0 은 하단(L), z = 1 은 상단(U).
-
-(1 − z)γ 항이 있으므로 가격이 낮을수록 qtarget은 qmax에 가까워지고, 높을수록 qmin에 가까워진다. → "쌀 때 더 많이 들고, 비쌀 때 줄여라."
-
-## Stale Previous Price Guard
-
-직전 평가 이후 경과 시간이 임계값을 초과하면 그 cycle의 신규 매수 평가는 스킵한다.
-
-telapsed = tmonotonicNow − tpreviousPrice
-
-[식 43]
-
-sskip = ( telapsed > Tstale )
-
-[식 44]
-
-이 경우:
-
-Pprev ← P
-
-[식 45]
-
-tpreviousPrice ← tmonotonicNow
-
-[식 46]
-
-✅ SELL 평가
-
-SELL 평가는 계속 수행한다.
-
-## 매도 조건
-
-보유 슬롯의 매도 후보:
-
-P ≥ Sieff
-
-[식 47]
-
-TP 주문 생성 최소 금액 조건:
-
-Sieff Hi ≥ Amin
-
-[식 48]
-
-## Age TP 압축
-
-보유 시간:
-
-a = tnowUtc − tfilledUtc
-
-[식 49]
-
-`k` 압축량:
-
-d(a) =
-1.0a ≥ 7 days
-0.548 hours ≤ a < 7 days
-0.0a < 48 hours
-
-[식 50]
-
-유효 k:
-
-keff = max( kbase − d(a), kfloor )
-
-[식 51]
-
-압축 매도 가격:
-
-gbase = ln( Si / Bi )
-
-[식 52]
-
-gcompressed = gbase · keffkbase
-
-[식 53]
-
-Si = Fnorm( Bi · egcompressed )
-
-[식 54]
-
-최종 매도 가격:
-
-Sieff =
-SiBi < Si < Si
-Siotherwise
-
-[식 55]
-
-🔢 워크드 예시 · kbase = 2.0, kfloor = 1.0, a = 72h
-
-a = 72h → 48h ≤ a < 7d 이므로 d(a) = 0.5
-
-keff = max(2.0 − 0.5, 1.0) = 1.5
-
-예: Bi = 90,000,000, Si = 91,800,000
-
-gbase = ln(91,800,000 / 90,000,000) ≈ 0.01980
-
-gcompressed = 0.01980 × (1.5 / 2.0) ≈ 0.01485
-
-e0.01485 ≈ 1.01497 → 압축 매도가 ≈ 91,347,300 (정규화 전)
-
-Bi < 압축가 < Si 이므로 Sieff = 압축 매도가
-
-⚠ 적용 조건
-
-Age TP는 `k` 모델로 생성된 그리드이고 holding 슬롯에 `filled_at`이 있을 때만 적용된다.
-
-## 브레이크아웃 가드
-
-최근 완료 캔들 종가 Cj를 최신순으로 M개 본다.
-
-상단 이탈:
-
-oupper = ⋀j=1M ( Cj > U )
-
-[식 56]
-
-하단 이탈:
-
-olower = ⋀j=1M ( Cj < L )
-
-[식 57]
-
-가드 활성:
-
-bguard = oupper ∨ olower
-
-[식 58]
-
-🚫 가드 활성화 시
-
-가드가 활성화되면 신규 BUY 후보는 제거하고 SELL 후보는 유지한다.
-
-📌 입력 실패 처리
-
-캔들 조회 실패, 캔들 부족, invalid band 같은 입력 실패는 `app/main.py`의 failure policy에서 fail-open / fail-close로 처리한다.
-
-## 매수 필요 KRW 추정
-
-BUY 주문 원금:
-
-#### 시장가 예산매수
-
-Arequired = Aspend
-
-[식 59]
-
-#### 지정가 BUY
-
-Arequired = Porder Qorder
-
-[식 60]
-
-수수료와 버퍼를 포함한 필요 금액:
-
-Aestimated = Arequired(1 + fupbit) + Abuffer
-
-[식 61]
-
-잔고 통과 조건:
-
-Aavailable ≥ Aestimated + Areserve
-
-[식 62]
-
-📌 사이클 내 누적 차감
-
-같은 cycle에서 여러 BUY를 검사할 때는 통과한 주문의 Aestimated를 가용 잔고에서 선반영 차감한다.
-
-🔢 워크드 예시 · 지정가 BUY 100,000 KRW
-
-Arequired = 100,000 KRW
-
-fupbit = 0.0005, Abuffer = 100 KRW
-
-Aestimated = 100,000 × 1.0005 + 100 = 100,150 KRW
-
-Areserve = 10,000 KRW 라면 가용 잔고는 ≥ 110,150 KRW 이어야 통과.
-
-## 라이브 예산 조정
-
-`scripts/adjust_budget_live.py --target-budget X`는 기존 ladder와 보유 수량을 유지하고 Qi만 다시 계산한다.
-
-Btotal ← X
-
-[식 63]
-
-슬롯별 예산 재배분:
-
-Bslot, i = Btotal · wiW
-
-[식 64]
-
-Qinew = Fstep( Bslot, iBi, 0.00000001 BTC )
-
-[식 65]
-
-✅ 유지되는 값
-
-보유 슬롯의 Hi, Si, `filled_at`은 유지한다.
+$$B_{total} \leftarrow X \quad (\text{조정 예산 주입}) \tag{식 63}$$
+$$B_{slot, i} = B_{total} \cdot \frac{w_i}{W} \tag{식 64}$$
+$$Q_{i, new} = F_{step}\left( \frac{B_{slot, i}}{B_i}, 0.00000001 \text{ BTC} \right) \tag{식 65}$$

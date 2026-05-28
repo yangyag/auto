@@ -1,729 +1,367 @@
 # Mobile API 사용 문서
 
-React Native Android 앱에서 자동매매 상태를 조회하고 운영 명령을 요청하기 위한 FastAPI 서버 문서다.
+React Native Android 앱에서 자동매매 상태를 조회하고 운영 명령을 요청하기 위한 FastAPI 서버 문서입니다.
 
-🚀 FastAPI · Port 8086
-🔐 JWT · Bearer
-⚙ auto-api.service
-⚡ auto-command-worker.service
+---
 
-🌐Base URL
+## 📌 API 인프라 요약
 
-외부
-:   http://<EC2\_PUBLIC\_IP>:8086
+### 🌐 Base URL
+- **외부 접속**: `http://<EC2_PUBLIC_IP>:8086`
+- **EC2 내부 전용**: `http://127.0.0.1:8086`
+- **OpenAPI 명세**: `GET /openapi.json`
+- **Swagger UI 문서**: `GET /docs`
 
-EC2 내부
-:   http://127.0.0.1:8086
+### 🔑 인증 방식
+- **인증 메커니즘**: `Bearer JWT`
+- **인증 헤더**: `Authorization: Bearer <access_token>`
+- **만료 시간**: Access Token 15분 (900s)
+- **토큰 갱신**: `refresh_token` 사용
 
-OpenAPI
-:   GET /openapi.json
+### 📦 요청 & 응답
+- **Content Type**: `application/json` (UTF-8 인코딩)
+- **HTML 모니터링 콘솔**: `GET /ops`
+- **오류 응답**: FastAPI HTTPException 규격 (`{"detail": "에러메시지"}`)
+- **상태 코드**: 성공 `2xx` / 실패 `4xx`, `5xx` (401, 409, 503 등)
 
-Swagger
-:   GET /docs
-
-🔑인증
-
-방식
-:   Bearer JWT
-
-헤더
-:   Authorization: Bearer <access\_token>
-
-만료
-:   access 15분 (900s)
-
-갱신
-:   refresh\_token
-
-📦Content Type
-
-요청
-:   application/json
-
-응답
-:   application/json
-
-인코딩
-:   UTF-8
-
-HTML 점검
-:   GET /ops
-
-⚠에러 응답
-
-형식
-:   FastAPI HTTPException
-
-본문
-:   {"detail": "..."}
-
-2xx
-:   200201
-
-4xx/5xx
-:   401409503
+---
 
 ## 한 줄 요약
 
-`./run.sh`는 트레이딩 봇만 실행한다. 모바일 앱용 API는 `auto-api.service`, 앱에서 요청한 명령을 실제로 실행하는 워커는 `auto-command-worker.service`로 따로 실행된다.
+[run.sh](file:///C:/dev/mobileAuto/auto/run.sh)는 트레이딩 봇만 백그라운드로 실행합니다. 모바일 앱 연동용 API 서버는 `auto-api.service`, 앱의 제어 요청을 실행하는 작업 큐 백그라운드 워커는 `auto-command-worker.service` 서비스로 각각 분리하여 관리됩니다.
 
-📌 분리된 3개의 프로세스
+> [!NOTE]
+> **프로세스 분리 운영**: 트레이딩 봇, FastAPI API 서버, 명령 백그라운드 워커는 프로세스가 완벽하게 분리되어 독립적으로 동작하며, PostgreSQL 데이터베이스 상태를 공유하여 통신합니다. 이 구조 덕분에 API 서버를 재시작해도 가동 중인 자동매매 봇은 영향을 받지 않습니다.
 
-트레이딩 봇 / FastAPI 서버 / 명령 워커가 각각 독립 실행되며 PostgreSQL을 통해 상태를 공유한다.
+---
 
-## 구현 위치
+## 구현 소스 및 배포 위치
 
 | 경로 | 역할 |
-| --- | --- |
-| `app/api/main.py` | FastAPI 인스턴스 생성, 라우터 등록 |
-| `app/api/routers/` | 인증, 상태 조회, 그리드, 주문, 손익, 명령 API 라우터 |
-| `app/api/schemas/` | API 요청/응답 Pydantic 모델 |
-| `app/api/services/` | 기존 봇 저장소/스크립트 로직을 HTTP 응답으로 가공하는 서비스 계층 |
-| `app/api/command_worker.py` | `commands` 테이블에 쌓인 운영 명령 실행 |
-| `db/migrations/004_mobile_api.sql` | 모바일 API용 heartbeat, 명령, refresh token 테이블 |
-| `deploy/systemd/user/auto-api.service` | FastAPI 서버 user systemd unit |
-| `deploy/systemd/user/auto-command-worker.service` | 명령 워커 user systemd unit |
+| :--- | :--- |
+| [main.py](file:///C:/dev/mobileAuto/auto/app/api/main.py) | FastAPI 인스턴스 초기화 및 API 라우터 일괄 등록 |
+| [routers/](file:///C:/dev/mobileAuto/auto/app/api/routers) | 인증, 상태 조회, 그리드 제어, 주문 정보, 손익 및 제어 명령 라우터 구현부 |
+| [schemas/](file:///C:/dev/mobileAuto/auto/app/api/schemas) | API 요청/응답 검증용 Pydantic 스키마 모델 |
+| [services/](file:///C:/dev/mobileAuto/auto/app/api/services) | 기존 봇 모듈 및 조회 스크립트 결과를 HTTP 응답에 맞춰 가공하는 서비스 계층 |
+| [command_worker.py](file:///C:/dev/mobileAuto/auto/app/api/command_worker.py) | 데이터베이스 `commands` 테이블 큐에 등록된 운영 제어 스크립트 실행기 |
+| [004_mobile_api.sql](file:///C:/dev/mobileAuto/auto/db/migrations/004_mobile_api.sql) | 모바일 API 하트비트, 명령 저장용 큐, Refresh Token 관리용 마이그레이션 SQL |
+| [auto-api.service](file:///C:/dev/mobileAuto/auto/deploy/systemd/user/auto-api.service) | FastAPI 서버 구동용 User Systemd 유닛 서비스 설정 파일 |
+| [auto-command-worker.service](file:///C:/dev/mobileAuto/auto/deploy/systemd/user/auto-command-worker.service) | 명령 워커 구동용 User Systemd 유닛 서비스 설정 파일 |
 
-## 전체 실행 구조
+---
 
-운영 서버에는 역할이 다른 프로세스가 3개 있다.
+## 프로세스 실행 관계도
 
-| 역할 | 실행 방식 | 하는 일 | 꺼져 있으면 |
-| --- | --- | --- | --- |
-| 트레이딩 봇 | `./run.sh` | 가격을 보고 실제 그리드 매수/매도 로직을 실행한다. | 자동매매가 멈춘다. |
-| 모바일 API | `auto-api.service` | React Native 앱이 호출하는 HTTP API 서버다. 8086 포트로 열린다. | 앱에서 상태 조회/로그인이 안 된다. |
-| 명령 워커 | `auto-command-worker.service` | 앱에서 요청한 시작/중지/reset 같은 명령을 큐에서 꺼내 실행한다. | 앱에서 명령을 넣어도 실행되지 않고 큐에 남는다. |
+운영 환경에서는 각기 목적이 다른 3개의 백그라운드 프로세스가 실행됩니다.
 
-흐름은 아래와 같다.
-
-text
+| 프로세스 유형 | 구동 커맨드 / 서비스 | 주요 역할 | 중단 시 영향 |
+| :--- | :--- | :--- | :--- |
+| **트레이딩 봇** | [run.sh](file:///C:/dev/mobileAuto/auto/run.sh) | 실시간 시세를 모니터링하여 그리드 주문 실행 | 자동매매 전면 중단 |
+| **모바일 API** | `auto-api.service` | 앱이 호출하는 HTTP 백그라운드 API 서버 (Port: 8086) | 모바일 앱을 통한 정보 조회 및 로그인 불가 |
+| **명령 워커** | `auto-command-worker.service` | 앱에서 요청하여 commands 테이블에 적재된 제어 명령 실행 | 앱 제어 불가 (명령어들이 큐에 대기 상태로 남음) |
 
 ```
-React Native 앱
-  -> FastAPI 서버(auto-api.service, 8086)
-  -> PostgreSQL
-  <- 트레이딩 봇(./run.sh로 실행되는 main.py)
-
-위험 명령:
-React Native 앱
-  -> FastAPI 서버
-  -> commands 테이블에 큐 저장
-  -> 명령 워커(auto-command-worker.service)
-  -> stop.sh/run.sh/reset 스크립트 실행
+[React Native 앱]
+       │ (HTTP 호출)
+       ▼
+[FastAPI 서버 (auto-api.service, Port 8086)]
+       │
+       ▼ (상태 공유)
+[PostgreSQL Database] ◀──▶ [트레이딩 봇 (run.sh 기반 main.py)]
+       │
+       ▼ (위험 명령 큐 적재 확인)
+[명령 워커 (auto-command-worker.service)]
+       │
+       ▼ (실제 스크립트 수행)
+[stop.sh / run.sh / 리셋 가동]
 ```
 
-📌 메모리 분리
+---
 
-FastAPI가 트레이딩 봇을 메모리에서 직접 호출하지 않는다. 둘은 PostgreSQL을 통해 상태를 공유한다. 그래서 API를 재시작해도 봇 루프가 바로 죽지 않고, 봇이 꺼져 있어도 API 서버 자체는 살아 있을 수 있다.
+## 자주 쓰는 운영 명령어
 
-## 가장 자주 쓰는 운영 명령
-
-EC2에서 작업할 때는 먼저 프로젝트 폴더로 이동한다.
-
-bash
-
-```
+EC2 접속 후 작업 폴더로 이동합니다.
+```bash
 cd /home/ubuntu/auto
 ```
 
-### 트레이딩 봇만 재시작
-
-bash
-
-```
+### 트레이딩 봇 프로세스만 재시작
+```bash
 ./stop.sh
 ./run.sh
 ```
 
-### 모바일 API와 명령 워커 재시작
-
-bash
-
-```
+### 모바일 API 및 명령 워커 프로세스 재시작
+```bash
 systemctl --user restart auto-api.service auto-command-worker.service
 ```
 
-### 전체 상태 확인
-
-bash
-
-```
+### 관련 프로세스 가동 여부 일괄 확인
+```bash
 ps -ef | grep '/home/ubuntu/auto/main.py' | grep -v grep
 systemctl --user status auto-api.service auto-command-worker.service
 ss -ltnp | grep :8086
 ```
 
-### 로그 확인
-
-bash
-
-```
+### 각 프로세스별 실시간 로그 출력
+```bash
+# API 서버 로그
 journalctl --user -u auto-api.service -f
+
+# 명령 워커 로그
 journalctl --user -u auto-command-worker.service -f
+
+# 자동매매 봇 트레이딩 로그
 tail -f logs/trading-$(date +%F).log
 ```
 
-## 배포 상태
-
-- API URL: `http://<EC2_PUBLIC_IP>:8086`
-- EC2 내부 확인 URL: `http://127.0.0.1:8086`
-- 브라우저 점검 화면: `GET /ops`
-- FastAPI 서비스: `auto-api.service`
-- 명령 워커 서비스: `auto-command-worker.service`
-- OpenAPI: `GET /openapi.json`
-- Swagger UI: `GET /docs`
-
-⚠ Linger 설정
-
-현재 user systemd로 설치되어 있다. `loginctl show-user "$USER" -p Linger` 값은 `Linger=yes`여야 SSH 접속이 끊겨도 user service가 유지된다.
-
-⚠ HTTPS 권장
-
-현재 8086 포트는 직접 HTTP로 열려 있다. 실제 모바일 앱에 장기간 사용할 때는 도메인/Caddy/Nginx를 붙여 HTTPS로 종단하는 구성이 더 안전하다.
-
-서비스 파일 원본:
-
-- `deploy/systemd/user/auto-api.service`
-- `deploy/systemd/user/auto-command-worker.service`
-
-## 브라우저 점검 화면
-
-간단히 눈으로 API 상태를 확인하려면 브라우저에서 아래 주소를 연다.
-
-text
-
-```
-http://<EC2_PUBLIC_IP>:8086/ops
-```
-
-이 화면은 FastAPI가 직접 내려주는 HTML이다. HTML과 API가 같은 서버/같은 포트에서 열리므로 CORS 문제가 없다.
-
-### 화면에서 할 수 있는 일
-
-- API 상태 확인
-- 아이디/비밀번호 로그인
-- 봇 상태 조회
-- 그리드 요약 조회
-- 그리드 전체 조회: 슬롯별 매수가, 계획 매수 BTC/KRW, 보유 BTC/KRW, 매도가, 미체결 주문
-- 현재가 조회
-- 미체결 주문 조회
-- 오늘/이번주/이번달/올해/전체 실현손익 조회
-
-📌 조회 전용
-
-이 화면에는 reset, 예산 조정, 봇 중지 같은 위험 명령 버튼을 넣지 않았다. 운영 상태를 바꾸지 않고 조회만 해보는 용도다.
-
-## 환경 변수
-
-환경 변수는 `/home/ubuntu/auto/.env`에서 읽는다.
-
-### 모바일 API 자체에 필요한 값
-
-dotenv
-
-```
-MOBILE_API_USERNAME=admin
-MOBILE_API_PASSWORD=<strong-password>
-MOBILE_API_JWT_SECRET=<random-secret>
-```
-
-### 선택 값
-
-dotenv
-
-```
-# 설정하면 로그인/위험 명령에 TOTP 코드가 필요하다.
-MOBILE_API_TOTP_SECRET=<base32-secret>
-```
-
-### Upbit 관련 값
-
-dotenv
-
-```
-UPBIT_ACCESS_KEY=<upbit-access-key>
-UPBIT_SECRET_KEY=<upbit-secret-key>
-```
-
-⚠ Upbit 키 필수 엔드포인트
-
-`/v1/pnl/realized`는 Upbit의 private 주문 조회 API를 사용하므로 `UPBIT_ACCESS_KEY`, `UPBIT_SECRET_KEY`가 필요하다. 키가 비어 있으면 503을 반환한다.
-
-### WebSocket 설정 (선택)
-
-WebSocket 설정은 코드 기본값이 있지만, 운영 의도를 분명히 남기려면 `.env`에 명시해도 된다.
-
-dotenv
-
-```
-UPBIT_WS_PUBLIC_ENABLED=true
-UPBIT_WS_PRICE_MAX_AGE_SECONDS=10
-UPBIT_WS_EVENT_LOOP_ENABLED=true
-UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS=3
-UPBIT_WS_CANDLE_ENABLED=false
-UPBIT_WS_CANDLE_MAX_AGE_SECONDS=60
-UPBIT_WS_ASSET_ENABLED=false
-UPBIT_WS_ASSET_MAX_AGE_SECONDS=30
-UPBIT_WS_ORDER_ENABLED=false
-UPBIT_WS_ORDER_MAX_AGE_SECONDS=10
-```
-
-`.env`를 수정한 뒤에는 해당 값을 읽는 프로세스를 재시작해야 한다.
-
-bash
-
-```
-# 봇 설정 변경 반영
-./stop.sh
-./run.sh
-
-# API/worker 설정 변경 반영
-systemctl --user restart auto-api.service auto-command-worker.service
-```
-
-## 인증 흐름
-
-앱은 먼저 로그인해서 `access_token`과 `refresh_token`을 받는다.
-
-| 필드 | 타입 | 필수 | 설명 |
-| --- | --- | --- | --- |
-| `access_token` | string | 응답 | API 호출 때 `Authorization` 헤더에 넣는다. 유효 시간은 15분이다. |
-| `refresh_token` | string | 응답 | access token을 새로 받을 때 쓴다. 앱의 보안 저장소에 저장한다. |
-| `totp_code` | string | 조건부 | `MOBILE_API_TOTP_SECRET`을 설정한 경우에만 필요하다. |
-
-POST
-/v1/auth/login
-로그인 (access + refresh 발급)
-
-#### Request
-
-bash
-
-```
-curl -s http://127.0.0.1:8086/v1/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "username": "admin",
-    "password": "<password>",
-    "totp_code": "123456"
-  }'
-```
-
-#### Response
-
-json
-
-```
-{
-  "access_token": "...",
-  "refresh_token": "...",
-  "token_type": "bearer",
-  "expires_in": 900
-}
-```
-
-POST
-/v1/auth/refresh
-access\_token 재발급
-
-#### Request
-
-bash
-
-```
-curl -s http://127.0.0.1:8086/v1/auth/refresh \
-  -H 'Content-Type: application/json' \
-  -d '{"refresh_token":"<refresh_token>"}'
-```
-
-POST
-/v1/auth/logout
-refresh\_token 무효화
-
-#### Request
-
-bash
-
-```
-curl -s http://127.0.0.1:8086/v1/auth/logout \
-  -H 'Content-Type: application/json' \
-  -d '{"refresh_token":"<refresh_token>"}'
-```
-
-## React Native 호출 예시
-
-토큰은 Android Keystore 기반 secure storage에 저장한다. 예시는 `react-native-keychain` 사용 형태다.
-
-ts
-
-```
-import * as Keychain from 'react-native-keychain';
-
-const API_BASE = 'http://<EC2_PUBLIC_IP>:8086';
-
-export async function login(username: string, password: string, totpCode?: string) {
-  const res = await fetch(`${API_BASE}/v1/auth/login`, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({username, password, totp_code: totpCode}),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const tokens = await res.json();
-  await Keychain.setGenericPassword('auto-mobile-api', JSON.stringify(tokens));
-  return tokens;
-}
-
-export async function apiGet(path: string) {
-  const stored = await Keychain.getGenericPassword();
-  if (!stored) throw new Error('not logged in');
-
-  const {access_token} = JSON.parse(stored.password);
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: {Authorization: `Bearer ${access_token}`},
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-```
-
-## 읽기 API
-
-읽기 API는 상태를 보여줄 뿐, 주문을 만들거나 봇을 멈추지 않는다. 모두 `Authorization: Bearer <access_token>` 헤더가 필요하다.
-
-| API | 앱에서 보여줄 내용 | 비고 |
-| --- | --- | --- |
-| `GET /v1/bot/status` | 봇 alive 여부, 마지막 heartbeat, 손절/브레이크아웃 상태 | 봇이 꺼져 있으면 API는 살아 있어도 `is_alive=false`가 될 수 있다. |
-| `GET /v1/market/price` | 현재가 | 봇 heartbeat 가격이 fresh하면 우선 사용하고, 없으면 Upbit public REST를 사용한다. |
-| `GET /v1/grid/state` | 전체 그리드 슬롯 목록 | 각 슬롯의 매수가, 계획 매수 BTC/KRW, 보유 BTC/KRW, 매도가, pending 주문을 확인한다. |
-| `GET /v1/grid/summary` | 그리드 요약 | 보유 슬롯 수, 총 재고, 원가, 평균 매수가 등을 보여준다. |
-| `GET /v1/orders/pending` | DB 기준 미체결 주문 | 봇이 관리하는 open 주문 목록이다. |
-| `GET /v1/orders/recent?limit=50` | 최근 주문 이력 | DB에 기록된 주문 기준이다. |
-| `GET /v1/pnl/realized?period=d` | 오늘 실현손익 | `d/w/m/y/all` 기간을 지원한다. Upbit 키가 필요하다. |
-| `GET /v1/monitor/open-sells` | 매도 대기 주문 현황 | 슬롯별 매수원가, 미실현손익, 도달까지 거리를 보여준다. |
-| `GET /v1/config` | 앱에 보여줘도 되는 핵심 설정 | secret은 반환하지 않는다. |
-
-GET
-/v1/bot/status
-봇 alive, heartbeat, 손절/브레이크아웃 상태
-
-봇이 꺼져 있으면 API는 살아 있어도 `is_alive=false`가 될 수 있다.
-
-#### Request
-
-bash
-
-```
-curl -s http://127.0.0.1:8086/v1/bot/status \
-  -H "Authorization: Bearer <access_token>"
-```
-
-GET
-/v1/market/price
-현재가 (heartbeat 우선, fallback Upbit REST)
-
-봇 heartbeat 가격이 fresh하면 우선 사용하고, 없으면 Upbit public REST를 사용한다.
-
-#### Request
-
-bash
-
-```
-curl -s http://127.0.0.1:8086/v1/market/price \
-  -H "Authorization: Bearer <access_token>"
-```
-
-GET
-/v1/grid/state
-전체 그리드 슬롯 목록
-
-각 슬롯의 매수가, 계획 매수 BTC/KRW, 보유 BTC/KRW, 매도가, pending 주문을 확인한다.
-
-#### Slot 필드
-
-| 필드 | 타입 | 설명 |
-| --- | --- | --- |
-| `buy_price` | number | 해당 슬롯의 매수 기준 가격 |
-| `planned_qty`, `planned_buy_krw` | number | 아직 비어 있는 슬롯에서 매수할 목표 BTC 수량과 KRW 금액 |
-| `held_qty`, `inventory_cost_krw` | number | 이미 매수되어 보유 중인 BTC 수량과 원가 |
-| `sell_price`, `effective_sell_price` | number | 기본 매도 기준 가격과 Age TP 등이 반영된 실제 매도 기준 가격 |
-| `pending_order` | object | null | 해당 슬롯에 아직 완료되지 않은 주문이 있으면 주문 정보 |
-
-#### Request
-
-bash
-
-```
-curl -s http://127.0.0.1:8086/v1/grid/state \
-  -H "Authorization: Bearer <access_token>"
-```
-
-GET
-/v1/grid/summary
-그리드 요약 (보유 슬롯, 재고, 평균 매수가 등)
-
-보유 슬롯 수, 총 재고, 원가, 평균 매수가 등을 보여준다.
-
-⚠ 원가 기준
-
-모바일 API나 앱에서 원금성 지표를 만들 때 업비트 `avg_buy_price` 를 봇 슬롯 원가로 대체하지 않는다. 업비트 평균매수가는 계정 전체 BTC 평균이고, 그리드 봇의 원가는 슬롯별 BUY/SELL 매칭 결과다.
-
-낮은 슬롯이 먼저 매도되고 높은 슬롯이 남는 구간에서는 `주문 가능 KRW + avg_buy_price * BTC 수량` 이 봇 장부 기준 원금과 다르게 보일 수 있다. 봇 기준 원금/잔여 원가는 그리드 슬롯 상태와 실현손익 매칭 로직의 잔여 BUY 큐를 기준으로 해석하며, 운영 서버에서는 `scripts/upbit_actual_assets.py` 를 바로 실행해 확인한다.
-
-#### Request
-
-bash
-
-```
-curl -s http://127.0.0.1:8086/v1/grid/summary \
-  -H "Authorization: Bearer <access_token>"
-```
-
-GET
-/v1/orders/pending
-DB 기준 미체결 주문 목록
-
-봇이 관리하는 open 주문 목록이다.
-
-#### Request
-
-bash
-
-```
-curl -s http://127.0.0.1:8086/v1/orders/pending \
-  -H "Authorization: Bearer <access_token>"
-```
-
-GET
-/v1/orders/recent?limit=50
-최근 주문 이력
-
-DB에 기록된 주문 기준이다.
-
-#### Query
-
-| 이름 | 타입 | 필수 | 설명 |
-| --- | --- | --- | --- |
-| `limit` | int | 선택 | 가져올 행 수 (기본 50) |
-
-#### Request
-
-bash
-
-```
-curl -s "http://127.0.0.1:8086/v1/orders/recent?limit=50" \
-  -H "Authorization: Bearer <access_token>"
-```
-
-GET
-/v1/pnl/realized?period=d
-실현손익 (Upbit private API)
-
-`d/w/m/y/all` 기간을 지원한다. Upbit 키가 필요하다.
-
-#### Query
-
-| 이름 | 타입 | 필수 | 설명 |
-| --- | --- | --- | --- |
-| `period` | enum | 필수 | `d` / `w` / `m` / `y` / `all` |
-
-#### Status
-
-200 정상
-401 토큰 없음/만료
-503 Upbit 키 누락
-
-#### Request
-
-bash
-
-```
-curl -s "http://127.0.0.1:8086/v1/pnl/realized?period=d" \
-  -H "Authorization: Bearer <access_token>"
-```
-
-GET
-/v1/config
-앱에 보여줘도 되는 핵심 설정 (secret 제외)
-
-secret은 반환하지 않는다.
-
-#### Request
-
-bash
-
-```
-curl -s http://127.0.0.1:8086/v1/config \
-  -H "Authorization: Bearer <access_token>"
-```
-
-GET
-/v1/monitor/open-sells
-매도 대기 주문 현황 (슬롯별 매수원가 + 미실현손익)
-
-현재 미체결 매도 주문을 봇 슬롯별 실제 매수원가와 매칭해, 각 슬롯의 매수원가, 매도지정가, 현재가 기준 미실현손익, 체결까지 남은 거리를 보여준다.
-
-#### Query
-
-| 이름 | 타입 | 필수 | 설명 |
-| --- | --- | --- | --- |
-| `market` | string | 선택 | 업비트 마켓 코드 (기본: `KRW-BTC`) |
-| `lookback_days` | int | 선택 | BUY 큐 계산용 주문 조회 기간 (기본: `120`) |
-| `bot_key` | string | 선택 | identifier bot key prefix (기본: `cfg.STATE_BOT_KEY`) |
-| `reset_sell_uuid` | string[] | 선택 | 과거 reset SELL uuid 지정 (반복 가능) |
-
-#### Status
-
-200 정상
-401 토큰 없음/만료
-503 Upbit 키 누락
-
-#### Response
-
-```json
-{
-  "market": "KRW-BTC",
-  "current_price": "152000000",
-  "generated_at": "2026-05-28T14:30:00+09:00",
-  "rows": [
-    {
-      "slot_index": 3,
-      "qty": "0.00100",
-      "buy_unit_cost": "148500000",
-      "sell_limit_price": "153000000",
-      "current_price": "152000000",
-      "unrealized_at_current": "3500",
-      "gap_to_fill_krw": "1000000"
-    }
-  ],
-  "summary": {
-    "total_count": 5,
-    "matched_count": 4,
-    "unmatched_count": 1,
-    "profit_count": 3,
-    "loss_count": 1,
-    "total_unrealized_krw": "5000"
-  },
-  "diagnostic": {
-    "open_orders": 5,
-    "matched": 4,
-    "unmatched": 1,
-    "lookback_days": 120
+> [!IMPORTANT]
+> **Systemd Linger 설정**: 
+> 현재 서비스들은 User Systemd 기반으로 빌드되어 있습니다. SSH 콘솔 접속이 끊긴 후에도 백그라운드 서비스가 유지되기 위해서는 사용자 계정에 Linger 기능이 반드시 활성화되어 있어야 합니다 (`loginctl show-user "$USER" -p Linger` 실행 결과가 `Linger=yes` 여야 합니다).
+
+---
+
+## 1. 인증(Auth) API 규격
+
+### 1-1. 로그인 (`/v1/auth/login`)
+아이디와 비밀번호(및 설정 시 TOTP 코드)로 인증하여 JWT 토큰 쌍을 발급받습니다.
+
+- **HTTP Method**: `POST`
+- **Request Body 필드**:
+  | 필드명 | 타입 | 필수 여부 | 설명 |
+  | :--- | :---: | :---: | :--- |
+  | `username` | string | 필수 | 관리자 아이디 (`MOBILE_API_USERNAME`) |
+  | `password` | string | 필수 | 관리자 비밀번호 (`MOBILE_API_PASSWORD`) |
+  | `totp_code` | string | 조건부 | TOTP 보안 활성화 시 입력 필수 |
+
+- **요청 예시 (cURL)**:
+  ```bash
+  curl -s http://127.0.0.1:8086/v1/auth/login \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "username": "admin",
+      "password": "YOUR_STRONG_PASSWORD",
+      "totp_code": "123456"
+    }'
+  ```
+
+- **응답 예시 (JSON)**:
+  ```json
+  {
+    "access_token": "eyJhbGciOiJIUzI1Ni...",
+    "refresh_token": "rfr_ey...",
+    "token_type": "bearer",
+    "expires_in": 900
   }
-}
+  ```
+
+### 1-2. 토큰 갱신 (`/v1/auth/refresh`)
+만료된 Access Token을 재발급받습니다.
+
+- **HTTP Method**: `POST`
+- **Request Body 필드**:
+  | 필드명 | 타입 | 필수 여부 | 설명 |
+  | :--- | :---: | :---: | :--- |
+  | `refresh_token` | string | 필수 | 로그인 시 발급받은 Refresh Token 값 |
+
+- **요청 예시 (cURL)**:
+  ```bash
+  curl -s http://127.0.0.1:8086/v1/auth/refresh \
+    -H 'Content-Type: application/json' \
+    -d '{"refresh_token":"YOUR_REFRESH_TOKEN"}'
+  ```
+
+### 1-3. 로그아웃 (`/v1/auth/logout`)
+전달된 Refresh Token을 데이터베이스에서 삭제하여 무효화합니다.
+
+- **HTTP Method**: `POST`
+- **요청 예시 (cURL)**:
+  ```bash
+  curl -s http://127.0.0.1:8086/v1/auth/logout \
+    -H 'Content-Type: application/json' \
+    -d '{"refresh_token":"YOUR_REFRESH_TOKEN"}'
+  ```
+
+---
+
+## 2. 조회(Read-Only) API 규격
+
+모든 조회 API는 `Authorization: Bearer <access_token>` 헤더가 필요합니다.
+
+### 2-1. 봇 상태 조회 (`GET /v1/bot/status`)
+봇의 라이브 여부, 최종 하트비트 시각, 손절/브레이크아웃 가드 적용 여부를 반환합니다.
+```bash
+curl -s http://127.0.0.1:8086/v1/bot/status \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
-#### Request
+### 2-2. 실시간 시세 조회 (`GET /v1/market/price`)
+봇이 남긴 최근 가격 하트비트 시각이 정상 범위 내이면 해당 캐시 시세를 반환하고, 부재 시 업비트 Public API를 직접 조회하여 결과를 응답합니다.
+```bash
+curl -s http://127.0.0.1:8086/v1/market/price \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### 2-3. 전체 그리드 상태 조회 (`GET /v1/grid/state`)
+현재 활성화되어 있는 모든 그리드 슬롯의 매수가, 계획 물량, 체결 재고, 매도가 등의 명세를 리스트로 가져옵니다.
+
+- **Slot 응답 데이터 필드 정보**:
+  | 필드명 | 타입 | 상세 설명 |
+  | :--- | :---: | :--- |
+  | `buy_price` | number | 슬롯의 최초 기준 매수 단가 |
+  | `planned_qty` / `planned_buy_krw` | number | 매수 대기 상태의 수량(BTC) 및 투입 목표 예산(KRW) |
+  | `held_qty` / `inventory_cost_krw` | number | 이미 체결되어 보유 중인 재고 수량(BTC) 및 획득 원가(KRW) |
+  | `sell_price` / `effective_sell_price` | number | 기준 매도 타깃가 및 봇 로직(Age TP 등)이 가미된 최종 매도 단가 |
+  | `pending_order` | object | 미체결 대기 상태의 주문 정보 객체 (없을 시 `null`) |
 
 ```bash
-curl -s "http://127.0.0.1:8086/v1/monitor/open-sells" \
-  -H "Authorization: Bearer <access_token>"
+curl -s http://127.0.0.1:8086/v1/grid/state \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
-lookback을 늘려 재확인:
+### 2-4. 그리드 요약 정보 (`GET /v1/grid/summary`)
+체결된 슬롯 개수, 총 재고 평가 원장, 평단가 등의 요약 값을 반환합니다.
+
+> [!WARNING]
+> **자산 원장 평가 기준 유의**: 
+> 모바일 앱이나 API 요약 데이터는 업비트 계정상의 `avg_buy_price` 평단을 직접 사용하지 않고, 봇 데이터베이스의 매수/매도 FIFO 매칭 큐 원장 데이터를 표준으로 반환합니다. 따라서 업비트 MTS 화면상의 평가액과 미세한 차이가 발생할 수 있으며, 종합 정밀 자산 내역은 운영 서버의 `scripts/upbit_actual_assets.py`를 수행하여 비교 점검하는 것이 가장 정확합니다.
 
 ```bash
-curl -s "http://127.0.0.1:8086/v1/monitor/open-sells?lookback_days=180" \
-  -H "Authorization: Bearer <access_token>"
+curl -s http://127.0.0.1:8086/v1/grid/summary \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
-## 명령 API
-
-명령 API는 실제 운영에 영향을 줄 수 있다. 그래서 바로 실행하지 않고 먼저 `commands` 테이블에 저장한다. `auto-command-worker.service`가 큐에서 하나씩 꺼내 실행한다.
-
-| API | 실제로 하는 일 | 주의 |
-| --- | --- | --- |
-| `POST /v1/commands/bot/stop` | `stop.sh` 실행 | 트레이딩 봇이 멈춘다. |
-| `POST /v1/commands/bot/start` | `run.sh` 실행 | 트레이딩 봇을 다시 켠다. |
-| `POST /v1/commands/reset` | `scripts/reset_krw_btc_live.py` 실행 | 미체결 취소, BTC 청산, 그리드 재반영 경로라 매우 위험하다. |
-| `POST /v1/commands/adjust-budget` | `scripts/adjust_budget_live.py` 실행 | 빈 슬롯 planned\_qty를 목표 예산에 맞춰 조정한다. |
-| `POST /v1/commands/reset-stop-loss` | `main.py reset-stop-loss` 실행 | 손절 상태를 해제한다. |
-| `GET /v1/commands/{id}` | 명령 진행 상태 확인 | `queued/running/succeeded/failed`를 본다. |
-
-⚠ 위험 명령 확인 문구
-
-- reset: `"confirmation": "RESET"`
-- adjust-budget: `"confirmation": "ADJUST_BUDGET"`
-
-POST
-/v1/commands/bot/stop
-stop.sh 실행 (봇 정지)
-
-트레이딩 봇이 멈춘다.
-
-#### Request
-
-bash
-
+### 2-5. 미체결 주문 목록 (`GET /v1/orders/pending`)
+봇이 거래소에 주문을 제출하여 현재 대기 중인 활성 주문들을 반환합니다.
+```bash
+curl -s http://127.0.0.1:8086/v1/orders/pending \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
+
+### 2-6. 최근 거래 내역 (`GET /v1/orders/recent`)
+데이터베이스에 누적된 과거 체결/주문 데이터 목록을 최신순으로 가져옵니다.
+
+- **Query Parameters**:
+  | 파라미터 | 타입 | 기본값 | 용도 |
+  | :--- | :---: | :---: | :--- |
+  | `limit` | int | `50` | 조회할 최근 데이터의 개수 제한 |
+
+```bash
+curl -s "http://127.0.0.1:8086/v1/orders/recent?limit=50" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### 2-7. 실현 손익 요약 (`GET /v1/pnl/realized`)
+업비트 거래 정보를 스캔해 수수료가 차감된 순 실현 이익 내역을 기간별로 정제하여 가져옵니다. (업비트 API 연동 활성화 필수)
+
+- **Query Parameters**:
+  | 파라미터 | 타입 | 필수 여부 | 상세 값 범위 |
+  | :--- | :---: | :---: | :--- |
+  | `period` | enum | 필수 | `d` (오늘) / `w` (이번주) / `m` (이번달) / `y` (올해) / `all` (전체) |
+
+```bash
+curl -s "http://127.0.0.1:8086/v1/pnl/realized?period=d" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### 2-8. 매도 대기 실시간 현황 (`GET /v1/monitor/open-sells`)
+체결 대기 중인 모든 SELL 주문과 봇의 실제 매수 슬롯 원가를 정합하여 미실현 손익 구조를 한눈에 볼 수 있도록 가공해 반환합니다.
+
+- **Query Parameters**:
+  | 파라미터 | 타입 | 기본값 | 용도 |
+  | :--- | :---: | :---: | :--- |
+  | `market` | string | `KRW-BTC` | 분석 대상 업비트 마켓 코드 |
+  | `lookback_days` | int | `120` | 과거 매수 이력 매칭을 위한 큐 추적 윈도우 기간 (일 단위) |
+  | `bot_key` | string | (기본 봇 키) | 특정 봇 식별 고유 접두사 |
+  | `reset_sell_uuid` | array | — | 과거 강제 리셋 매도 주문 UUID 목록 (다중 지정 가능) |
+
+- **응답 예시 (JSON)**:
+  ```json
+  {
+    "market": "KRW-BTC",
+    "current_price": "152000000",
+    "generated_at": "2026-05-28T14:30:00+09:00",
+    "rows": [
+      {
+        "slot_index": 3,
+        "qty": "0.00100",
+        "buy_unit_cost": "148500000",
+        "sell_limit_price": "153000000",
+        "current_price": "152000000",
+        "unrealized_at_current": "3500",
+        "gap_to_fill_krw": "1000000"
+      }
+    ],
+    "summary": {
+      "total_count": 5,
+      "matched_count": 4,
+      "unmatched_count": 1,
+      "profit_count": 3,
+      "loss_count": 1,
+      "total_unrealized_krw": "5000"
+    },
+    "diagnostic": {
+      "open_orders": 5,
+      "matched": 4,
+      "unmatched": 1,
+      "lookback_days": 120
+    }
+  }
+  ```
+
+---
+
+## 3. 제어(Commands) API 규격
+
+제어 명령 API는 봇 프로세스를 기동/정지하거나 예산을 개편하는 등 위험도가 높으므로 실행 큐(`commands` 테이블)에 적재된 뒤 비동기 워커가 안전 검증을 수행하며 처리합니다.
+
+### 3-1. 봇 작동 중지 (`POST /v1/commands/bot/stop`)
+[stop.sh](file:///C:/dev/mobileAuto/auto/stop.sh)를 백그라운드 호출하여 봇을 안전하게 정지시킵니다.
+```bash
 curl -s -X POST http://127.0.0.1:8086/v1/commands/bot/stop \
-  -H "Authorization: Bearer <access_token>" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"totp_code":"123456"}'
 ```
 
-POST
-/v1/commands/bot/start
-run.sh 실행 (봇 재시작)
-
-트레이딩 봇을 다시 켠다.
-
-#### Request
-
-bash
-
-```
+### 3-2. 봇 작동 시작 (`POST /v1/commands/bot/start`)
+[run.sh](file:///C:/dev/mobileAuto/auto/run.sh)를 실행하여 봇을 백그라운드로 기동합니다.
+```bash
 curl -s -X POST http://127.0.0.1:8086/v1/commands/bot/start \
-  -H "Authorization: Bearer <access_token>" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"totp_code":"123456"}'
 ```
 
-POST
-/v1/commands/reset
-라이브 reset (매우 위험)
+### 3-3. 라이브 리셋 (`POST /v1/commands/reset`)
+가동 봇을 정지하고, 모든 미체결 매매를 취소한 뒤, 보유 코인을 전량 시장가 청산 및 그리드를 초기화하는 고위험 명령입니다.
 
-미체결 취소, BTC 청산, 그리드 재반영 경로라 매우 위험하다. 확인 문구 `"RESET"` 필수.
+- **Request Body 필드**:
+  | 필드명 | 타입 | 필수 여부 | 설명 |
+  | :--- | :---: | :---: | :--- |
+  | `totp_code` | string | 조건부 | TOTP 보안 활성화 시 필수 |
+  | `confirmation` | string | 필수 | 오작동 예방용 고정 텍스트 문구 `"RESET"` 입력 |
 
-#### Body 필드
-
-| 이름 | 타입 | 필수 | 설명 |
-| --- | --- | --- | --- |
-| `totp_code` | string | 조건부 | TOTP secret 설정 시 필수 |
-| `confirmation` | string | 필수 | 고정 문자열 `"RESET"` |
-
-#### Request
-
-bash
-
-```
+```bash
 curl -s -X POST http://127.0.0.1:8086/v1/commands/reset \
-  -H "Authorization: Bearer <access_token>" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"totp_code":"123456","confirmation":"RESET"}'
 ```
 
-POST
-/v1/commands/adjust-budget
-빈 슬롯 planned\_qty 재계산
+### 3-4. 가동 예산 조정 (`POST /v1/commands/adjust-budget`)
+기존 가격대 및 체결 재고는 유지한 상태로 미체결 대기 슬롯들의 계획 매수량만 조정된 예산에 맞춰 업데이트합니다.
 
-빈 슬롯 planned\_qty를 목표 예산에 맞춰 조정한다. 확인 문구 `"ADJUST_BUDGET"` 필수.
+- **Request Body 필드**:
+  | 필드명 | 타입 | 필수 여부 | 설명 |
+  | :--- | :---: | :---: | :--- |
+  | `target_budget` | string | 필수 | 개편할 절대 총예산 금액 (원화 단위 정수) |
+  | `force` | bool | 선택 | 강제 적용 여부 |
+  | `confirmation` | string | 필수 | 오작동 예방용 고정 텍스트 문구 `"ADJUST_BUDGET"` 입력 |
 
-#### Body 필드
-
-| 이름 | 타입 | 필수 | 설명 |
-| --- | --- | --- | --- |
-| `target_budget` | string | 필수 | 절대 총예산 (KRW) |
-| `force` | bool | 선택 | 강제 적용 여부 |
-| `totp_code` | string | 조건부 | TOTP secret 설정 시 필수 |
-| `confirmation` | string | 필수 | 고정 문자열 `"ADJUST_BUDGET"` |
-
-#### Request
-
-bash
-
-```
+```bash
 curl -s -X POST http://127.0.0.1:8086/v1/commands/adjust-budget \
-  -H "Authorization: Bearer <access_token>" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{
     "target_budget": "2400000",
@@ -733,128 +371,56 @@ curl -s -X POST http://127.0.0.1:8086/v1/commands/adjust-budget \
   }'
 ```
 
-POST
-/v1/commands/reset-stop-loss
-손절 상태 해제 (main.py reset-stop-loss)
-
-손절 상태를 해제한다.
-
-#### Request
-
-bash
-
-```
+### 3-5. 손절 상태 해제 (`POST /v1/commands/reset-stop-loss`)
+활성화된 L1/L2 손절 가드 락 상태를 초기화하여 정상 거래 가능 모드로 복구합니다.
+```bash
 curl -s -X POST http://127.0.0.1:8086/v1/commands/reset-stop-loss \
-  -H "Authorization: Bearer <access_token>" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"totp_code":"123456"}'
 ```
 
-GET
-/v1/commands/{id}
-명령 진행 상태 확인
-
-상태 값: queued running succeeded failed
-
-#### Request
-
-bash
-
-```
-curl -s http://127.0.0.1:8086/v1/commands/<command_id> \
-  -H "Authorization: Bearer <access_token>"
+### 3-6. 적재 명령 가동 상태 조회 (`GET /v1/commands/{id}`)
+큐에 전달한 비동기 작업의 진행 및 성공 여부를 확인합니다.
+*(반환 상태 값: `queued` / `running` / `succeeded` / `failed`)*
+```bash
+curl -s http://127.0.0.1:8086/v1/commands/YOUR_COMMAND_ID \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
-📌 동시성 안전장치
+---
 
-위험 명령은 PostgreSQL advisory lock과 기존 운영 스크립트의 안전장치를 그대로 사용한다. 동시에 같은 종류의 명령은 하나만 `queued/running` 상태가 될 수 있다.
+## 🛠 장애 대응 및 점검 가이드
 
-## 문제 해결 순서
+### 1. 앱 연동 장애 (조회/통신이 전혀 안 될 때)
+- API 서버 구동 로그 및 포트 대기 확인:
+  ```bash
+  systemctl --user status auto-api.service
+  ss -ltnp | grep :8086
+  curl -s http://127.0.0.1:8086/health
+  ```
 
-### 앱에서 아무 API도 안 될 때
+### 2. 로그인 인증 불가 시
+- `.env` 내 모바일 인증 계정 정보 정합성 확인 후 API 재기동:
+  ```bash
+  awk -F= '/^MOBILE_API_/ {print $1"=<set>"}' .env
+  systemctl --user restart auto-api.service
+  ```
 
-bash
+### 3. 모바일에서 손익 정보(PnL) 조회 실패 시
+- 업비트 API 키 주입 여부 확인 및 수동 손익 조회 테스트:
+  ```bash
+  awk -F= '/^(UPBIT_ACCESS_KEY|UPBIT_SECRET_KEY)=/ {print $1"=<set>"}' .env
+  .venv/bin/python scripts/upbit_realized_pnl.py --period d
+  ```
 
-```
-cd /home/ubuntu/auto
-systemctl --user status auto-api.service
-ss -ltnp | grep :8086
-curl -s http://127.0.0.1:8086/health
-```
-
-### 로그인이 안 될 때
-
-bash
-
-```
-cd /home/ubuntu/auto
-awk -F= '/^MOBILE_API_/ {print $1"=<set>"}' .env
-systemctl --user restart auto-api.service
-```
-
-### PnL API가 실패할 때
-
-bash
-
-```
-cd /home/ubuntu/auto
-awk -F= '/^(UPBIT_ACCESS_KEY|UPBIT_SECRET_KEY)=/ {print $1"=<set>"}' .env
-.venv/bin/python scripts/upbit_realized_pnl.py --period d
-```
-
-### 총 평가액과 장부 원금이 다르게 보일 때
-
-bash
-
-```
-cd /home/ubuntu/auto
-scripts/upbit_actual_assets.py
-# 수량 불일치가 표시될 때만:
-scripts/upbit_actual_assets.py --lookback-days 180
-```
-
-`--lookback-days` 기본값은 120일이다. 평소에는 옵션 없이 실행하고, 오래된 BUY가 누락된 것으로 보일 때만 늘린다.
-
-### 앱에서 봇 시작/중지 명령이 실행되지 않을 때
-
-bash
-
-```
-cd /home/ubuntu/auto
-systemctl --user status auto-command-worker.service
-journalctl --user -u auto-command-worker.service -n 100 --no-pager
-docker exec auto-postgres psql -U auto -d auto \
-  -c "SELECT id, kind, status, requested_at, error FROM auto_trading.commands ORDER BY requested_at DESC LIMIT 10"
-```
-
-### API는 되는데 봇이 죽어 있는 것 같을 때
-
-bash
-
-```
-cd /home/ubuntu/auto
-ps -ef | grep '/home/ubuntu/auto/main.py' | grep -v grep
-tail -n 100 logs/trading-$(date +%F).log
-```
-
-## 안전 기준
-
-✅ 읽기 API
-
-`GET` API는 조회용이다. 주문을 만들거나 봇을 멈추지 않는다.
-
-⚠ 명령 API
-
-`POST /v1/commands/*` API는 운영 상태를 바꿀 수 있다.
-
-🚫 reset 계열
-
-reset 계열 명령은 실제 자산과 주문에 영향을 주므로 앱 UI에서 별도 확인 절차를 둔다.
-
-🔐 Upbit 키 보호
-
-모바일 앱에는 Upbit 키를 넣지 않는다. Upbit 키는 EC2의 `.env`에만 둔다.
-
-⚠ HTTPS 권장
-
-지금 8086은 HTTP다. 실제 외부 앱에서 장기간 쓰려면 HTTPS reverse proxy를 붙이는 것을 권장한다.
+### 4. 제어 명령어가 앱에서 작동하지 않을 때 (명령 락 현상)
+- 명령 실행기 워커 구동 여부 및 PostgreSQL 명령어 큐 적재 데이터 확인:
+  ```bash
+  systemctl --user status auto-command-worker.service
+  journalctl --user -u auto-command-worker.service -n 50 --no-pager
+  
+  # 데이터베이스 내 commands 큐 최종 적재 10건 현황 확인
+  docker exec auto-postgres psql -U auto -d auto \
+    -c "SELECT id, kind, status, requested_at, error FROM auto_trading.commands ORDER BY requested_at DESC LIMIT 10"
+  ```
