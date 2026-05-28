@@ -118,7 +118,7 @@ $$k_{base} \ge k_{floor} > 0 \tag{식 18}$$
 $$b_i = \min\left( \left\lfloor \frac{3i}{N-1} \right\rfloor, 2 \right) \tag{식 19}$$
 
 각 구간 변수 $b_i$에 따른 매칭 가중치 $w_i$:
-$$w_i = \begin{cases} 0.7 & \text{if } b_i = 0 \quad (\text{상단 } 1/3) \\ 1.0 & \text{if } b_i = 1 \quad (\text{중단 } 1/3) \\ 1.3 & \text{if } b_i = 2 \quad (\text{하단 } 1/3) \end{cases} \tag{식 20}$$
+$$w_i = \begin{cases} 0.7 & \text{if } b_i = 0 \quad (\text{상단 } 1/3) \\\\ 1.0 & \text{if } b_i = 1 \quad (\text{중단 } 1/3) \\\\ 1.3 & \text{if } b_i = 2 \quad (\text{하단 } 1/3) \end{cases} \tag{식 20}$$
 
 전체 그리드 가중치 합산 $W$:
 $$W = \sum_{i=0}^{N-1} w_i \tag{식 21}$$
@@ -191,7 +191,7 @@ $$n_{>} = n_{above} \tag{식 34}$$
 시세의 밴드상 위치에 따라 안전 재고 비율을 차등 부여하는 알고리즘입니다.
 
 최대 운영 예산 기준 분모 $B_{op}$:
-$$B_{op} = \begin{cases} B_{maxop} & \text{if } B_{maxop} > 0 \\ B_{allocated} & \text{if } B_{maxop} \le 0 \end{cases} \tag{식 35}$$
+$$B_{op} = \begin{cases} B_{maxop} & \text{if } B_{maxop} > 0 \\\\ B_{allocated} & \text{if } B_{maxop} \le 0 \end{cases} \tag{식 35}$$
 
 현재 가격 사이클에서의 누적 가상 재고 비율 $q_{current}$:
 $$q_{current} = \frac{C_{projected}}{B_{op}} \tag{식 36}$$
@@ -235,7 +235,7 @@ $$t_{previousPrice} \leftarrow t_{monotonicNow} \tag{식 46}$$
 $$a = t_{nowUtc} - t_{filledUtc} \tag{식 49}$$
 
 보유 연령에 따른 $k$ 감쇄 변량 $d(a)$:
-$$d(a) = \begin{cases} 1.0 & \text{if } a \ge 7 \text{ days} \\ 0.5 & \text{if } 48 \text{ hours} \le a < 7 \text{ days} \\ 0.0 & \text{if } a < 48 \text{ hours} \end{cases} \tag{식 50}$$
+$$d(a) = \begin{cases} 1.0 & \text{if } a \ge 7 \text{ days} \\\\ 0.5 & \text{if } 48 \text{ hours} \le a < 7 \text{ days} \\\\ 0.0 & \text{if } a < 48 \text{ hours} \end{cases} \tag{식 50}$$
 
 감쇄가 반영된 유효 배수 $k_{eff}$:
 $$k_{eff} = \max(k_{base} - d(a), k_{floor}) \tag{식 51}$$
@@ -246,7 +246,7 @@ $$g_{compressed} = g_{base} \cdot \frac{k_{eff}}{k_{base}} \tag{식 53}$$
 $$S_i' = F_{norm}(B_i \cdot e^{g_{compressed}}) \tag{식 54}$$
 
 최종 적용할 매도 호가 $S_i^{eff}$:
-$$S_i^{eff} = \begin{cases} S_i' & \text{if } B_i < S_i' < S_i \\ S_i & \text{otherwise} \end{cases} \tag{식 55}$$
+$$S_i^{eff} = \begin{cases} S_i' & \text{if } B_i < S_i' < S_i \\\\ S_i & \text{otherwise} \end{cases} \tag{식 55}$$
 
 ---
 
