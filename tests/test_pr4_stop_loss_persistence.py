@@ -19,6 +19,19 @@ from app.storage.interfaces import GridSnapshot, RepositoryMetadata
 from app.utils.decimal_utils import DECIMAL_ZERO
 
 
+_symbol_patcher = None
+
+
+def setUpModule():
+    global _symbol_patcher
+    _symbol_patcher = patch.object(cfg, "SYMBOL", "KRW-BTC")
+    _symbol_patcher.start()
+
+
+def tearDownModule():
+    _symbol_patcher.stop()
+
+
 class StopLossMetadataPersistenceTest(unittest.TestCase):
     """Flaw 2: GridSnapshot round-trip test — stop_loss_armed_at 포함"""
 

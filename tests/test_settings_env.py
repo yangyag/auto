@@ -9,6 +9,44 @@ from pathlib import Path
 
 class SettingsEnvLoadingTest(unittest.TestCase):
 
+    def test_settings_loads_symbol_from_env_file(self):
+        project_root = Path(__file__).resolve().parents[1]
+        settings_source = (project_root / "app" / "config" / "settings.py").read_text(encoding="utf-8")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            (tmp_path / "app" / "config").mkdir(parents=True)
+            (tmp_path / "app" / "__init__.py").write_text("", encoding="utf-8")
+            (tmp_path / "app" / "config" / "__init__.py").write_text("", encoding="utf-8")
+            (tmp_path / "app" / "config" / "settings.py").write_text(settings_source, encoding="utf-8")
+            (tmp_path / ".env").write_text("SYMBOL=KRW-USDT\n", encoding="utf-8")
+
+            env = os.environ.copy()
+            env.pop("SYMBOL", None)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    textwrap.dedent(
+                        """
+                        import sys
+                        sys.path.insert(0, r'__TMPDIR__')
+                        import app.config.settings as settings
+                        print(settings.SYMBOL)
+                        """.replace("__TMPDIR__", str(r"__TMPDIR__"))
+                    ),
+                ],
+                cwd=tmpdir,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertEqual(result.stdout.strip(), "KRW-USDT")
+
     def test_settings_loads_upbit_credentials_from_project_root_env_file(self):
         project_root = Path(__file__).resolve().parents[1]
         settings_source = (project_root / "app" / "config" / "settings.py").read_text(encoding="utf-8")

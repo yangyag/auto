@@ -1,6 +1,8 @@
 import unittest
 from decimal import Decimal
+from unittest.mock import patch
 
+import app.main as main
 from app.core.grid import GridState
 from app.core.models import GridRow
 from app.main import GridStateRuntime, refresh_grid_state_if_changed
@@ -44,6 +46,11 @@ class InMemoryGridRepository:
 
 
 class GridReloadTest(unittest.TestCase):
+
+    def setUp(self):
+        self.symbol_patch = patch.object(main.cfg, "SYMBOL", "KRW-BTC")
+        self.symbol_patch.start()
+        self.addCleanup(self.symbol_patch.stop)
 
     def test_refresh_grid_state_if_changed_refreshes_rows_from_repository(self):
         repository = InMemoryGridRepository(INITIAL_SNAPSHOT)

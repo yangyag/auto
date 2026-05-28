@@ -9,7 +9,7 @@
 - 운영 심볼을 `KRW-USDT`로 바꾼다.
 - 새 상태 키는 `krw-usdt-live-local`을 사용한다.
 - 그리드 매수 범위는 1430원부터 1530원까지로 설정한다.
-- 총 배정 예산은 기존과 동일하게 6,000,000 KRW로 유지한다.
+- 총 배정 예산은 10,000,000 KRW로 설정한다.
 - 기존 BTC 상태, 주문 identifier 이력, 손익 분석 경계를 새 USDT 운영 상태와 섞지 않는다.
 
 ## 제외 범위
@@ -42,11 +42,12 @@ STATE_BOT_KEY=krw-usdt-live-local
 ```properties
 MIN_BUY_PRICE=1430
 MAX_BUY_PRICE=1530
-TOTAL_BUDGET_KRW=6000000
+TOTAL_BUDGET_KRW=10000000
 GRID_STEP_PCT=0.2
 ```
 
 TP 모델과 손절 설정은 기존 값을 유지한다.
+단, `1430~1530` 범위에서 기존 `STOP_LOSS_BAND_MULTIPLE=1.5`는 코드 검증상 정상 운영 구간을 침범하므로, 동일한 `band_multiple` 모드를 유지하되 `STOP_LOSS_BAND_MULTIPLE=1.55`로 조정한다.
 
 ### DB 반영
 

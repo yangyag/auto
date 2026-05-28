@@ -72,8 +72,8 @@ _load_project_env()
 EXCHANGE_TYPE = "crypto"
 
 # ── 거래 대상 ────────────────────────────────────────────
-# 업비트 마켓 형식: "KRW-BTC", "KRW-ETH" 등
-SYMBOL = "KRW-BTC"
+# 업비트 마켓 형식: "KRW-BTC", "KRW-ETH", "KRW-USDT" 등
+SYMBOL = os.getenv("SYMBOL", "KRW-BTC")
 
 # ── PostgreSQL 상태 저장 ─────────────────────────────────
 STATE_BOT_KEY = os.getenv("STATE_BOT_KEY", "krw-btc-live")

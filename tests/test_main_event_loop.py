@@ -31,6 +31,11 @@ class FakePriceEventExchange:
 
 class MainEventLoopTest(unittest.TestCase):
 
+    def setUp(self):
+        self.symbol_patch = patch.object(main.cfg, "SYMBOL", "KRW-BTC")
+        self.symbol_patch.start()
+        self.addCleanup(self.symbol_patch.stop)
+
     def _cycle_kwargs(self):
         return {
             "strategy": Mock(),
