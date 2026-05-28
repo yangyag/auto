@@ -399,6 +399,7 @@ export async function apiGet(path: string) {
 | `GET /v1/orders/pending` | DB 기준 미체결 주문 | 봇이 관리하는 open 주문 목록이다. |
 | `GET /v1/orders/recent?limit=50` | 최근 주문 이력 | DB에 기록된 주문 기준이다. |
 | `GET /v1/pnl/realized?period=d` | 오늘 실현손익 | `d/w/m/y/all` 기간을 지원한다. Upbit 키가 필요하다. |
+| `GET /v1/monitor/open-sells` | 매도 대기 주문 현황 | 슬롯별 매수원가, 미실현손익, 도달까지 거리를 보여준다. |
 | `GET /v1/config` | 앱에 보여줘도 되는 핵심 설정 | secret은 반환하지 않는다. |
 
 GET
@@ -552,6 +553,76 @@ bash
 
 ```
 curl -s http://127.0.0.1:8086/v1/config \
+  -H "Authorization: Bearer <access_token>"
+```
+
+GET
+/v1/monitor/open-sells
+매도 대기 주문 현황 (슬롯별 매수원가 + 미실현손익)
+
+현재 미체결 매도 주문을 봇 슬롯별 실제 매수원가와 매칭해, 각 슬롯의 매수원가, 매도지정가, 현재가 기준 미실현손익, 체결까지 남은 거리를 보여준다.
+
+#### Query
+
+| 이름 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `market` | string | 선택 | 업비트 마켓 코드 (기본: `KRW-BTC`) |
+| `lookback_days` | int | 선택 | BUY 큐 계산용 주문 조회 기간 (기본: `120`) |
+| `bot_key` | string | 선택 | identifier bot key prefix (기본: `cfg.STATE_BOT_KEY`) |
+| `reset_sell_uuid` | string[] | 선택 | 과거 reset SELL uuid 지정 (반복 가능) |
+
+#### Status
+
+200 정상
+401 토큰 없음/만료
+503 Upbit 키 누락
+
+#### Response
+
+```json
+{
+  "market": "KRW-BTC",
+  "current_price": "152000000",
+  "generated_at": "2026-05-28T14:30:00+09:00",
+  "rows": [
+    {
+      "slot_index": 3,
+      "qty": "0.00100",
+      "buy_unit_cost": "148500000",
+      "sell_limit_price": "153000000",
+      "current_price": "152000000",
+      "unrealized_at_current": "3500",
+      "gap_to_fill_krw": "1000000"
+    }
+  ],
+  "summary": {
+    "total_count": 5,
+    "matched_count": 4,
+    "unmatched_count": 1,
+    "profit_count": 3,
+    "loss_count": 1,
+    "total_unrealized_krw": "5000"
+  },
+  "diagnostic": {
+    "open_orders": 5,
+    "matched": 4,
+    "unmatched": 1,
+    "lookback_days": 120
+  }
+}
+```
+
+#### Request
+
+```bash
+curl -s "http://127.0.0.1:8086/v1/monitor/open-sells" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+lookback을 늘려 재확인:
+
+```bash
+curl -s "http://127.0.0.1:8086/v1/monitor/open-sells?lookback_days=180" \
   -H "Authorization: Bearer <access_token>"
 ```
 

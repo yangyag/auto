@@ -266,6 +266,13 @@ bash
 .venv/bin/python scripts/upbit_open_sell_monitor.py --lookback-days 180
 ```
 
+📌 API / 브라우저로도 확인 가능
+
+EC2 운영 서버에서는 CLI 외에 아래 방법으로도 동일한 매도 대기 현황을 조회할 수 있다.
+
+- 브라우저 점검 화면: `http://<EC2_IP>:8086/ops` → **매도 대기** 버튼
+- Mobile API: `GET /v1/monitor/open-sells` (JWT 인증 필요, [docs/mobile-api.md](mobile-api.md) 참조)
+
 ### 출력 컬럼 설명
 
 | 컬럼 | 의미 |

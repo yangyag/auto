@@ -78,6 +78,8 @@ scripts/upbit_actual_assets.py
 .venv/bin/python scripts/upbit_open_sell_monitor.py --bot-key krw-btc-live
 ```
 
+EC2 운영 서버에서는 모바일 API (`GET /v1/monitor/open-sells`) 또는 브라우저 점검 화면 (`/ops`)에서도 같은 내용을 확인할 수 있다. 자세한 API 명세는 [docs/mobile-api.md](docs/mobile-api.md#v1monitoropen-sells)를 참조한다.
+
 ### 6. 봇 시작 / 종료
 
 시작:
