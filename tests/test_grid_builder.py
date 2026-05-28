@@ -1,6 +1,7 @@
 import unittest
 from decimal import Decimal
 
+from app.config import settings as cfg
 from app.core.grid import GridState
 from app.core.grid_builder import build_cash_only_grid
 from app.core.grid_properties import GridPropertySpec, build_grid_rows_from_property_spec, build_target_sell_price
@@ -47,8 +48,8 @@ class GridBuilderTest(unittest.TestCase):
                 lower_price=Decimal("93695193"),
                 upper_price=Decimal("110370483"),
                 price_interval_count=9,
-                tp_k=Decimal("9.0"),
-                tp_k_floor=Decimal("7.0"),
+                tp_k=cfg.GRID_TP_K_BASE,
+                tp_k_floor=cfg.GRID_TP_K_FLOOR,
             ),
         )
 

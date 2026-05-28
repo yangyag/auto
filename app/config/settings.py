@@ -82,8 +82,8 @@ GRID_LOWER_PRICE = Decimal("92253123")
 GRID_UPPER_PRICE = Decimal("111137221")
 GRID_TOTAL_BUDGET_KRW = Decimal("2400000")
 GRID_TP_MODEL = "k"
-GRID_TP_K_BASE = Decimal("9.0")
-GRID_TP_K_FLOOR = Decimal("7.0")
+GRID_TP_K_BASE = Decimal("3.2")
+GRID_TP_K_FLOOR = Decimal("3.0")
 
 # ── PostgreSQL 접속 정보 ─────────────────────────────────
 PGHOST = os.getenv("PGHOST", "127.0.0.1")

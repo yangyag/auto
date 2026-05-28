@@ -12,8 +12,8 @@ from app.utils.decimal_utils import BTC_QUANTITY_STEP, DECIMAL_ZERO, quantize_to
 from app.utils.upbit_market import MIN_KRW_ORDER_AMOUNT, normalize_krw_price
 
 DEFAULT_TP_MODEL = "k"
-DEFAULT_TP_K_BASE = Decimal("9.0")
-DEFAULT_TP_K_FLOOR = Decimal("7.0")
+DEFAULT_TP_K_BASE = Decimal("3.2")
+DEFAULT_TP_K_FLOOR = Decimal("3.0")
 DEFAULT_TOP_THIRD_WEIGHT = Decimal("0.7")
 DEFAULT_MIDDLE_THIRD_WEIGHT = Decimal("1.0")
 DEFAULT_BOTTOM_THIRD_WEIGHT = Decimal("1.3")

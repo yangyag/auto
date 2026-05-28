@@ -113,8 +113,8 @@ class GridPropertiesTest(unittest.TestCase):
                 lower_price=spec.min_buy_price,
                 upper_price=spec.max_buy_price,
                 price_interval_count=spec.grid_count - 1,
-                tp_k=Decimal("9.0"),
-                tp_k_floor=Decimal("7.0"),
+                tp_k=cfg.GRID_TP_K_BASE,
+                tp_k_floor=cfg.GRID_TP_K_FLOOR,
             ),
         )
         self.assertEqual(
@@ -125,8 +125,8 @@ class GridPropertiesTest(unittest.TestCase):
                 lower_price=spec.min_buy_price,
                 upper_price=spec.max_buy_price,
                 price_interval_count=spec.grid_count - 1,
-                tp_k=Decimal("9.0"),
-                tp_k_floor=Decimal("7.0"),
+                tp_k=cfg.GRID_TP_K_BASE,
+                tp_k_floor=cfg.GRID_TP_K_FLOOR,
             ),
         )
         self.assertGreater(rows[0].sell_price, rows[0].buy_price)
@@ -181,8 +181,8 @@ class GridPropertiesTest(unittest.TestCase):
                 lower_price=spec.min_buy_price,
                 upper_price=spec.max_buy_price,
                 price_interval_count=spec.grid_count - 1,
-                tp_k=Decimal("9.0"),
-                tp_k_floor=Decimal("7.0"),
+                tp_k=cfg.GRID_TP_K_BASE,
+                tp_k_floor=cfg.GRID_TP_K_FLOOR,
             ),
         )
         self.assertEqual(
@@ -193,8 +193,8 @@ class GridPropertiesTest(unittest.TestCase):
                 lower_price=spec.min_buy_price,
                 upper_price=spec.max_buy_price,
                 price_interval_count=spec.grid_count - 1,
-                tp_k=Decimal("9.0"),
-                tp_k_floor=Decimal("7.0"),
+                tp_k=cfg.GRID_TP_K_BASE,
+                tp_k_floor=cfg.GRID_TP_K_FLOOR,
             ),
         )
         self.assertEqual(
@@ -205,8 +205,8 @@ class GridPropertiesTest(unittest.TestCase):
                 lower_price=spec.min_buy_price,
                 upper_price=spec.max_buy_price,
                 price_interval_count=spec.grid_count - 1,
-                tp_k=Decimal("9.0"),
-                tp_k_floor=Decimal("7.0"),
+                tp_k=cfg.GRID_TP_K_BASE,
+                tp_k_floor=cfg.GRID_TP_K_FLOOR,
             ),
         )
 
