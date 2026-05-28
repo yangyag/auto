@@ -347,14 +347,14 @@ OPS_DASHBOARD_HTML = """<!doctype html>
       return valueOrDash(status);
     }
 
-    function pendingOrderText(order) {
+    function pendingOrderText(order, baseCurrency = "BTC") {
       if (!order) {
         return "-";
       }
       const rawSide = String(order.side || "").toLowerCase();
       const side = rawSide === "buy" ? "매수" : rawSide === "sell" ? "매도" : valueOrDash(order.side);
       const status = order.status || "open";
-      const amount = order.spend_amount ? formatKrw(order.spend_amount) + " KRW" : valueOrDash(order.quantity) + " BTC";
+      const amount = order.spend_amount ? formatKrw(order.spend_amount) + " KRW" : valueOrDash(order.quantity) + " " + baseCurrency;
       return side + " " + status + " " + amount;
     }
 
@@ -435,9 +435,11 @@ OPS_DASHBOARD_HTML = """<!doctype html>
       const table = document.createElement("table");
       const thead = document.createElement("thead");
       const headerRow = document.createElement("tr");
+      const symbol = data.symbol || "KRW-BTC";
+      const baseCurrency = symbol.includes("-") ? symbol.split("-")[1].toUpperCase() : symbol.toUpperCase();
       const headers = [
-        "슬롯", "상태", "매수가", "계획 BTC", "계획 매수(KRW)",
-        "보유 BTC", "보유 원가(KRW)", "매도가", "유효 매도가", "미체결"
+        "슬롯", "상태", "매수가", `계획 ${baseCurrency}`, "계획 매수(KRW)",
+        `보유 ${baseCurrency}`, "보유 원가(KRW)", "매도가", "유효 매도가", "미체결"
       ];
       for (const header of headers) {
         const cell = document.createElement("th");
@@ -467,7 +469,7 @@ OPS_DASHBOARD_HTML = """<!doctype html>
         appendCell(row, formatKrw(slot.inventory_cost_krw));
         appendCell(row, formatKrw(slot.sell_price));
         appendCell(row, formatKrw(slot.effective_sell_price));
-        appendCell(row, pendingOrderText(slot.pending_order));
+        appendCell(row, pendingOrderText(slot.pending_order, baseCurrency));
         tbody.appendChild(row);
       }
       table.appendChild(tbody);
@@ -556,10 +558,12 @@ OPS_DASHBOARD_HTML = """<!doctype html>
             {label: "현재가", value: data.current_price}
           ]);
         } else if (button.dataset.path === "/v1/grid/summary") {
+          const symbol = data.symbol || "KRW-BTC";
+          const baseCurrency = symbol.includes("-") ? symbol.split("-")[1].toUpperCase() : symbol.toUpperCase();
           showFacts([
             {label: "행 수", value: data.row_count},
             {label: "보유 칸 수", value: data.holding_count},
-            {label: "보유 BTC", value: data.total_inventory_btc},
+            {label: `보유 ${baseCurrency}`, value: data.total_inventory_btc},
             {label: "보유 원가(KRW)", value: data.current_inventory_cost_krw}
           ]);
         } else if (button.dataset.path === "/v1/grid/state") {
@@ -599,11 +603,13 @@ OPS_DASHBOARD_HTML = """<!doctype html>
       const period = document.getElementById("pnlPeriod").value;
       const data = await run("실현손익", () => request("/v1/pnl/realized?period=" + encodeURIComponent(period)));
       const first = data.buckets && data.buckets[0] ? data.buckets[0] : {};
+      const market = data.market || "KRW-BTC";
+      const baseCurrency = market.includes("-") ? market.split("-")[1].toUpperCase() : market.toUpperCase();
       showFacts([
         {label: "기간", value: data.period},
         {label: "구간", value: first.key},
         {label: "실현손익(KRW)", value: first.realized_pnl_krw},
-        {label: "매칭 BTC", value: first.matched_qty_btc}
+        {label: `매칭 ${baseCurrency}`, value: first.matched_qty_btc}
       ]);
     });
 
