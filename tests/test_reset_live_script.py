@@ -5,10 +5,10 @@ from unittest.mock import Mock, call, patch
 
 from app.core.models import OrderExecutionType, OrderSide
 from app.core.models import OrderStatus
-import scripts.reset_krw_btc_live as reset_script
+import scripts.reset_live as reset_script
 
 
-class ResetKrwBtcLiveScriptTest(unittest.TestCase):
+class ResetLiveScriptTest(unittest.TestCase):
     def test_cancel_open_orders_cancels_live_orders_and_repository_entries(self):
         exchange = Mock()
         exchange.get_open_order_ids.side_effect = [
@@ -37,7 +37,7 @@ class ResetKrwBtcLiveScriptTest(unittest.TestCase):
             [call("uuid-1"), call("uuid-1"), call("uuid-stale")]
         )
 
-    def test_liquidate_btc_position_places_market_sell_order_and_waits_for_fill(self):
+    def test_liquidate_position_places_market_sell_order_and_waits_for_fill(self):
         exchange = Mock()
         exchange.get_holdings.side_effect = [
             Decimal("0.025"),
@@ -62,7 +62,7 @@ class ResetKrwBtcLiveScriptTest(unittest.TestCase):
 
         with patch.object(reset_script.time, "time", return_value=1234.567), \
              patch.object(reset_script.uuid, "uuid4", return_value=Mock(hex="abcdef1234567890")):
-            order_id = reset_script.liquidate_btc_position(
+            order_id = reset_script.liquidate_position(
                 exchange,
                 timeout_seconds=5,
                 poll_interval=0.01,
@@ -82,12 +82,12 @@ class ResetKrwBtcLiveScriptTest(unittest.TestCase):
             f"{reset_script.cfg.STATE_BOT_KEY}-reset-sell-1234567-abcdef123456",
         )
 
-    def test_liquidate_btc_position_skips_when_notional_is_below_minimum(self):
+    def test_liquidate_position_skips_when_notional_is_below_minimum(self):
         exchange = Mock()
         exchange.get_holdings.return_value = Decimal("0.00001")
         exchange.get_current_price.return_value = Decimal("1000000")
 
-        order_id = reset_script.liquidate_btc_position(
+        order_id = reset_script.liquidate_position(
             exchange,
             timeout_seconds=5,
             poll_interval=0.01,
@@ -108,7 +108,7 @@ class ResetKrwBtcLiveScriptTest(unittest.TestCase):
              patch.object(reset_script, "print_runtime_snapshot") as print_runtime_snapshot, \
              patch.object(reset_script, "run_project_command") as run_project_command, \
              patch.object(reset_script, "cancel_open_orders") as cancel_open_orders, \
-             patch.object(reset_script, "liquidate_btc_position") as liquidate_btc_position:
+             patch.object(reset_script, "liquidate_position") as liquidate_position:
             mock_lock_cls.return_value.acquire.return_value = True
 
             def observe_project_command(command, *, env=None):
@@ -136,7 +136,7 @@ class ResetKrwBtcLiveScriptTest(unittest.TestCase):
             timeout_seconds=30,
             poll_interval=1.0,
         )
-        liquidate_btc_position.assert_called_once()
+        liquidate_position.assert_called_once()
         self.assertEqual(run_project_command.call_args_list[0].args[0], [str(reset_script.PROJECT_ROOT / "stop.sh")])
         self.assertEqual(
             run_project_command.call_args_list[1].args[0],

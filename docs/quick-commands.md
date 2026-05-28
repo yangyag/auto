@@ -333,7 +333,7 @@ TP_K_FLOOR=7.0
 
 ### `[reset]` 전량 청산 및 그리드 리빌드 원스톱 실행
 ```bash
-.venv/bin/python scripts/reset_krw_btc_live.py
+.venv/bin/python scripts/reset_live.py
 ```
 
 > [!IMPORTANT]

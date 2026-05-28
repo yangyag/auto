@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""KRW-BTC 라이브 상태를 정리하고 새 grid.properties를 반영한다."""
+"""라이브 상태를 정리하고 새 grid.properties를 반영한다. cfg.SYMBOL 기준으로 동작."""
 from __future__ import annotations
 
 import argparse
@@ -23,14 +23,14 @@ from app.utils.decimal_utils import DECIMAL_ZERO, format_decimal
 from app.utils.upbit_market import MIN_KRW_ORDER_AMOUNT
 from app.utils.logger import get_logger
 
-logger = get_logger("reset_krw_btc_live")
+logger = get_logger("reset_live")
 
 DEFAULT_ORDER_WAIT_SECONDS = 30
 DEFAULT_ORDER_POLL_SECONDS = 1.0
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python3 scripts/reset_krw_btc_live.py")
+    parser = argparse.ArgumentParser(prog="python3 scripts/reset_live.py")
     parser.add_argument("--wait-timeout", type=int, default=DEFAULT_ORDER_WAIT_SECONDS)
     parser.add_argument("--poll-interval", type=float, default=DEFAULT_ORDER_POLL_SECONDS)
     return parser
@@ -89,7 +89,7 @@ def cancel_open_orders(
             break
         if time.monotonic() >= deadline:
             raise RuntimeError(
-                "KRW-BTC 미체결 주문이 남아 있습니다: "
+                f"{cfg.SYMBOL} 미체결 주문이 남아 있습니다: "
                 + ", ".join(remaining_order_ids)
             )
         time.sleep(max(poll_interval, 0.1))
@@ -118,7 +118,7 @@ def wait_for_terminal_order_status(
         time.sleep(max(poll_interval, 0.1))
 
 
-def liquidate_btc_position(
+def liquidate_position(
     exchange,
     *,
     timeout_seconds: int,
@@ -126,14 +126,14 @@ def liquidate_btc_position(
 ) -> str | None:
     quantity = exchange.get_holdings(cfg.SYMBOL)
     if quantity <= DECIMAL_ZERO:
-        logger.info("BTC 보유 수량이 없어 전량 매도를 건너뜁니다.")
+        logger.info(f"{cfg.SYMBOL} 보유 수량이 없어 전량 매도를 건너뜁니다.")
         return None
 
     current_price = exchange.get_current_price(cfg.SYMBOL)
     notional = current_price * quantity
     if notional < MIN_KRW_ORDER_AMOUNT:
         logger.info(
-            "BTC 보유 금액이 업비트 최소 주문 금액보다 작아 전량 매도를 건너뜁니다: "
+            f"{cfg.SYMBOL} 보유 금액이 업비트 최소 주문 금액보다 작아 전량 매도를 건너뜁니다: "
             f"{format_decimal(notional)}"
         )
         return None
@@ -152,7 +152,7 @@ def liquidate_btc_position(
     )
     order_id = exchange.place_order(order)
     if not order_id:
-        raise RuntimeError("BTC 전량 시장가 매도 주문 접수에 실패했습니다.")
+        raise RuntimeError(f"{cfg.SYMBOL} 전량 시장가 매도 주문 접수에 실패했습니다.")
 
     status = wait_for_terminal_order_status(
         exchange,
@@ -162,13 +162,13 @@ def liquidate_btc_position(
     )
     if not status.is_filled:
         raise RuntimeError(
-            "BTC 전량 시장가 매도가 체결 완료 상태로 끝나지 않았습니다: "
+            f"{cfg.SYMBOL} 전량 시장가 매도가 체결 완료 상태로 끝나지 않았습니다: "
             f"state={status.state}"
         )
 
     remaining_holdings = exchange.get_holdings(cfg.SYMBOL)
     logger.info(
-        "BTC 전량 시장가 매도 완료: "
+        f"{cfg.SYMBOL} 전량 시장가 매도 완료: "
         f"order_id={order_id}, remaining_holdings={format_decimal(remaining_holdings)}"
     )
     return order_id
@@ -177,8 +177,6 @@ def liquidate_btc_position(
 def validate_environment() -> None:
     if cfg.EXCHANGE_TYPE != "crypto":
         raise RuntimeError("이 운영 스크립트는 업비트 crypto 모드에서만 지원합니다.")
-    if cfg.SYMBOL != "KRW-BTC":
-        raise RuntimeError(f"이 운영 스크립트는 KRW-BTC 전용입니다: {cfg.SYMBOL}")
     if not cfg.API_KEY or not cfg.API_SECRET:
         raise RuntimeError("UPBIT_ACCESS_KEY / UPBIT_SECRET_KEY 환경변수가 필요합니다.")
 
@@ -215,7 +213,7 @@ def main(argv: list[str] | None = None) -> int:
             poll_interval=args.poll_interval,
         )
         print_runtime_snapshot(exchange, title="미체결 취소 후 런타임 스냅샷")
-        liquidate_btc_position(
+        liquidate_position(
             exchange,
             timeout_seconds=args.wait_timeout,
             poll_interval=args.poll_interval,

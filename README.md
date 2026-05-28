@@ -146,7 +146,7 @@ PYTHON_BIN=.venv/bin/python ./run.sh
 ### 라이브 리셋
 
 ```bash
-.venv/bin/python scripts/reset_krw_btc_live.py
+.venv/bin/python scripts/reset_live.py
 ```
 
 이 명령은 `KRW-BTC` 미체결 주문을 취소하고, BTC를 전량 시장가 매도한 뒤, `grid.properties` 기준으로 DB 그리드를 다시 반영한다. 재시작은 자동으로 하지 않으므로 결과 확인 후 직접 `./run.sh` 를 실행한다.
@@ -207,7 +207,7 @@ L1 손절 이후 매수 차단을 해제할 때 사용한다. L2 24시간 잠금
 | | `upbit_ws.py` | 업비트 WebSocket ticker/candle/myAsset/myOrder 캐시와 현재가 이벤트 대기 기능 |
 | | `base.py` | 거래소 연동을 위한 공통 추상 클래스(`BaseExchange`) 정의 |
 | | `stock.py` | 주식 거래소 연동용 stub. `EXCHANGE_TYPE=stock` 일 때 로드되는 `BaseExchange` 구현 뼈대이며 현재는 `NotImplementedError` 만 던진다 (KIS API 등 실 연동 시 교체 예정) |
-| **scripts/** | `reset_krw_btc_live.py` | 운영 중인 그리드와 자산을 정리하고 새 그리드를 반영하는 운영 스크립트. 봇 재시작은 자동으로 하지 않는다 |
+| **scripts/** | `reset_live.py` | 운영 중인 그리드와 자산을 정리하고 새 그리드를 반영하는 운영 스크립트. cfg.SYMBOL 기준 동작. 봇 재시작은 자동으로 하지 않는다 |
 | | `show_grid_state.py` | 현재 DB에 저장된 그리드와 주문의 상태를 요약해서 터미널에 출력 |
 | | `check_daily_low.py` | `logs/trading-YYYY-MM-DD.log` 파일들을 스캔해 날짜별 최저 현재가를 출력. 매수 라인 도달 여부 빠른 점검용 |
 | | `apply_grid_properties_to_postgres.py` | `grid.properties` 파일의 설정을 DB의 그리드 테이블에 강제 반영 |
@@ -358,12 +358,12 @@ rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단
 
 `GRID_COUNT`는 슬롯 수를 직접 고정할 때 쓰고, `GRID_STEP_PCT`는 기존 슬롯 간격을 비율로 그대로 복원할 때 쓴다.
 
-운영 중 예산이나 그리드를 다시 세팅할 때는 단순히 DB 그리드만 덮어쓰지 말고, 가능하면 `scripts/reset_krw_btc_live.py` 경로를 사용한다.
+운영 중 예산이나 그리드를 다시 세팅할 때는 단순히 DB 그리드만 덮어쓰지 말고, 가능하면 `scripts/reset_live.py` 경로를 사용한다.
 
-- 대상: `KRW-BTC` 라이브 운영 환경
+- 대상: `cfg.SYMBOL` 기준 (예: `KRW-BTC`, `KRW-USDT`)
 - 실행 위치: EC2 `cd /home/ubuntu/auto`
-- 실행 명령: `.venv/bin/python scripts/reset_krw_btc_live.py`
-- 수행 순서: `./stop.sh` -> 업비트 `KRW-BTC` 미체결 주문 취소 -> BTC 전량 시장가 매도 -> `grid.properties` 기준 DB 그리드 재반영 -> 상태 출력
+- 실행 명령: `.venv/bin/python scripts/reset_live.py`
+- 수행 순서: `./stop.sh` -> 업비트 `{cfg.SYMBOL}` 미체결 주문 취소 -> 전량 시장가 매도 -> `grid.properties` 기준 DB 그리드 재반영 -> 상태 출력
 - 재시작은 자동으로 하지 않는다. 결과 확인 후 필요하면 직접 `./run.sh` 를 실행한다.
 - reset 전량 시장가 매도에는 `{STATE_BOT_KEY}-reset-sell-...` identifier를 붙인다. `scripts/upbit_realized_pnl.py` 는 이 주문을 reset 청산 경계로 자동 인식하고, reset 직전 취소된 TP SELL 슬롯을 우선 사용해 청산 손익을 매칭한다.
 

@@ -893,7 +893,7 @@ ps -eo pid,args | grep '[p]ython.*/home/yangyag/auto/main.py'</code></pre>
 
       <div class="callout info">
         <div class="callout-title">📌 reset 청산 매칭</div>
-        <p><code>reset_krw_btc_live.py</code> 로 발생한 reset 전량 시장가 매도는 <code>{STATE_BOT_KEY}-reset-sell-...</code> identifier 로 자동 인식된다. reset 직전에 취소된 봇 TP SELL 주문들이 있으면 해당 슬롯/수량을 우선 사용해 청산 손익을 매칭한다.</p>
+        <p><code>reset_live.py</code> 로 발생한 reset 전량 시장가 매도는 <code>{STATE_BOT_KEY}-reset-sell-...</code> identifier 로 자동 인식된다. reset 직전에 취소된 봇 TP SELL 주문들이 있으면 해당 슬롯/수량을 우선 사용해 청산 손익을 매칭한다.</p>
         <p>코드 반영 전 발생한 과거 reset 매도처럼 identifier 가 없는 청산 주문도 직전 취소 TP SELL 수량으로 일부 자동 추론되며, 자동 추론이 애매한 경우는 <code>--reset-sell-uuid &lt;UUID&gt;</code> 를 반복 지정해서 reset 청산 경계로 포함한다.</p>
       </div>
     </section>
@@ -1103,7 +1103,7 @@ TP_K_FLOOR=7.0</code></pre>
           <div class="cmd-tile-title"><span class="tag">reset</span>전량 청산 + 그리드 재반영</div>
           <div class="cmd-tile-desc">한 번에 정지/취소/매도/그리드 반영/상태 출력까지.</div>
           <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
-<pre><code>.venv/bin/python scripts/reset_krw_btc_live.py</code></pre>
+<pre><code>.venv/bin/python scripts/reset_live.py</code></pre>
           </div>
         </div>
       </div>

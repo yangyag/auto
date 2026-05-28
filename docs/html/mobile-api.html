@@ -1035,7 +1035,7 @@ export async function apiGet(path: string) {
         <tbody>
           <tr><td><code>POST /v1/commands/bot/stop</code></td><td><code>stop.sh</code> 실행</td><td>트레이딩 봇이 멈춘다.</td></tr>
           <tr><td><code>POST /v1/commands/bot/start</code></td><td><code>run.sh</code> 실행</td><td>트레이딩 봇을 다시 켠다.</td></tr>
-          <tr><td><code>POST /v1/commands/reset</code></td><td><code>scripts/reset_krw_btc_live.py</code> 실행</td><td>미체결 취소, BTC 청산, 그리드 재반영 경로라 매우 위험하다.</td></tr>
+          <tr><td><code>POST /v1/commands/reset</code></td><td><code>scripts/reset_live.py</code> 실행</td><td>미체결 취소, 청산, 그리드 재반영 경로라 매우 위험하다.</td></tr>
           <tr><td><code>POST /v1/commands/adjust-budget</code></td><td><code>scripts/adjust_budget_live.py</code> 실행</td><td>빈 슬롯 planned_qty를 목표 예산에 맞춰 조정한다.</td></tr>
           <tr><td><code>POST /v1/commands/reset-stop-loss</code></td><td><code>main.py reset-stop-loss</code> 실행</td><td>손절 상태를 해제한다.</td></tr>
           <tr><td><code>GET /v1/commands/{id}</code></td><td>명령 진행 상태 확인</td><td><code>queued/running/succeeded/failed</code>를 본다.</td></tr>

@@ -64,7 +64,7 @@ class MobileApiCommandHelperTest(unittest.TestCase):
         with patch.dict("os.environ", {"PYTHON_BIN": "/tmp/python"}, clear=False):
             argv, stdin_text = service.build_command_argv({"kind": "reset"})
 
-        self.assertEqual(argv, ["/tmp/python", "scripts/reset_krw_btc_live.py"])
+        self.assertEqual(argv, ["/tmp/python", "scripts/reset_live.py"])
         self.assertIsNone(stdin_text)
 
     def test_build_command_argv_for_adjust_budget(self):

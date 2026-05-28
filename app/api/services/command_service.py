@@ -71,7 +71,7 @@ def build_command_argv(command: dict[str, Any]) -> tuple[list[str], str | None]:
     if kind == "bot_start":
         return [str(PROJECT_ROOT / "run.sh")], None
     if kind == "reset":
-        return [python_bin, "scripts/reset_krw_btc_live.py"], None
+        return [python_bin, "scripts/reset_live.py"], None
     if kind == "adjust_budget":
         target_budget = str(params["target_budget"])
         argv = [python_bin, "scripts/adjust_budget_live.py", "--target-budget", target_budget]
