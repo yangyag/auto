@@ -98,6 +98,8 @@ PYTHON_BIN=.venv/bin/python ./run.sh
 
 ### 7. 실현 손익 확인
 
+기본 조회 대상은 현재 환경의 `SYMBOL`과 `STATE_BOT_KEY`다. 현재 USDT 라이브 장부라면 별도 옵션 없이 `KRW-USDT` 기준으로 계산한다.
+
 ```bash
 .venv/bin/python scripts/upbit_realized_pnl.py
 ```
@@ -108,6 +110,12 @@ PYTHON_BIN=.venv/bin/python ./run.sh
 .venv/bin/python scripts/upbit_realized_pnl.py --period d
 .venv/bin/python scripts/upbit_realized_pnl.py --period w
 .venv/bin/python scripts/upbit_realized_pnl.py --period m
+```
+
+과거 BTC 라이브 장부를 별도로 확인할 때는 마켓과 봇 키를 명시한다.
+
+```bash
+STATE_BOT_KEY=krw-btc-live .venv/bin/python scripts/upbit_realized_pnl.py --market KRW-BTC
 ```
 
 ## grid.properties 수정 후 기본 흐름
@@ -204,7 +212,7 @@ L1 손절 이후 매수 차단을 해제할 때 사용한다. L2 24시간 잠금
 | | `adjust_budget_live.py` | 현재 DB 그리드의 가격 구조와 보유 수량은 유지한 채 `planned_qty`만 재계산하여 예산을 보수적으로 증액/감액. `--target-budget` (절대 총액) 으로 지정 |
 | | `upbit_actual_assets.py` | 실행 권한이 있어 `scripts/upbit_actual_assets.py` 로 바로 실행 가능. 업비트 잔고와 현재가, `avg_buy_price` 기준 원가, 봇 슬롯별 잔여 BUY 원가를 비교해 BTC 보유 중 총자산 착시를 점검한다. 기본 lookback 은 120일이며 수량 불일치가 있을 때만 `--lookback-days` 를 늘린다 |
 | | `upbit_open_sell_monitor.py` | 실행 권한이 있어 `scripts/upbit_open_sell_monitor.py` 로 바로 실행 가능. 현재 미체결 매도 주문을 슬롯별로 매칭해 실제 매수원가 대비 미실현 손익을 보여준다. 로컬 `STATE_BOT_KEY`가 거래소와 다르면 `--bot-key`로 지정 |
-| | `upbit_realized_pnl.py` | 업비트 `GET /v1/orders/closed` + `/v1/order` 로 KRW-BTC 실현 손익을 산출. 옵션 없이 실행하면 최근 90일을 일/주/월/년/전체로 모두 출력하고, `--period d/w/m/y` 로 오늘/이번주/이번달/이번년만 조회한다. 직접 지정 기간은 `--from/--to` 로 1개 범위를 합산 출력한다. 봇 주문 identifier의 슬롯 번호를 기준으로 같은 슬롯 안에서만 FIFO 매칭한다 (수수료 차감, read-only 분석). lookback 마진(기본 30일)으로 과거 BUY를 포함해 정확한 매칭을 보장한다. reset 청산 매도는 reset identifier 또는 직전 취소 TP SELL 수량으로 자동 인식하며, 과거 reset 주문은 `--reset-sell-uuid`로 지정 가능. 일별 버킷팅은 SELL `_time_key`(=최대 체결 시각, KST) 기준 |
+| | `upbit_realized_pnl.py` | 업비트 `GET /v1/orders/closed` + `/v1/order` 로 현재 설정된 `SYMBOL` 기준 실현 손익을 산출. 옵션 없이 실행하면 최근 90일을 일/주/월/년/전체로 모두 출력하고, `--period d/w/m/y` 로 오늘/이번주/이번달/이번년만 조회한다. 직접 지정 기간은 `--from/--to` 로 1개 범위를 합산 출력한다. 봇 주문 identifier의 슬롯 번호를 기준으로 같은 슬롯 안에서만 FIFO 매칭한다 (수수료 차감, read-only 분석). lookback 마진(기본 30일)으로 과거 BUY를 포함해 정확한 매칭을 보장한다. reset 청산 매도는 reset identifier 또는 직전 취소 TP SELL 수량으로 자동 인식하며, 과거 reset 주문은 `--reset-sell-uuid`로 지정 가능. 과거 BTC 장부는 `STATE_BOT_KEY=krw-btc-live ... --market KRW-BTC` 로 명시 조회한다. 일별 버킷팅은 SELL `_time_key`(=최대 체결 시각, KST) 기준 |
 | **app/utils/** | `upbit_market.py` | 업비트 마켓의 최소 주문 단위, 호가 단위 등 시장 정보 관리 |
 | | `grid_reporting.py` | 수익률, 재고 현황 등 그리드 운영 성과 리포팅 유틸리티 |
 | | `decimal_utils.py` | 정밀한 수치 계산을 위한 Decimal 변환 및 절사(Truncate) 도구 |

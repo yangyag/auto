@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""업비트 실현 손익 분석 (KRW-BTC, read-only).
+"""업비트 실현 손익 분석 (설정 SYMBOL 기본, read-only).
 
 매칭 방식: 슬롯 1:1 매칭. identifier 의 슬롯 번호로 BUY ↔ SELL 짝지음.
 글로벌 FIFO 와 의도적으로 다른 결과를 생산 (봇 슬롯 단위 매핑 의미).
@@ -13,14 +13,14 @@ tie-break 로 SELL 이 먼저 처리될 가능성 (운영상 거의 불가능, �
 
 사용법:
     .venv/bin/python scripts/upbit_realized_pnl.py [--period d|w|m|y]
-        [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--market KRW-BTC]
+        [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--market MARKET]
         [--reset-sell-uuid UUID] [--lookback DAYS]
 
 기본값:
     옵션 없음 : 오늘 기준 최근 90일, daily/weekly/monthly/yearly/ALL 5개 섹션 출력
     --period  : d=오늘, w=이번주, m=이번달, y=이번년
     --from/to : 사용자가 직접 지정한 기간 1개 합산 출력
-    --market   : KRW-BTC
+    --market   : app.config.settings.SYMBOL
     --lookback : 30일 (default: DEFAULT_LOOKBACK_DAYS = 30)
 
 --lookback 파라미터:
@@ -129,7 +129,7 @@ BASE_URL = "https://api.upbit.com"
 KST = ZoneInfo("Asia/Seoul")
 RATE_LIMIT_SLEEP_SEC = 0.05   # 50ms, rate-limit 안전마진
 WINDOW_DAYS = 7               # closed orders 분할 조회 윈도우 (일)
-DEFAULT_MARKET = "KRW-BTC"
+DEFAULT_MARKET = cfg.SYMBOL
 DEFAULT_REPORT_DAYS = 90
 DEFAULT_LOOKBACK_DAYS = 30
 RESET_QTY_TOLERANCE = Decimal("0.00000001")
@@ -161,6 +161,16 @@ PERIOD_PRESET_ALIASES = {
     "year": "y",
     "yearly": "y",
 }
+
+
+def default_market() -> str:
+    return cfg.SYMBOL
+
+
+def market_base_currency(market: str) -> str:
+    if "-" not in market:
+        return market.upper()
+    return market.split("-", 1)[1].upper()
 
 
 @dataclass(frozen=True)
@@ -685,9 +695,9 @@ def run_fifo(
 
         if order["side"] == "bid":
             # ── BUY 처리: 슬롯 큐에 적재 ─────────────────────
-            buy_qty = exec_vol                                   # Decimal BTC
+            buy_qty = exec_vol                                   # Decimal base asset
             buy_total_cost = exec_funds + paid_fee               # Decimal KRW (수수료 포함)
-            buy_unit_cost = buy_total_cost / buy_qty             # Decimal KRW/BTC
+            buy_unit_cost = buy_total_cost / buy_qty             # Decimal KRW/base asset
             queues_by_slot.setdefault(slot, []).append({
                 "qty": buy_qty,
                 "unit_cost": buy_unit_cost,
@@ -783,21 +793,26 @@ def _fmt_krw(val: Decimal) -> str:
     return f"{int(rounded):,}"
 
 
-def _fmt_btc(val: Decimal) -> str:
-    """BTC 8자리 소수 포맷."""
+def _fmt_asset_qty(val: Decimal) -> str:
+    """기초자산 수량 8자리 소수 포맷."""
     return f"{val:.8f}"
+
+
+def _fmt_btc(val: Decimal) -> str:
+    return _fmt_asset_qty(val)
 
 
 def _print_realized_section(
     realized_lines: list[dict],
     periods: list[str],
     title: str = "[ 실현손익 ]",
+    base_currency: str = "BTC",
 ) -> None:
     """period 별 realized 합계 섹션 출력."""
     print(title)
     header = (
         f"{'기간':<23} {'매도주문수':>9} {'체결건수':>8}"
-        f" {'실현손익(KRW)':>18} {'매도수량(BTC)':>18}"
+        f" {'실현손익(KRW)':>18} {f'매도수량({base_currency})':>18}"
     )
     print(header)
     print("-" * len(header))
@@ -837,10 +852,11 @@ def _print_unmatched_section(
     unmatched_lines: list[dict],
     periods: list[str],
     title: str = "[ 미매칭(같은 슬롯 매수 큐 비어있음 — 윈도우 밖 또는 unparseable, PnL 아님) ]",
+    base_currency: str = "BTC",
 ) -> None:
     """period 별 unmatched 섹션 출력."""
     print(title)
-    header = f"{'기간':<23} {'건수':>8} {'매도순대금(KRW)':>18} {'매도수량(BTC)':>18}"
+    header = f"{'기간':<23} {'건수':>8} {'매도순대금(KRW)':>18} {f'매도수량({base_currency})':>18}"
     print(header)
     print("-" * len(header))
 
@@ -1031,6 +1047,45 @@ def _print_anomaly_section() -> None:
         )
 
 
+def print_report_sections(
+    *,
+    realized_lines: list[dict],
+    unmatched_lines: list[dict],
+    unparseable_buys: list[dict],
+    unparseable_sells: list[dict],
+    outside_sell_orders: list[dict],
+    queues_by_slot: dict[int, list[dict]],
+    reset_residuals: list[dict],
+    sorted_orders: list[dict],
+    display_start_dt: datetime,
+    display_end_dt: datetime,
+    fetch_start_dt: datetime,
+    lookback_days: int,
+    periods: list[str],
+    market: str,
+) -> None:
+    base_currency = market_base_currency(market)
+
+    print()
+    print("=" * 80)
+    _print_realized_section(realized_lines, periods, base_currency=base_currency)
+    print()
+    _print_unmatched_section(unmatched_lines, periods, base_currency=base_currency)
+    print()
+    _print_unparseable_section(unparseable_buys, unparseable_sells, display_start_dt, display_end_dt)
+    print()
+    _print_outside_display_window_section(outside_sell_orders)
+    print()
+    _print_fetch_boundary_warning_section(sorted_orders, fetch_start_dt, lookback_days)
+    print()
+    _print_remaining_buy_section(queues_by_slot)
+    print()
+    _print_reset_residual_section(reset_residuals)
+    print()
+    _print_anomaly_section()
+    print("=" * 80)
+
+
 # ── argparse ─────────────────────────────────────────────────
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1058,8 +1113,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--market",
-        default=DEFAULT_MARKET,
-        help=f"업비트 마켓 코드 (기본: {DEFAULT_MARKET})",
+        default=default_market(),
+        help=f"업비트 마켓 코드 (기본: {default_market()})",
     )
     parser.add_argument(
         "--reset-sell-uuid",
@@ -1218,24 +1273,22 @@ def main(argv: list[str] | None = None) -> int:
 
     # 6단계: 출력
     periods_to_show = report_window.periods_to_show
-    print()
-    print("=" * 80)
-    _print_realized_section(display_realized_lines, periods_to_show)
-    print()
-    _print_unmatched_section(display_unmatched_lines, periods_to_show)
-    print()
-    _print_unparseable_section(unparseable_buys, unparseable_sells, display_start_dt, display_end_dt)
-    print()
-    _print_outside_display_window_section(outside_sell_orders)
-    print()
-    _print_fetch_boundary_warning_section(sorted_orders, fetch_start_dt, args.lookback)
-    print()
-    _print_remaining_buy_section(queues_by_slot)
-    print()
-    _print_reset_residual_section(reset_residuals)
-    print()
-    _print_anomaly_section()
-    print("=" * 80)
+    print_report_sections(
+        realized_lines=display_realized_lines,
+        unmatched_lines=display_unmatched_lines,
+        unparseable_buys=unparseable_buys,
+        unparseable_sells=unparseable_sells,
+        outside_sell_orders=outside_sell_orders,
+        queues_by_slot=queues_by_slot,
+        reset_residuals=reset_residuals,
+        sorted_orders=sorted_orders,
+        display_start_dt=display_start_dt,
+        display_end_dt=display_end_dt,
+        fetch_start_dt=fetch_start_dt,
+        lookback_days=args.lookback,
+        periods=periods_to_show,
+        market=market,
+    )
 
     return 0
 

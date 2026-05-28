@@ -3,6 +3,7 @@ from contextlib import redirect_stdout
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from io import StringIO
+from unittest.mock import patch
 
 import scripts.upbit_realized_pnl as pnl
 
@@ -48,6 +49,16 @@ def _identifier(side: str, slot: int, suffix: str) -> str:
 
 
 class UpbitRealizedPnlTest(unittest.TestCase):
+    def test_parser_defaults_market_to_current_config_symbol(self):
+        with patch.object(pnl.cfg, "SYMBOL", "KRW-ETH"):
+            args = pnl.build_parser().parse_args([])
+
+        self.assertEqual(args.market, "KRW-ETH")
+
+    def test_market_base_currency_parses_quote_base_market(self):
+        self.assertEqual(pnl.market_base_currency("KRW-USDT"), "USDT")
+        self.assertEqual(pnl.market_base_currency("krw-btc"), "BTC")
+
     def test_default_report_window_shows_recent_90_days_all_sections(self):
         args = pnl.build_parser().parse_args([])
 
@@ -414,6 +425,89 @@ class UpbitRealizedPnlTest(unittest.TestCase):
             pnl._print_realized_section(realized_lines, ["daily"])
 
         self.assertIn("         1        1", out.getvalue())
+
+    def test_realized_section_uses_base_currency_quantity_label(self):
+        realized_lines = [
+            {
+                "time_key": datetime(2026, 5, 5, 10, 0, tzinfo=KST),
+                "realized_pnl": Decimal("100"),
+                "matched_qty": Decimal("12.5"),
+                "sell_uuid": "sell-1",
+                "sell_trade_count": 1,
+                "slot": 1,
+            },
+        ]
+
+        out = StringIO()
+        with redirect_stdout(out):
+            pnl._print_realized_section(realized_lines, ["daily"], base_currency="USDT")
+
+        output = out.getvalue()
+        self.assertIn("매도수량(USDT)", output)
+        self.assertNotIn("매도수량(BTC)", output)
+
+    def test_unmatched_section_uses_base_currency_quantity_label(self):
+        unmatched_lines = [
+            {
+                "time_key": datetime(2026, 5, 5, 10, 0, tzinfo=KST),
+                "unmatched_proceeds": Decimal("1000"),
+                "unmatched_qty": Decimal("7.25"),
+                "sell_uuid": "sell-1",
+                "slot": 1,
+            },
+        ]
+
+        out = StringIO()
+        with redirect_stdout(out):
+            pnl._print_unmatched_section(unmatched_lines, ["daily"], base_currency="USDT")
+
+        output = out.getvalue()
+        self.assertIn("매도수량(USDT)", output)
+        self.assertNotIn("매도수량(BTC)", output)
+
+    def test_print_report_uses_market_base_currency_in_all_quantity_sections(self):
+        realized_lines = [
+            {
+                "time_key": datetime(2026, 5, 5, 10, 0, tzinfo=KST),
+                "realized_pnl": Decimal("100"),
+                "matched_qty": Decimal("12.5"),
+                "sell_uuid": "sell-1",
+                "sell_trade_count": 1,
+                "slot": 1,
+            },
+        ]
+        unmatched_lines = [
+            {
+                "time_key": datetime(2026, 5, 5, 10, 0, tzinfo=KST),
+                "unmatched_proceeds": Decimal("1000"),
+                "unmatched_qty": Decimal("7.25"),
+                "sell_uuid": "sell-2",
+                "slot": 1,
+            },
+        ]
+
+        out = StringIO()
+        with redirect_stdout(out):
+            pnl.print_report_sections(
+                realized_lines=realized_lines,
+                unmatched_lines=unmatched_lines,
+                unparseable_buys=[],
+                unparseable_sells=[],
+                outside_sell_orders=[],
+                queues_by_slot={},
+                reset_residuals=[],
+                sorted_orders=[],
+                display_start_dt=datetime(2026, 5, 5, tzinfo=KST),
+                display_end_dt=datetime(2026, 5, 5, 23, 59, 59, tzinfo=KST),
+                fetch_start_dt=datetime(2026, 5, 1, tzinfo=KST),
+                lookback_days=30,
+                periods=["daily"],
+                market="KRW-USDT",
+            )
+
+        output = out.getvalue()
+        self.assertIn("매도수량(USDT)", output)
+        self.assertNotIn("매도수량(BTC)", output)
 
 
 if __name__ == "__main__":

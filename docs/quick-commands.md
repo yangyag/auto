@@ -201,9 +201,9 @@ python3 scripts/show_grid_state.py
 
 ---
 
-## 8. 실현 손익 정밀 계산 (KRW-BTC)
+## 8. 실현 손익 정밀 계산 (현재 SYMBOL)
 
-업비트 API 주문 기록을 바탕으로 봇 전용 주문 식별자(`identifier`)를 추적해 수수료 차감 후 순 손익을 FIFO(선입선출) 방식으로 계산합니다.
+업비트 API 주문 기록을 바탕으로 봇 전용 주문 식별자(`identifier`)를 추적해 수수료 차감 후 순 손익을 FIFO(선입선출) 방식으로 계산합니다. 기본 마켓은 현재 환경의 `SYMBOL`이며, 수량 라벨은 해당 마켓의 기초자산(`KRW-USDT`이면 `USDT`)으로 표시됩니다.
 
 ### `[all]` 최근 90일 요약 조회
 최근 90일 치 기록을 일/주/월/년/전체 단위 버킷으로 자동 매칭하여 종합 출력합니다.
@@ -229,6 +229,11 @@ python3 scripts/show_grid_state.py
 ### `[range]` 특정 기간 수동 조회 & 조회 마진 확장
 ```bash
 .venv/bin/python scripts/upbit_realized_pnl.py --from 2026-05-01 --to 2026-05-31 --lookback 45
+```
+
+### `[btc]` 과거 KRW-BTC 라이브 장부 명시 조회
+```bash
+STATE_BOT_KEY=krw-btc-live .venv/bin/python scripts/upbit_realized_pnl.py --market KRW-BTC
 ```
 
 > [!WARNING]
