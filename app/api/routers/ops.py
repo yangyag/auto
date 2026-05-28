@@ -245,6 +245,7 @@ OPS_DASHBOARD_HTML = """<!doctype html>
         <button data-path="/v1/grid/state" type="button">그리드 전체</button>
         <button data-path="/v1/market/price" type="button">현재가</button>
         <button data-path="/v1/orders/pending" type="button">미체결 주문</button>
+        <button data-path="/v1/monitor/open-sells" type="button">매도 대기</button>
         <button data-path="/v1/config" type="button">설정</button>
       </div>
       <div class="actions" style="margin-top: 10px;">
@@ -261,6 +262,7 @@ OPS_DASHBOARD_HTML = """<!doctype html>
       </div>
       <div id="facts" class="facts"></div>
       <div id="gridTableWrap" class="table-wrap" hidden></div>
+      <div id="monitorTableWrap" class="table-wrap" hidden></div>
     </section>
 
     <section>
@@ -278,6 +280,7 @@ OPS_DASHBOARD_HTML = """<!doctype html>
     const authStatus = document.getElementById("authStatus");
     const facts = document.getElementById("facts");
     const gridTableWrap = document.getElementById("gridTableWrap");
+    const monitorTableWrap = document.getElementById("monitorTableWrap");
 
     baseUrlInput.value = window.location.origin;
     usernameInput.value = window.localStorage.getItem("autoOpsUsername") || "admin";
@@ -312,6 +315,11 @@ OPS_DASHBOARD_HTML = """<!doctype html>
     function clearGridTable() {
       gridTableWrap.hidden = true;
       gridTableWrap.innerHTML = "";
+    }
+
+    function clearMonitorTable() {
+      monitorTableWrap.hidden = true;
+      monitorTableWrap.innerHTML = "";
     }
 
     function valueOrDash(value) {
@@ -357,6 +365,66 @@ OPS_DASHBOARD_HTML = """<!doctype html>
       }
       cell.textContent = text;
       row.appendChild(cell);
+    }
+
+    function renderMonitorTable(data) {
+      const rows = data.rows || [];
+      monitorTableWrap.innerHTML = "";
+      const table = document.createElement("table");
+      const thead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      const headers = [
+        "슬롯", "수량(BTC)", "매수원가", "매도지정가",
+        "현재가", "미실현손익", "도달까지"
+      ];
+      for (const header of headers) {
+        const cell = document.createElement("th");
+        cell.textContent = header;
+        headerRow.appendChild(cell);
+      }
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      for (const row of rows) {
+        const tr = document.createElement("tr");
+        appendCell(tr, valueOrDash(row.slot_index));
+        appendCell(tr, valueOrDash(row.qty));
+        appendCell(tr, formatKrw(row.buy_unit_cost));
+        appendCell(tr, formatKrw(row.sell_limit_price));
+        appendCell(tr, formatKrw(row.current_price));
+
+        const pnlCell = document.createElement("td");
+        const unrealized = row.unrealized_at_current;
+        if (unrealized == null) {
+          pnlCell.textContent = "-";
+        } else {
+          pnlCell.textContent = formatKrw(unrealized);
+          pnlCell.style.color = Number(unrealized) >= 0 ? "#167a3a" : "#b42318";
+        }
+        tr.appendChild(pnlCell);
+
+        const gapKrW = row.gap_to_fill_krw;
+        const gapCell = document.createElement("td");
+        if (gapKrW == null) {
+          gapCell.textContent = "-";
+        } else {
+          const gapNum = Number(gapKrW);
+          if (gapNum > 0) {
+            gapCell.textContent = formatKrw(gapKrW) + " 남음";
+          } else if (gapNum === 0) {
+            gapCell.textContent = "근접";
+          } else {
+            gapCell.textContent = "즉시체결 가능 (" + formatKrw(Math.abs(gapNum)) + ")";
+          }
+        }
+        tr.appendChild(gapCell);
+
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      monitorTableWrap.appendChild(table);
+      monitorTableWrap.hidden = false;
     }
 
     function renderGridTable(data) {
@@ -428,6 +496,7 @@ OPS_DASHBOARD_HTML = """<!doctype html>
 
     async function run(name, callback) {
       clearGridTable();
+      clearMonitorTable();
       show(name + "...");
       try {
         const data = await callback();
@@ -508,6 +577,18 @@ OPS_DASHBOARD_HTML = """<!doctype html>
             {label: "출처", value: data.source},
             {label: "확인 시각", value: data.observed_at}
           ]);
+        } else if (button.dataset.path === "/v1/monitor/open-sells") {
+          const summary = data.summary || {};
+          const diagnostic = data.diagnostic || {};
+          showFacts([
+            {label: "마켓", value: data.market},
+            {label: "현재가", value: formatKrw(data.current_price)},
+            {label: "총 주문", value: summary.total_count},
+            {label: "매칭/미매칭", value: (summary.matched_count || 0) + " / " + (summary.unmatched_count || 0)},
+            {label: "수익권/손실권", value: (summary.profit_count || 0) + " / " + (summary.loss_count || 0)},
+            {label: "총 미실현손익", value: formatKrw(summary.total_unrealized_krw)}
+          ]);
+          renderMonitorTable(data);
         }
       });
     }
