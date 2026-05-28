@@ -700,7 +700,7 @@ ps -eo pid,args | grep '[p]ython.*/home/yangyag/auto/main.py'</code></pre>
         <thead><tr><th>컬럼</th><th>의미</th></tr></thead>
         <tbody>
           <tr><td><code>slot</code></td><td>그리드 슬롯 번호. <code>-</code> 이면 봇 identifier가 없는 수동 주문</td></tr>
-          <tr><td><code>qty(BTC)</code></td><td>매도 대기 중인 BTC 수량</td></tr>
+          <tr><td><code>qty(&lt;기초자산&gt;)</code></td><td>매도 대기 중인 수량 (선택 마켓의 기초자산 기준, 예: USDT)</td></tr>
           <tr><td><code>매수원가</code></td><td>해당 슬롯의 실제 BUY 체결 원가 (봇 기준). <code>-</code> 이면 매칭 실패</td></tr>
           <tr><td><code>매도지정가</code></td><td>현재 걸려있는 SELL 지정가</td></tr>
           <tr><td><code>현재가</code></td><td>업비트 현재 시세</td></tr>

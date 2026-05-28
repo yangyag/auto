@@ -270,7 +270,7 @@ curl -s "http://127.0.0.1:8086/v1/pnl/realized?period=d" \
 - **Query Parameters**:
   | 파라미터 | 타입 | 기본값 | 용도 |
   | :--- | :---: | :---: | :--- |
-  | `market` | string | `KRW-BTC` | 분석 대상 업비트 마켓 코드 |
+  | `market` | string | `cfg.SYMBOL` | 분석 대상 업비트 마켓 코드 (기본: 현재 설정 기준) |
   | `lookback_days` | int | `120` | 과거 매수 이력 매칭을 위한 큐 추적 윈도우 기간 (일 단위) |
   | `bot_key` | string | (기본 봇 키) | 특정 봇 식별 고유 접두사 |
   | `reset_sell_uuid` | array | — | 과거 강제 리셋 매도 주문 UUID 목록 (다중 지정 가능) |
