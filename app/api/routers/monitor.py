@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+import app.config.settings as cfg
 from app.api.deps import get_current_user
 from app.api.schemas.monitor import OpenSellMonitorResponse
 from app.api.services.monitor_service import get_open_sell_monitor_data
@@ -15,7 +16,7 @@ router = APIRouter(
 
 @router.get("/open-sells", response_model=OpenSellMonitorResponse)
 def open_sells(
-    market: str = Query(default="KRW-BTC"),
+    market: str = Query(default=cfg.SYMBOL),
     lookback_days: int = Query(default=120, ge=1),
     bot_key: str | None = Query(default=None),
     reset_sell_uuid: list[str] = Query(default=[]),

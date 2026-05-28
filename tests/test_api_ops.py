@@ -37,6 +37,34 @@ class MobileApiOpsDashboardTest(unittest.TestCase):
         self.assertNotIn("Grid Summary", body)
         self.assertNotIn("Realized PnL", body)
 
+    def test_ops_dashboard_monitor_has_no_hardcoded_btc_header(self):
+        """renderMonitorTable must derive base currency from data.market, not hardcode BTC."""
+        response = ops_dashboard()
+        body = response.body.decode("utf-8")
+
+        self.assertIn("/v1/monitor/open-sells", body)
+        self.assertNotIn('"수량(BTC)"', body)
+        self.assertIn("market.includes", body)
+        self.assertIn("baseCurrency", body)
+
+
+class MonitorRouterDefaultMarketTest(unittest.TestCase):
+    def test_open_sells_market_default_is_cfg_symbol_not_hardcoded(self):
+        """GET /v1/monitor/open-sells market default must be cfg.SYMBOL, not 'KRW-BTC'."""
+        import app.config.settings as cfg
+        from app.api.routers.monitor import open_sells
+
+        default = open_sells.__defaults__[0]
+        self.assertEqual(default.default, cfg.SYMBOL)
+        self.assertNotEqual(default.default, "KRW-BTC")
+
+    def test_open_sells_bot_key_default_is_none_passthrough(self):
+        """bot_key default is None so service layer can apply cfg.STATE_BOT_KEY."""
+        from app.api.routers.monitor import open_sells
+
+        default = open_sells.__defaults__[2]
+        self.assertIsNone(default.default)
+
 
 if __name__ == "__main__":
     unittest.main()

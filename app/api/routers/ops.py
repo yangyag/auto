@@ -373,8 +373,10 @@ OPS_DASHBOARD_HTML = """<!doctype html>
       const table = document.createElement("table");
       const thead = document.createElement("thead");
       const headerRow = document.createElement("tr");
+      const market = data.market || "KRW-BTC";
+      const baseCurrency = market.includes("-") ? market.split("-")[1].toUpperCase() : market.toUpperCase();
       const headers = [
-        "슬롯", "수량(BTC)", "매수원가", "매도지정가",
+        "슬롯", `수량(${baseCurrency})`, "매수원가", "매도지정가",
         "현재가", "미실현손익", "도달까지"
       ];
       for (const header of headers) {
