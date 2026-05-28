@@ -60,23 +60,30 @@
 그리드의 가격 계단 개수($N$)를 결정하는 방식은 두 가지가 있습니다.
 
 ### (1) `GRID_COUNT` 값을 직접 고정 주입하는 경우
+
 $$N = G_{N} \tag{식 1}$$
+
 $$I = N - 1 \tag{식 2}$$
 
 ### (2) `GRID_STEP_PCT` (슬롯 간격 비율)를 지정하는 경우
 그리드 범위 내의 총 로그 변동률과 지정 간격의 로그 변동률을 비교하여 최적의 정수 구간 수 $I$를 산출합니다.
 
 $$\Delta_{log} = \ln\left(\frac{U}{L}\right) \tag{식 3}$$
+
 $$\delta_{log} = \ln\left(1 + \frac{p_{step}}{100}\right) \tag{식 4}$$
+
 $$I_{raw} = \frac{\Delta_{log}}{\delta_{log}} \tag{식 5}$$
 
 구간 수는 정수여야 하므로 올림과 내림을 후보군으로 잡습니다:
+
 $$\mathcal{I}_{cand} = \{ \lfloor I_{raw} \rfloor, \lceil I_{raw} \rceil \} \tag{식 6}$$
 
 각 정수 후보 $j \in \mathcal{I}_{cand}$에 대해 실제 계산되는 격자 간격과 목표 간격 간의 절대 오차 $E(j)$를 구합니다:
+
 $$E(j) = \left| \frac{\Delta_{log}}{j} - \delta_{log} \right| \tag{식 7}$$
 
 오차 $E(j)$를 최소화하는 정수를 최종 구간 수 $I$로 채택하며, 오차가 같을 경우 안전마진 확보를 위해 더 큰 값을 선택합니다. 슬롯 수 $N$은 다음과 같습니다:
+
 $$N = I + 1 \tag{식 8}$$
 
 ---
@@ -86,9 +93,13 @@ $$N = I + 1 \tag{식 8}$$
 상단 경계($U$)에서 하단 경계($L$)로 내려가는 로그 간격 사다리를 생성합니다.
 
 $$\ell = \frac{\ln(U / L)}{N - 1} \tag{식 9}$$
+
 $$g = e^\ell \tag{식 10}$$
+
 $$B_0 = U \tag{식 11}$$
+
 $$B_i = F_{norm}\left( \frac{U}{g^i} \right), \quad 0 < i < N - 1 \tag{식 12}$$
+
 $$B_{N-1} = L \tag{식 13}$$
 
 > [!WARNING]
@@ -102,11 +113,15 @@ $$B_{N-1} = L \tag{식 13}$$
 `k` 모델은 단순 고정 비율이 아닌, 그리드 슬롯 간의 로그 거리인 $\ell$을 바탕으로 하여 $k$배수 영역에 매도를 등록합니다.
 
 $$k_{eff} = k_{base} \tag{식 14}$$
+
 $$S_{i, raw} = B_i \cdot e^{\ell \cdot k_{eff}} \tag{식 15}$$
+
 $$S_i = F_{norm}(S_{i, raw}) \tag{식 16}$$
 
 정상 등록 검증 조건:
+
 $$S_i > B_i \tag{식 17}$$
+
 $$k_{base} \ge k_{floor} > 0 \tag{식 18}$$
 
 ---
@@ -118,13 +133,17 @@ $$k_{base} \ge k_{floor} > 0 \tag{식 18}$$
 $$b_i = \min\left( \left\lfloor \frac{3i}{N-1} \right\rfloor, 2 \right) \tag{식 19}$$
 
 각 구간 변수 $b_i$에 따른 매칭 가중치 $w_i$:
+
 $$w_i = \begin{cases} 0.7 & \text{if } b_i = 0 \quad (\text{상단 } 1/3) \\\\ 1.0 & \text{if } b_i = 1 \quad (\text{중단 } 1/3) \\\\ 1.3 & \text{if } b_i = 2 \quad (\text{하단 } 1/3) \end{cases} \tag{식 20}$$
 
 전체 그리드 가중치 합산 $W$:
+
 $$W = \sum_{i=0}^{N-1} w_i \tag{식 21}$$
 
 슬롯별 할당 예산 $B_{slot, i}$ 및 목표 매수량 $Q_i$:
+
 $$B_{slot, i} = B_{total} \cdot \frac{w_i}{W} \tag{식 22}$$
+
 $$Q_i = F_{step}\left( \frac{B_{slot, i}}{B_i}, 0.00000001 \text{ BTC} \right) \tag{식 23}$$
 
 ---
@@ -134,6 +153,7 @@ $$Q_i = F_{step}\left( \frac{B_{slot, i}}{B_i}, 0.00000001 \text{ BTC} \right) \
 현재 가동 중인 봇의 재고 원가($C_{inventory}$)와 총 할당 예산($B_{allocated}$):
 
 $$C_{inventory} = \sum_{i \in \mathcal{H}} B_i H_i \tag{식 24}$$
+
 $$B_{allocated} = \sum_{i \in \mathcal{H}} B_i H_i + \sum_{i \in \mathcal{E}} B_i Q_i \tag{식 25}$$
 
 - $\mathcal{H}$: 코인을 보유 중인 활성 슬롯 집합 (Holding)
@@ -145,6 +165,7 @@ $$B_{allocated} = \sum_{i \in \mathcal{H}} B_i H_i + \sum_{i \in \mathcal{E}} B_
 
 ### 6-1. 하락 매수 조건 (기본)
 최근 시세 흐름이 가격 장벽을 하향 돌파할 때 매수합니다.
+
 $$P_{prev} > B_i \ge P \tag{식 26}$$
 
 **추가 통과 조건**:
@@ -156,13 +177,16 @@ $$P_{prev} > B_i \ge P \tag{식 26}$$
 
 ### 6-2. 상승 재진입 매수 조건
 상승 돌파 시 추격 매수하는 로직입니다.
+
 $$P > P_{prev} \tag{식 27}$$
+
 $$P_{prev} < B_i \le P \tag{식 28}$$
 
 **추가 통과 조건**:
 1. `UPWARD_BUY_ENABLED = true` 설정 상태여야 함
 2. **Burst Guard** (동시 다발 체결 가드): 전략 주기 내에 감지된 상승 교차 슬롯이 **오직 1개**여야 함 (급등 시 동시 다수 슬롯 매수 진입 방지)
 3. 지정가 매수가 아닌 시장가 예산 집행 주문으로 발주:
+
    $$A_{spend} = F_{step}(B_i Q_i, 1 \text{ KRW}) \tag{식 29}$$
 
 ---
@@ -172,7 +196,9 @@ $$P_{prev} < B_i \le P \tag{식 28}$$
 현재가 주변 슬롯만 주문 가능 상태로 제한하여 예산 쏠림 및 미체결 잠김을 예방하는 윈도우 규칙입니다.
 
 기준점은 직전 주기 가격인 $P_{prev}$입니다.
+
 $$\mathcal{B}_{\le} = \{ i \in \mathcal{E} : B_i \le P_{prev} \} \quad (\text{하위 가격 빈 슬롯}) \tag{식 30}$$
+
 $$\mathcal{B}_{>} = \{ i \in \mathcal{E} : B_i > P_{prev} \} \quad (\text{상위 가격 빈 슬롯}) \tag{식 31}$$
 
 - 정렬 기준:
@@ -180,8 +206,11 @@ $$\mathcal{B}_{>} = \{ i \in \mathcal{E} : B_i > P_{prev} \} \quad (\text{상위
   - $\mathcal{B}_{>}$: 가격 오름차순 (인덱스 오름차순)
 
 최종 가동할 슬롯 집합 $\mathcal{A}$는 다음과 같이 부분 슬롯 수 $n_{\le}$ 및 $n_{>}$ 개수만큼만 절단하여 활성화합니다:
+
 $$\mathcal{A} = firstn_{\le}(\mathcal{B}_{\le}) \cup firstn_{>}(\mathcal{B}_{>}) \tag{식 32}$$
+
 $$n_{\le} = n_{below} \tag{식 33}$$
+
 $$n_{>} = n_{above} \tag{식 34}$$
 
 ---
@@ -191,21 +220,29 @@ $$n_{>} = n_{above} \tag{식 34}$$
 시세의 밴드상 위치에 따라 안전 재고 비율을 차등 부여하는 알고리즘입니다.
 
 최대 운영 예산 기준 분모 $B_{op}$:
+
 $$B_{op} = \begin{cases} B_{maxop} & \text{if } B_{maxop} > 0 \\\\ B_{allocated} & \text{if } B_{maxop} \le 0 \end{cases} \tag{식 35}$$
 
 현재 가격 사이클에서의 누적 가상 재고 비율 $q_{current}$:
+
 $$q_{current} = \frac{C_{projected}}{B_{op}} \tag{식 36}$$
 
 현재 가격의 밴드 내 로그 위치 비율 $z$:
+
 $$z_{raw} = \frac{\ln(P) - \ln(L)}{\ln(U) - \ln(L)} \tag{식 37}$$
+
 $$z = clamp(z_{raw}, 0, 1) \tag{식 38}$$
 
 실시간 목표 재고 비중 한도 $q_{target}(z)$:
+
 $$q_{target}(z) = q_{min} + (q_{max} - q_{min})(1 - z)^\gamma \tag{식 39}$$
+
 $$q_{target}(z) = clamp(q_{target}(z), q_{min}, q_{max}) \tag{식 40}$$
 
 최종 매수 통과 조건:
+
 $$\theta = \max(q_{target}(z) - \epsilon, 0) \tag{식 41}$$
+
 $$g_{pass} = (q_{current} < \theta) \tag{식 42}$$
 
 > [!NOTE]
@@ -219,10 +256,13 @@ $$g_{pass} = (q_{current} < \theta) \tag{식 42}$$
 네트워크 지연 등으로 인해 시세 데이터 업데이트가 임계 시간($T_{stale}$)을 초과한 경우, 오작동 방지를 위해 신규 매수 판단을 한 주기 보류합니다.
 
 $$t_{elapsed} = t_{monotonicNow} - t_{previousPrice} \tag{식 43}$$
+
 $$s_{skip} = (t_{elapsed} > T_{stale}) \tag{식 44}$$
 
 만약 시세가 지연되었을 경우, 다음 연산 주기를 위해 직전 가격과 시간을 즉시 현 시점으로 초기화합니다:
+
 $$P_{prev} \leftarrow P \tag{식 45}$$
+
 $$t_{previousPrice} \leftarrow t_{monotonicNow} \tag{식 46}$$
 
 ---
@@ -232,20 +272,27 @@ $$t_{previousPrice} \leftarrow t_{monotonicNow} \tag{식 46}$$
 체결 재고의 보유 시간($a$)이 길어질 경우 자금 고착을 막기 위해 목표 매도가를 하향 압축하여 탈출을 돕습니다.
 
 보유 시간 연산 (현재시각 - 체결 완료 시각):
+
 $$a = t_{nowUtc} - t_{filledUtc} \tag{식 49}$$
 
 보유 연령에 따른 $k$ 감쇄 변량 $d(a)$:
+
 $$d(a) = \begin{cases} 1.0 & \text{if } a \ge 7 \text{ days} \\\\ 0.5 & \text{if } 48 \text{ hours} \le a < 7 \text{ days} \\\\ 0.0 & \text{if } a < 48 \text{ hours} \end{cases} \tag{식 50}$$
 
 감쇄가 반영된 유효 배수 $k_{eff}$:
+
 $$k_{eff} = \max(k_{base} - d(a), k_{floor}) \tag{식 51}$$
 
 압축 매도 가격 산출:
+
 $$g_{base} = \ln\left(\frac{S_i}{B_i}\right) \tag{식 52}$$
+
 $$g_{compressed} = g_{base} \cdot \frac{k_{eff}}{k_{base}} \tag{식 53}$$
+
 $$S_i' = F_{norm}(B_i \cdot e^{g_{compressed}}) \tag{식 54}$$
 
 최종 적용할 매도 호가 $S_i^{eff}$:
+
 $$S_i^{eff} = \begin{cases} S_i' & \text{if } B_i < S_i' < S_i \\\\ S_i & \text{otherwise} \end{cases} \tag{식 55}$$
 
 ---
@@ -255,11 +302,15 @@ $$S_i^{eff} = \begin{cases} S_i' & \text{if } B_i < S_i' < S_i \\\\ S_i & \text{
 직전 완성된 $M$개의 분봉 캔들의 종가($C_j$)를 분석하여 급변침 상황 시 진입을 일시적으로 차단합니다.
 
 - **상단 이탈**: $M$개 연속 캔들이 그리드 상단 $U$ 위에서 마감
+
   $$o_{upper} = \bigwedge_{j=1}^M (C_j > U) \tag{식 56}$$
+
 - **하단 이탈**: $M$개 연속 캔들이 그리드 하단 $L$ 아래에서 마감
+
   $$o_{lower} = \bigwedge_{j=1}^M (C_j < L) \tag{식 57}$$
 
 가드 작동 판정:
+
 $$b_{guard} = o_{upper} \lor o_{lower} \tag{식 58}$$
 
 > [!WARNING]
@@ -272,14 +323,19 @@ $$b_{guard} = o_{upper} \lor o_{lower} \tag{식 58}$$
 주문 체결에 필요한 실 가용 원화 잔고 평가식입니다.
 
 - **시장가 매수 시 필요 원금**:
+
   $$A_{required} = A_{spend} \tag{식 59}$$
+
 - **지정가 매수 시 필요 원금**:
+
   $$A_{required} = P_{order} Q_{order} \tag{식 60}$$
 
 수수료 및 안전 버퍼를 감안한 예상 투입 금액 $A_{estimated}$:
+
 $$A_{estimated} = A_{required}(1 + f_{upbit}) + A_{buffer} \tag{식 61}$$
 
 최종 잔고 가용성 조건 검증:
+
 $$A_{available} \ge A_{estimated} + A_{reserve} \tag{식 62}$$
 
 ---
@@ -289,5 +345,7 @@ $$A_{available} \ge A_{estimated} + A_{reserve} \tag{식 62}$$
 운영 중 예산 개편 명령 발생 시 호출되는 로직입니다. 보유 수량($H_i$)은 고정하고, 빈 슬롯의 목표량($Q_{i, new}$)만 재산출합니다.
 
 $$B_{total} \leftarrow X \quad (\text{조정 예산 주입}) \tag{식 63}$$
+
 $$B_{slot, i} = B_{total} \cdot \frac{w_i}{W} \tag{식 64}$$
+
 $$Q_{i, new} = F_{step}\left( \frac{B_{slot, i}}{B_i}, 0.00000001 \text{ BTC} \right) \tag{식 65}$$
