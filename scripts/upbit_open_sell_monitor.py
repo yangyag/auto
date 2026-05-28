@@ -197,8 +197,12 @@ def _fmt_krw(value: Decimal) -> str:
     return f"{int(value.quantize(Decimal('1'))):,}"
 
 
-def _fmt_btc(value: Decimal) -> str:
+def _fmt_asset_qty(value: Decimal) -> str:
     return f"{value:.8f}"
+
+
+def _fmt_btc(value: Decimal) -> str:
+    return _fmt_asset_qty(value)
 
 
 def _fmt_pnl(value: Decimal | None) -> str:
@@ -215,6 +219,7 @@ def print_open_sell_summary(
     lookback_days: int,
 ) -> None:
     now_kst = datetime.now(pnl.KST).strftime("%Y-%m-%d %H:%M KST")
+    base_currency = pnl.market_base_currency(market)
 
     print("=== 매도 대기 주문 현황 ===")
     print(f"마켓: {market} | 현재가: {_fmt_krw(current_price)} KRW | 조회시각: {now_kst}")
@@ -226,7 +231,7 @@ def print_open_sell_summary(
         return
 
     header = (
-        f"{'slot':>5}  {'qty(BTC)':>12}  {'매수원가':>14}  "
+        f"{'slot':>5}  {f'qty({base_currency})':>12}  {'매수원가':>14}  "
         f"{'매도지정가':>14}  {'현재가':>14}  {'미실현손익':>14}  도달까지"
     )
     print(header)
@@ -252,7 +257,7 @@ def print_open_sell_summary(
             gap_str = f"즉시체결 가능 ({_fmt_krw(abs(gap))})"
 
         print(
-            f"{slot_str:>5}  {_fmt_btc(row.qty):>12}  {buy_str:>14}  "
+            f"{slot_str:>5}  {_fmt_asset_qty(row.qty):>12}  {buy_str:>14}  "
             f"{sell_str:>14}  {cur_str:>14}  {pnl_str:>14}  {gap_str}"
         )
 

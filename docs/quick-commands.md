@@ -145,17 +145,16 @@ scripts/upbit_actual_assets.py --lookback-days 180
 
 ## 5. 미체결 매도 대기 실시간 현황
 
-현재 걸려 있는 모든 매도 주문을 봇의 가격 슬롯별 실제 취득 단가와 1:1 FIFO 매칭하여, 현재 시가 기준 각 슬롯별 상세 미실현 손익 구조를 시각화합니다.
+현재 걸려 있는 모든 매도 주문을 봇의 가격 슬롯별 실제 취득 단가와 1:1 FIFO 매칭하여, 현재 시가 기준 각 슬롯별 상세 미실현 손익 구조를 시각화합니다. 기본 마켓은 현재 환경의 `SYMBOL`이며, 수량 라벨은 해당 마켓의 기초자산(`KRW-USDT`이면 `USDT`)으로 표시됩니다.
 
 ### `[monitor]` 기본 모니터링 구동
 ```bash
 .venv/bin/python scripts/upbit_open_sell_monitor.py
 ```
 
-### `[bot-key]` 특정 봇 식별 키 지정
-로컬 `STATE_BOT_KEY` 환경 변수가 다를 경우 직접 매개변수로 명시합니다.
+### `[btc]` 과거 KRW-BTC 라이브 장부 명시 조회
 ```bash
-.venv/bin/python scripts/upbit_open_sell_monitor.py --bot-key krw-btc-live
+.venv/bin/python scripts/upbit_open_sell_monitor.py --market KRW-BTC --bot-key krw-btc-live
 ```
 
 ### `[lookback]` 주문 내역 조회 기간 확장
