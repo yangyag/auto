@@ -149,7 +149,7 @@ PYTHON_BIN=.venv/bin/python ./run.sh
 .venv/bin/python scripts/reset_live.py
 ```
 
-이 명령은 `KRW-BTC` 미체결 주문을 취소하고, BTC를 전량 시장가 매도한 뒤, `grid.properties` 기준으로 DB 그리드를 다시 반영한다. 재시작은 자동으로 하지 않으므로 결과 확인 후 직접 `./run.sh` 를 실행한다.
+이 명령은 `cfg.SYMBOL` 미체결 주문을 취소하고, 보유 수량을 전량 시장가 매도한 뒤, `grid.properties` 기준으로 DB 그리드를 다시 반영한다. 재시작은 자동으로 하지 않으므로 결과 확인 후 직접 `./run.sh` 를 실행한다.
 
 ### 라이브 예산 조정
 
@@ -189,7 +189,7 @@ L1 손절 이후 매수 차단을 해제할 때 사용한다. L2 24시간 잠금
 | :--- | :--- | :--- |
 | **Root** | `main.py` | 기존 `python3 main.py ...` 명령을 유지하는 호환 진입점 |
 | | `core.py`, `strategy.py`, `exchange.py`, `storage.py`, `config.py`, `utils.py` | 예전 루트 패키지 import 경로를 `app/` 하위 패키지로 연결하는 호환 alias |
-| **app/** | `main.py` | 프로그램 진입점 구현. 인자 없는 실행은 봇 루프, CLI subcommand는 `balance`, `init-grid` 처리 |
+| **app/** | `main.py` | 프로그램 진입점 구현. 인자 없는 실행은 봇 루프, CLI subcommand는 `balance`, `init-grid`, `reset-stop-loss` 처리 |
 | **app/api/** | `main.py` | FastAPI 대시보드 서버 진입점 (`run-api.sh`/`stop-api.sh`) |
 | | `routers/` | health, grid, orders, pnl, monitor, runtime, commands, ops, auth 라우터 |
 | | `schemas/` | API 요청/응답 Pydantic 스키마 |
@@ -352,7 +352,7 @@ Age TP 압축 규칙과 `effective_sell_price` 계산식은 [Strategy Formulas](
 
 rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단에 대한 bounded backoff 로만 다룬다. `POST /v1/orders` timeout 또는 network 오류처럼 체결 여부가 모호한 경우는 자동 재시도하지 않는다. 이 경우 `uuid`가 없으므로 pending reconciliation 대상에도 자동 등록되지 않는다.
 
-봇 시작 시에는 거래소에 열려 있지만 DB의 pending 주문 저장소에는 없는 `KRW-BTC` 미체결 주문을 조회해 취소한다. DB를 기준으로 관리하지 않는 외부/수동 주문과 섞여 중복 상태가 생기는 것을 막기 위한 부팅 가드다.
+봇 시작 시에는 거래소에 열려 있지만 DB의 pending 주문 저장소에는 없는 `cfg.SYMBOL` 미체결 주문을 조회해 취소한다. DB를 기준으로 관리하지 않는 외부/수동 주문과 섞여 중복 상태가 생기는 것을 막기 위한 부팅 가드다.
 
 ## 그리드 생성 경로
 - `main.py init-grid`는 슬롯 개수 기반이다.
