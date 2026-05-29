@@ -190,6 +190,10 @@ L1 손절 이후 매수 차단을 해제할 때 사용한다. L2 24시간 잠금
 | **Root** | `main.py` | 기존 `python3 main.py ...` 명령을 유지하는 호환 진입점 |
 | | `core.py`, `strategy.py`, `exchange.py`, `storage.py`, `config.py`, `utils.py` | 예전 루트 패키지 import 경로를 `app/` 하위 패키지로 연결하는 호환 alias |
 | **app/** | `main.py` | 프로그램 진입점 구현. 인자 없는 실행은 봇 루프, CLI subcommand는 `balance`, `init-grid` 처리 |
+| **app/api/** | `main.py` | FastAPI 대시보드 서버 진입점 (`run-api.sh`/`stop-api.sh`) |
+| | `routers/` | health, grid, orders, pnl, monitor, runtime, commands, ops, auth 라우터 |
+| | `schemas/` | API 요청/응답 Pydantic 스키마 |
+| | `services/` | grid, pnl, monitor, command, runtime 서비스 계층 |
 | **app/core/** | `grid.py` | 그리드 슬롯의 상태(`GridState`) 관리 및 업데이트 로직 |
 | | `grid_builder.py` | 설정된 속성값에 따라 신규 그리드 슬롯(`GridRow`)을 생성 및 분배 |
 | | `grid_properties.py` | 그리드 범위, 예산 가중치 등 그리드 명세(`GridPropertySpec`) 정의 |
@@ -203,6 +207,7 @@ L1 손절 이후 매수 차단을 해제할 때 사용한다. L2 24시간 잠금
 | | `factory.py` | 설정에 따라 적절한 저장소(Repository) 인스턴스를 생성하는 팩토리 |
 | | `interfaces.py` | 저장소 계층의 일관성을 위한 추상 인터페이스 정의 |
 | | `postgres_common.py` | DB 연결 설정 및 트랜잭션 관리를 위한 공통 유틸리티 |
+| | `postgres_runtime_repository.py` | 봇 런타임 상태(손절, 이전 가격 등)의 DB 영속성 관리 |
 | **app/exchange/** | `crypto.py` | 업비트(Upbit) REST API와 선택적 WebSocket 캐시를 연동하여 실제 주문 제출 및 상태 조회 구현 |
 | | `upbit_ws.py` | 업비트 WebSocket ticker/candle/myAsset/myOrder 캐시와 현재가 이벤트 대기 기능 |
 | | `base.py` | 거래소 연동을 위한 공통 추상 클래스(`BaseExchange`) 정의 |
@@ -219,6 +224,7 @@ L1 손절 이후 매수 차단을 해제할 때 사용한다. L2 24시간 잠금
 | | `grid_reporting.py` | 수익률, 재고 현황 등 그리드 운영 성과 리포팅 유틸리티 |
 | | `decimal_utils.py` | 정밀한 수치 계산을 위한 Decimal 변환 및 절사(Truncate) 도구 |
 | | `logger.py` | KST 기준 로그 포맷팅 및 파일/콘솔 로깅 설정 |
+| | `notifier.py` | 슬랙 등 외부 알림 채널로 운영 이벤트를 전송하는 노티파이어 |
 | **app/config/** | `settings.py` | `.env` 환경 변수 로드 및 시스템 전역 설정 값 관리 |
 
 ## 전략 개요
@@ -309,7 +315,7 @@ Age TP 압축 규칙과 `effective_sell_price` 계산식은 [Strategy Formulas](
 중요한 점:
 - 압축은 런타임 매도 판정에서만 적용된다.
 - 저장된 `sell_price` 자체를 덮어쓰지는 않는다.
-- 런타임 `GRID_TP_K_BASE=9.0` / `GRID_TP_K_FLOOR=7.0` 가 DB 그리드를 만들 때 쓴 값과 일치해야 의도한 폭으로 동작한다.
+- 런타임 `GRID_TP_K_BASE=3.2` / `GRID_TP_K_FLOOR=3.0` 가 DB 그리드를 만들 때 쓴 값과 일치해야 의도한 폭으로 동작한다.
 - 이미 제출된 SELL pending 주문의 가격은 Age TP 변화에 맞춰 자동 재호가하지 않는다. 압축은 새 SELL 주문을 만들 때만 반영한다.
 
 ## 브레이크아웃 가드
@@ -387,7 +393,7 @@ rate limit 대응은 `Remaining-Req` 기반 제한과 `429`, 짧은 `418` 차단
 - `UPWARD_BUY_ENABLED`: 상승 1칸 돌파 시장가 예산매수 토글이다.
 - `ACTIVE_WINDOW_BELOW_CURRENT_SLOTS`, `ACTIVE_WINDOW_ABOVE_CURRENT_REENTRY_SLOTS`: 빈 슬롯 매수 후보 범위를 제어한다.
 - `BREAKOUT_GUARD_ENABLED`, `BREAKOUT_GUARD_CANDLE_UNIT`, `BREAKOUT_GUARD_CONSECUTIVE_CANDLES`: 추세장 신규 매수 차단 규칙을 제어한다.
-- `GRID_TP_MODEL`, `GRID_TP_K_BASE=9.0`, `GRID_TP_K_FLOOR=7.0`: 신규 생성 그리드의 TP 규칙과 Age TP 압축 기준을 결정한다.
+- `GRID_TP_MODEL`, `GRID_TP_K_BASE=3.2`, `GRID_TP_K_FLOOR=3.0`: 신규 생성 그리드의 TP 규칙과 Age TP 압축 기준을 결정한다.
 - `UPBIT_WS_PUBLIC_ENABLED`, `UPBIT_WS_EVENT_LOOP_ENABLED`, `UPBIT_WS_EVENT_MIN_INTERVAL_SECONDS`: 현재가 WebSocket 이벤트 루프와 최소 전략 평가 간격을 제어한다.
 - `STALE_PREVIOUS_PRICE_THRESHOLD_SECONDS=30`: cycle 사이 경과 시간이 이 값을 초과하면 그 cycle 의 신규 매수 평가를 스킵하고 `previous_price` 만 baseline 재설정한다. DB 단절 후 stale `previous_price` 와 현재가 한 tick 비교로 BUY 다수가 fan-out 되는 사고 방지용.
 - `UPBIT_WS_CANDLE_ENABLED`, `UPBIT_WS_ASSET_ENABLED`, `UPBIT_WS_ORDER_ENABLED`: 캔들/자산/주문 상태 WebSocket 캐시 사용 여부를 제어한다. 주문 생성과 취소는 계속 REST만 사용한다. `UPBIT_WS_ORDER_ENABLED=true` 여도 주문 상태의 terminal 판정은 반드시 `GET /v1/order` REST 재조회 기준이며, WS myOrder 캐시는 관측/힌트 용도다.
