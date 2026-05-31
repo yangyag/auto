@@ -762,7 +762,7 @@ STOP_LOSS_L2_PCT=30</code></pre>
         <div class="callout-title">⚠ 모드별 거동 차이</div>
         <p>아래 L0 → L1 → L2 3단계 점진 구조는 <strong>모드에 따라 다르게 동작</strong>한다.</p>
         <ul style="margin: 0.3rem 0;">
-          <li><strong><code>band_multiple</code> (기본·권장) 모드:</strong> L0/L1/L2 임계값이 모두 <strong>동일한 단일 밴드 값</strong>으로 산출된다(임계값 = <code>min × (1 − k × band_ratio)</code>, level 인자 미사용). 따라서 아래 <strong>L0(신규 매수 차단)·L1(50% 부분청산) 완충 단계가 발동하지 않고</strong>, 시세가 밴드를 하회하면 완충 단계를 건너뛰고 곧바로 <strong>L2(전량 시장가 청산) 단계로 직행</strong>한다(연속 종가 컨펌은 L2 기준 2회, 대기 시간 30분이 그대로 적용됨).</li>
+          <li><strong><code>band_multiple</code> (기본·권장) 모드:</strong> L0/L1/L2 임계값이 모두 <strong>동일한 단일 밴드 값</strong>으로 산출된다(임계값 = <code>min × (1 − k × band_ratio)</code>, level 인자 미사용). 따라서 아래 <strong>L0(신규 매수 차단)·L1(50% 부분청산) 완충 단계가 발동하지 않고</strong>, 시세가 밴드를 하회하면 완충 단계를 건너뛰고 곧바로 <strong>L2(전량 시장가 청산) 단계로 직행</strong>한다(연속 종가 컨펌은 L2 기준 2회, 즉 15분봉 × 2 ≈ 30분이 그대로 적용됨).</li>
           <li><strong><code>fixed_pct</code> 모드:</strong> L0/L1/L2 가 각각 −10% / −20% / −30% 의 <strong>별개 가격대</strong>로 동작하여, 아래 3단계 점진 구조가 그대로 성립한다.</li>
           <li>아래 LEVEL 0~2 카드 설명은 단계가 모두 구분되는 <strong><code>fixed_pct</code> 모드 기준</strong> 서술이다.</li>
         </ul>
@@ -782,7 +782,7 @@ STOP_LOSS_L2_PCT=30</code></pre>
           <div class="sl-name">L1</div>
           <div class="sl-thresh">현재가 &lt; L1 임계값 (기본 −20%)</div>
           <div class="sl-body">
-            컨펌 후 <strong>1시간 대기</strong>하여 보유 기초자산(<code>cfg.SYMBOL</code>)의 <strong>50%</strong>를 threshold 가격 지정가 매도. 매수 영구 차단.<br>
+            <strong>15분봉 4회 연속 종가 컨펌(≈1시간)</strong> 후 보유 기초자산(<code>cfg.SYMBOL</code>)의 <strong>50%</strong>를 threshold 가격 지정가 매도. 매수 영구 차단.<br>
             <strong>재개:</strong> <code>reset-stop-loss</code> CLI. lockout 미경과면 exit 2.
           </div>
         </div>
@@ -791,7 +791,7 @@ STOP_LOSS_L2_PCT=30</code></pre>
           <div class="sl-name">L2</div>
           <div class="sl-thresh">현재가 &lt; L2 임계값 (기본 −30%)</div>
           <div class="sl-body">
-            컨펌 후 <strong>30분 대기</strong>하여 잔여 100%를 시장가로 <strong>분할 청산</strong>. 봇 즉시 종료. 24시간 재시작 잠금.<br>
+            <strong>15분봉 2회 연속 종가 컨펌(≈30분)</strong> 후 잔여 100%를 시장가로 <strong>분할 청산</strong>. 봇 즉시 종료. 24시간 재시작 잠금.<br>
             <strong>재개:</strong> 새 그리드로 <code>init-grid --force</code> 재구성.
           </div>
         </div>
@@ -810,8 +810,6 @@ STOP_LOSS_L2_PCT=30</code></pre>
           <tr><td><code>STOP_LOSS_L0_CONSECUTIVE_CLOSES</code></td><td><code>4</code></td><td>L0 연속 캔들</td><td>2 ~ 6</td><td>연속 종가가 임계 아래여야 트리거</td></tr>
           <tr><td><code>STOP_LOSS_L1_CONSECUTIVE_CLOSES</code></td><td><code>4</code></td><td>L1 연속 캔들</td><td>2 ~ 6</td><td>—</td></tr>
           <tr><td><code>STOP_LOSS_L2_CONSECUTIVE_CLOSES</code></td><td><code>2</code></td><td>L2 연속 캔들</td><td>1 ~ 4</td><td>L2는 위험하므로 더 빠르게 컨펌</td></tr>
-          <tr><td><code>STOP_LOSS_L1_ARM_HOLD_SECONDS</code></td><td><code>3600</code></td><td>L1 대기 (초)</td><td>600 ~ 3600</td><td>컨펌 후 손절 실행까지 (1시간)</td></tr>
-          <tr><td><code>STOP_LOSS_L2_ARM_HOLD_SECONDS</code></td><td><code>1800</code></td><td>L2 대기 (초)</td><td>300 ~ 1800</td><td>컨펌 후 손절 실행까지 (30분)</td></tr>
           <tr><td><code>STOP_LOSS_L1_LIQUIDATE_RATIO</code></td><td><code>0.5</code></td><td>L1 청산 비율</td><td>0.3 ~ 0.7</td><td>0 = 0%, 1 = 100%</td></tr>
           <tr><td><code>STOP_LOSS_RESTART_LOCKOUT_HOURS</code></td><td><code>24</code></td><td>L2 재시작 잠금</td><td>12 ~ 48</td><td>L2 후 자동 재시작 금지 시간</td></tr>
           <tr><td><code>STOP_LOSS_WEBHOOK_URL</code></td><td>(없음)</td><td>외부 알림 Webhook</td><td>URL</td><td>Slack/Generic Webhook</td></tr>
@@ -898,8 +896,8 @@ STOP_LOSS_NOTIFICATION_ENABLED=True</code></pre>
       <table>
         <thead><tr><th>이벤트</th><th>색상</th><th>트리거 시점</th><th>포함 정보</th></tr></thead>
         <tbody>
-          <tr><td><strong>ARMED</strong></td><td>🟠 주황</td><td>손절 조건 충족 → 대기 시간 진입</td><td>현재가, 임계값, 하락률, 그리드 기준가</td></tr>
-          <tr><td><strong>EXECUTED</strong></td><td>🟢 초록</td><td>대기 시간 경과 → 청산 완료</td><td>현재가, 임계값, 청산수량</td></tr>
+          <tr><td><strong>ARMED</strong></td><td>🟠 주황</td><td>손절 발동(연속 종가 컨펌 충족) 시</td><td>현재가, 임계값, 하락률, 그리드 기준가</td></tr>
+          <tr><td><strong>EXECUTED</strong></td><td>🟢 초록</td><td>청산 완료 시</td><td>현재가, 임계값, 청산수량</td></tr>
           <tr><td><strong>FAILED</strong></td><td>🔴 빨강</td><td>청산 중 오류 발생</td><td>현재가, 임계값, 실패한 슬롯 정보</td></tr>
         </tbody>
       </table>
@@ -920,7 +918,7 @@ STOP_LOSS_NOTIFICATION_ENABLED=True</code></pre>
       </ol>
       <div class="callout ok">
         <div class="callout-title">✅ 재시작으로 반영되는 파라미터</div>
-        <p><code>STOP_LOSS_MODE</code>, <code>STOP_LOSS_BAND_MULTIPLE</code>, 모든 <code>STOP_LOSS_*_CONSECUTIVE_CLOSES</code>, <code>STOP_LOSS_*_ARM_HOLD_SECONDS</code>, <code>STOP_LOSS_L1_LIQUIDATE_RATIO</code></p>
+        <p><code>STOP_LOSS_MODE</code>, <code>STOP_LOSS_BAND_MULTIPLE</code>, 모든 <code>STOP_LOSS_*_CONSECUTIVE_CLOSES</code>, <code>STOP_LOSS_L1_LIQUIDATE_RATIO</code></p>
       </div>
       <div class="callout warn">
         <div class="callout-title">⚠ 그리드 생성 시에만 반영</div>

@@ -394,22 +394,16 @@ $$c_{arm} = \bigwedge_{j=1}^{n_{Ln}} (C_j < T_{Ln}) \tag{식 67}$$
 
 $c_{arm} = true$일 때 해당 레벨이 ARM(무장)되며, `armed_at`(최초 무장 시각)이 기록·유지됩니다.
 
-### 14-4. arm-hold 시간 윈도우
-
-ARM 이후 실제 청산 실행까지의 시간 컨펌 윈도우 $W_{Ln}$(`STOP_LOSS_Ln_ARM_HOLD_SECONDS`)입니다. 최초 무장 시각(`armed_at`)을 기준으로 한 시간 컨펌용 파라미터로, `validate_stop_loss_config()`에서 양수로 강제됩니다.
-
-$$W_{L1} = 3600 \text{ s}, \quad W_{L2} = 1800 \text{ s} \tag{식 68}$$
-
-### 14-5. 레벨별 청산 동작
+### 14-4. 레벨별 청산 동작
 
 - **L0**: 신규 매수만 차단(no-op). 보유 재고는 청산하지 않습니다.
 - **L1**: 보유 슬롯을 임계가($T_{L1}$) 기준 **지정가 부분 청산**합니다. 청산 비율 $r_{L1}$ = `STOP_LOSS_L1_LIQUIDATE_RATIO` = 0.5.
 
-$$q_{sell, i} = H_i \cdot r_{L1}, \quad r_{L1} = 0.5 \tag{식 69}$$
+$$q_{sell, i} = H_i \cdot r_{L1}, \quad r_{L1} = 0.5 \tag{식 68}$$
 
 - **L2**: 보유 슬롯 **전량 시장가 청산**($r_{L2} = 1$). 청산 후 재시작 잠금 시간 $\tau_{lock}$(`STOP_LOSS_RESTART_LOCKOUT_HOURS`) 동안 봇 재가동이 잠깁니다.
 
-$$\tau_{lock} = 24 \text{ hours} \tag{식 70}$$
+$$\tau_{lock} = 24 \text{ hours} \tag{식 69}$$
 
 > [!WARNING]
 > 라이브 운영값은 `band_multiple` 모드 + `STOP_LOSS_BAND_MULTIPLE = 1.55`입니다 (코드 기본값은 [settings.py](../app/config/settings.py)의 `1.5`). `band_multiple`은 `validate_stop_loss_config()`에서 1.0~2.0 범위로 강제되며, 식 64의 $T_{band}$가 $0.5L < T_{band} < 0.9L$ 구간에 들어야 정상 운영 구간 침범/하한 50% 초과 검증을 통과합니다.

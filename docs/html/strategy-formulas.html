@@ -1173,13 +1173,6 @@
       </ul>
       <p><span class="var">c<sub>arm</sub></span> = true일 때 해당 레벨이 ARM(무장)되며, <code>armed_at</code>(최초 무장 시각)이 기록·유지된다.</p>
 
-      <h3>arm-hold 시간 윈도우</h3>
-      <p>ARM 이후 실제 청산 실행까지의 시간 컨펌 윈도우 <span class="var">W<sub>Ln</sub></span>(<code>STOP_LOSS_Ln_ARM_HOLD_SECONDS</code>)다. 최초 무장 시각(<code>armed_at</code>)을 기준으로 한 시간 컨펌용 파라미터로, <code>validate_stop_loss_config()</code>에서 양수로 강제된다.</p>
-      <div class="formula">
-        <div class="formula-body"><span class="var">W<sub>L1</sub></span> = 3600 s,&nbsp;&nbsp; <span class="var">W<sub>L2</sub></span> = 1800 s</div>
-        <span class="formula-label">[식 68]</span>
-      </div>
-
       <h3>레벨별 청산 동작</h3>
       <ul>
         <li><strong>L0</strong>: 신규 매수만 차단(no-op). 보유 재고는 청산하지 않는다.</li>
@@ -1187,14 +1180,14 @@
       </ul>
       <div class="formula">
         <div class="formula-body"><span class="var">q<sub>sell, i</sub></span> = <span class="var">H<sub>i</sub></span> · <span class="var">r<sub>L1</sub></span>,&nbsp;&nbsp; <span class="var">r<sub>L1</sub></span> = 0.5</div>
-        <span class="formula-label">[식 69]</span>
+        <span class="formula-label">[식 68]</span>
       </div>
       <ul>
         <li><strong>L2</strong>: 보유 슬롯 <strong>전량 시장가 청산</strong>(<span class="var">r<sub>L2</sub></span> = 1). 청산 후 재시작 잠금 시간 <span class="var">τ<sub>lock</sub></span>(<code>STOP_LOSS_RESTART_LOCKOUT_HOURS</code>) 동안 봇 재가동이 잠긴다.</li>
       </ul>
       <div class="formula">
         <div class="formula-body"><span class="var">τ<sub>lock</sub></span> = 24 hours</div>
-        <span class="formula-label">[식 70]</span>
+        <span class="formula-label">[식 69]</span>
       </div>
 
       <div class="callout danger">
