@@ -452,6 +452,7 @@
         <li class="indent"><a href="#ep-orders-pending">└ GET /v1/orders/pending</a></li>
         <li class="indent"><a href="#ep-orders-recent">└ GET /v1/orders/recent</a></li>
         <li class="indent"><a href="#ep-pnl">└ GET /v1/pnl/realized</a></li>
+        <li class="indent"><a href="#ep-open-sells">└ GET /v1/monitor/open-sells</a></li>
         <li class="indent"><a href="#ep-config">└ GET /v1/config</a></li>
         <li><a href="#cmd-api">명령 API</a></li>
         <li class="indent"><a href="#ep-bot-stop">└ POST bot/stop</a></li>
@@ -657,7 +658,7 @@ tail -f logs/trading-$(date +%F).log</code></pre>
         <li>아이디/비밀번호 로그인</li>
         <li>봇 상태 조회</li>
         <li>그리드 요약 조회</li>
-        <li>그리드 전체 조회: 슬롯별 매수가, 계획 매수 BTC/KRW, 보유 BTC/KRW, 매도가, 미체결 주문</li>
+        <li>그리드 전체 조회: 슬롯별 매수가, 계획 매수 기초자산(cfg.SYMBOL, 예: BTC/USDT)/KRW, 보유 기초자산/KRW, 매도가, 미체결 주문</li>
         <li>현재가 조회</li>
         <li>미체결 주문 조회</li>
         <li>오늘/이번주/이번달/올해/전체 실현손익 조회</li>
@@ -742,6 +743,15 @@ systemctl --user restart auto-api.service auto-command-worker.service</code></pr
           <span class="endpoint-summary">로그인 (access + refresh 발급)</span>
         </div>
         <div class="endpoint-body">
+          <h4>Body 필드</h4>
+          <table>
+            <thead><tr><th>이름</th><th>타입</th><th>필수</th><th>설명</th></tr></thead>
+            <tbody>
+              <tr><td><code>username</code></td><td>string</td><td>필수</td><td>관리자 아이디 (<code>MOBILE_API_USERNAME</code>)</td></tr>
+              <tr><td><code>password</code></td><td>string</td><td>필수</td><td>관리자 비밀번호 (<code>MOBILE_API_PASSWORD</code>)</td></tr>
+              <tr><td><code>totp_code</code></td><td>string</td><td>조건부</td><td>TOTP 보안 활성화 시 입력 필수</td></tr>
+            </tbody>
+          </table>
           <div class="endpoint-grid">
             <div>
               <h4>Request</h4>
@@ -775,14 +785,30 @@ systemctl --user restart auto-api.service auto-command-worker.service</code></pr
         <div class="endpoint-head">
           <span class="method post">POST</span>
           <span class="endpoint-path">/v1/auth/refresh</span>
-          <span class="endpoint-summary">access_token 재발급</span>
+          <span class="endpoint-summary">access_token 재발급 (refresh token 회전)</span>
         </div>
         <div class="endpoint-body">
-          <h4>Request</h4>
-          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+          <p>만료된 access token을 재발급한다. 이때 refresh token도 함께 회전(rotation)되어, 응답으로 새 <code>refresh_token</code>이 발급되고 요청에 사용한 기존 refresh token은 즉시 무효화된다. 따라서 앱은 응답으로 받은 새 <code>refresh_token</code>을 저장해 이후 갱신에 사용해야 한다.</p>
+          <div class="endpoint-grid">
+            <div>
+              <h4>Request</h4>
+              <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
 <pre><code>curl -s http://127.0.0.1:8086/v1/auth/refresh \
   -H 'Content-Type: application/json' \
   -d '{"refresh_token":"&lt;refresh_token&gt;"}'</code></pre>
+              </div>
+            </div>
+            <div>
+              <h4>Response</h4>
+              <div class="code-wrap"><div class="code-head"><span class="code-lang">json</span><button class="copy-btn">Copy</button></div>
+<pre><code>{
+  "access_token": "...",
+  "refresh_token": "...",
+  "token_type": "bearer",
+  "expires_in": 900
+}</code></pre>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -795,11 +821,24 @@ systemctl --user restart auto-api.service auto-command-worker.service</code></pr
           <span class="endpoint-summary">refresh_token 무효화</span>
         </div>
         <div class="endpoint-body">
-          <h4>Request</h4>
-          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+          <p>전달된 refresh token을 DB에서 삭제하여 무효화한다.</p>
+          <div class="endpoint-grid">
+            <div>
+              <h4>Request</h4>
+              <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
 <pre><code>curl -s http://127.0.0.1:8086/v1/auth/logout \
   -H 'Content-Type: application/json' \
   -d '{"refresh_token":"&lt;refresh_token&gt;"}'</code></pre>
+              </div>
+            </div>
+            <div>
+              <h4>Response</h4>
+              <div class="code-wrap"><div class="code-head"><span class="code-lang">json</span><button class="copy-btn">Copy</button></div>
+<pre><code>{
+  "status": "ok"
+}</code></pre>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -850,11 +889,12 @@ export async function apiGet(path: string) {
         <tbody>
           <tr><td><code>GET /v1/bot/status</code></td><td>봇 alive 여부, 마지막 heartbeat, 손절/브레이크아웃 상태</td><td>봇이 꺼져 있으면 API는 살아 있어도 <code>is_alive=false</code>가 될 수 있다.</td></tr>
           <tr><td><code>GET /v1/market/price</code></td><td>현재가</td><td>봇 heartbeat 가격이 fresh하면 우선 사용하고, 없으면 Upbit public REST를 사용한다.</td></tr>
-          <tr><td><code>GET /v1/grid/state</code></td><td>전체 그리드 슬롯 목록</td><td>각 슬롯의 매수가, 계획 매수 BTC/KRW, 보유 BTC/KRW, 매도가, pending 주문을 확인한다.</td></tr>
+          <tr><td><code>GET /v1/grid/state</code></td><td>전체 그리드 슬롯 목록</td><td>각 슬롯의 매수가, 계획 매수 기초자산(cfg.SYMBOL, 예: BTC/USDT)/KRW, 보유 기초자산/KRW, 매도가, pending 주문을 확인한다.</td></tr>
           <tr><td><code>GET /v1/grid/summary</code></td><td>그리드 요약</td><td>보유 슬롯 수, 총 재고, 원가, 평균 매수가 등을 보여준다.</td></tr>
           <tr><td><code>GET /v1/orders/pending</code></td><td>DB 기준 미체결 주문</td><td>봇이 관리하는 open 주문 목록이다.</td></tr>
           <tr><td><code>GET /v1/orders/recent?limit=50</code></td><td>최근 주문 이력</td><td>DB에 기록된 주문 기준이다.</td></tr>
           <tr><td><code>GET /v1/pnl/realized?period=d</code></td><td>오늘 실현손익</td><td><code>d/w/m/y/all</code> 기간을 지원한다. Upbit 키가 필요하다.</td></tr>
+          <tr><td><code>GET /v1/monitor/open-sells</code></td><td>매도 대기 현황</td><td>체결 대기 중인 SELL 주문과 봇 매수 슬롯 원가를 정합해 미실현 손익 구조를 보여준다.</td></tr>
           <tr><td><code>GET /v1/config</code></td><td>앱에 보여줘도 되는 핵심 설정</td><td>secret은 반환하지 않는다.</td></tr>
         </tbody>
       </table>
@@ -899,14 +939,14 @@ export async function apiGet(path: string) {
           <span class="endpoint-summary">전체 그리드 슬롯 목록</span>
         </div>
         <div class="endpoint-body">
-          <p>각 슬롯의 매수가, 계획 매수 BTC/KRW, 보유 BTC/KRW, 매도가, pending 주문을 확인한다.</p>
+          <p>각 슬롯의 매수가, 계획 매수 기초자산(cfg.SYMBOL, 예: BTC/USDT)/KRW, 보유 기초자산/KRW, 매도가, pending 주문을 확인한다.</p>
           <h4>Slot 필드</h4>
           <table>
             <thead><tr><th>필드</th><th>타입</th><th>설명</th></tr></thead>
             <tbody>
               <tr><td><code>buy_price</code></td><td>number</td><td>해당 슬롯의 매수 기준 가격</td></tr>
-              <tr><td><code>planned_qty</code>, <code>planned_buy_krw</code></td><td>number</td><td>아직 비어 있는 슬롯에서 매수할 목표 BTC 수량과 KRW 금액</td></tr>
-              <tr><td><code>held_qty</code>, <code>inventory_cost_krw</code></td><td>number</td><td>이미 매수되어 보유 중인 BTC 수량과 원가</td></tr>
+              <tr><td><code>planned_qty</code>, <code>planned_buy_krw</code></td><td>number</td><td>아직 비어 있는 슬롯에서 매수할 목표 수량(기초자산, cfg.SYMBOL 기준 · 예: BTC/USDT)과 KRW 금액</td></tr>
+              <tr><td><code>held_qty</code>, <code>inventory_cost_krw</code></td><td>number</td><td>이미 매수되어 보유 중인 수량(기초자산, cfg.SYMBOL 기준 · 예: BTC/USDT)과 원가</td></tr>
               <tr><td><code>sell_price</code>, <code>effective_sell_price</code></td><td>number</td><td>기본 매도 기준 가격과 Age TP 등이 반영된 실제 매도 기준 가격</td></tr>
               <tr><td><code>pending_order</code></td><td>object | null</td><td>해당 슬롯에 아직 완료되지 않은 주문이 있으면 주문 정보</td></tr>
             </tbody>
@@ -929,8 +969,8 @@ export async function apiGet(path: string) {
           <p>보유 슬롯 수, 총 재고, 원가, 평균 매수가 등을 보여준다.</p>
           <div class="callout warn">
             <div class="callout-title">⚠ 원가 기준</div>
-            <p>모바일 API나 앱에서 원금성 지표를 만들 때 업비트 <code>avg_buy_price</code> 를 봇 슬롯 원가로 대체하지 않는다. 업비트 평균매수가는 계정 전체 BTC 평균이고, 그리드 봇의 원가는 슬롯별 BUY/SELL 매칭 결과다.</p>
-            <p>낮은 슬롯이 먼저 매도되고 높은 슬롯이 남는 구간에서는 <code>주문 가능 KRW + avg_buy_price * BTC 수량</code> 이 봇 장부 기준 원금과 다르게 보일 수 있다. 봇 기준 원금/잔여 원가는 그리드 슬롯 상태와 실현손익 매칭 로직의 잔여 BUY 큐를 기준으로 해석하며, 운영 서버에서는 <code>scripts/upbit_actual_assets.py</code> 를 바로 실행해 확인한다.</p>
+            <p>모바일 API나 앱에서 원금성 지표를 만들 때 업비트 <code>avg_buy_price</code> 를 봇 슬롯 원가로 대체하지 않는다. 업비트 평균매수가는 계정 전체 기초자산(cfg.SYMBOL, 예: BTC/USDT) 평균이고, 그리드 봇의 원가는 슬롯별 BUY/SELL 매칭 결과다.</p>
+            <p>낮은 슬롯이 먼저 매도되고 높은 슬롯이 남는 구간에서는 <code>주문 가능 KRW + avg_buy_price * 기초자산 수량</code> 이 봇 장부 기준 원금과 다르게 보일 수 있다. 봇 기준 원금/잔여 원가는 그리드 슬롯 상태와 실현손익 매칭 로직의 잔여 BUY 큐를 기준으로 해석하며, 운영 서버에서는 <code>scripts/upbit_actual_assets.py</code> 를 바로 실행해 확인한다.</p>
           </div>
           <h4>Request</h4>
           <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
@@ -968,7 +1008,7 @@ export async function apiGet(path: string) {
           <table>
             <thead><tr><th>이름</th><th>타입</th><th>필수</th><th>설명</th></tr></thead>
             <tbody>
-              <tr><td><code>limit</code></td><td>int</td><td>선택</td><td>가져올 행 수 (기본 50)</td></tr>
+              <tr><td><code>limit</code></td><td>int</td><td>선택</td><td>가져올 행 수 (기본 50, 허용 범위 <code>1</code>~<code>200</code>)</td></tr>
             </tbody>
           </table>
           <h4>Request</h4>
@@ -991,7 +1031,7 @@ export async function apiGet(path: string) {
           <table>
             <thead><tr><th>이름</th><th>타입</th><th>필수</th><th>설명</th></tr></thead>
             <tbody>
-              <tr><td><code>period</code></td><td>enum</td><td>필수</td><td><code>d</code> / <code>w</code> / <code>m</code> / <code>y</code> / <code>all</code></td></tr>
+              <tr><td><code>period</code></td><td>enum</td><td>선택</td><td><code>d</code> / <code>w</code> / <code>m</code> / <code>y</code> / <code>all</code> (기본 <code>d</code>)</td></tr>
             </tbody>
           </table>
           <h4>Status</h4>
@@ -1008,6 +1048,71 @@ export async function apiGet(path: string) {
         </div>
       </div>
 
+      <div class="endpoint" id="ep-open-sells">
+        <div class="endpoint-head">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/monitor/open-sells</span>
+          <span class="endpoint-summary">매도 대기 실시간 현황</span>
+        </div>
+        <div class="endpoint-body">
+          <p>체결 대기 중인 모든 SELL 주문과 봇의 실제 매수 슬롯 원가를 정합하여 미실현 손익 구조를 한눈에 볼 수 있도록 가공해 반환한다.</p>
+          <h4>Query</h4>
+          <table>
+            <thead><tr><th>이름</th><th>타입</th><th>기본값</th><th>설명</th></tr></thead>
+            <tbody>
+              <tr><td><code>market</code></td><td>string</td><td><code>cfg.SYMBOL</code></td><td>분석 대상 업비트 마켓 코드 (기본: 현재 설정 기준)</td></tr>
+              <tr><td><code>lookback_days</code></td><td>int</td><td><code>120</code></td><td>과거 매수 이력 매칭을 위한 큐 추적 윈도우 기간 (일 단위)</td></tr>
+              <tr><td><code>bot_key</code></td><td>string</td><td>(기본 봇 키)</td><td>특정 봇 식별 고유 접두사</td></tr>
+              <tr><td><code>reset_sell_uuid</code></td><td>array</td><td>—</td><td>과거 강제 리셋 매도 주문 UUID 목록 (다중 지정 가능)</td></tr>
+            </tbody>
+          </table>
+          <div class="endpoint-grid">
+            <div>
+              <h4>Request</h4>
+              <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>curl -s http://127.0.0.1:8086/v1/monitor/open-sells \
+  -H "Authorization: Bearer &lt;access_token&gt;"</code></pre>
+              </div>
+            </div>
+            <div>
+              <h4>Response</h4>
+              <div class="code-wrap"><div class="code-head"><span class="code-lang">json</span><button class="copy-btn">Copy</button></div>
+<pre><code>{
+  "market": "KRW-BTC",
+  "current_price": "152000000",
+  "generated_at": "2026-05-28T14:30:00+09:00",
+  "rows": [
+    {
+      "slot_index": 3,
+      "qty": "0.00100",
+      "buy_unit_cost": "148500000",
+      "sell_limit_price": "153000000",
+      "current_price": "152000000",
+      "unrealized_at_current": "3500",
+      "gap_to_fill_krw": "1000000"
+    }
+  ],
+  "summary": {
+    "total_count": 5,
+    "matched_count": 4,
+    "unmatched_count": 1,
+    "profit_count": 3,
+    "loss_count": 1,
+    "total_unrealized_krw": "5000"
+  },
+  "diagnostic": {
+    "open_orders": 5,
+    "matched": 4,
+    "unmatched": 1,
+    "lookback_days": 120
+  }
+}</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="endpoint" id="ep-config">
         <div class="endpoint-head">
           <span class="method get">GET</span>
@@ -1015,7 +1120,24 @@ export async function apiGet(path: string) {
           <span class="endpoint-summary">앱에 보여줘도 되는 핵심 설정 (secret 제외)</span>
         </div>
         <div class="endpoint-body">
-          <p>secret은 반환하지 않는다.</p>
+          <p>현재 가동 기준이 되는 봇의 핵심 설정값(거래 마켓, 예산, TP 모델, 가드 활성화 여부 등)을 반환한다. secret은 반환하지 않는다.</p>
+          <h4>응답 필드</h4>
+          <table>
+            <thead><tr><th>필드</th><th>타입</th><th>설명</th></tr></thead>
+            <tbody>
+              <tr><td><code>symbol</code></td><td>string</td><td>거래 대상 업비트 마켓 코드 (<code>cfg.SYMBOL</code>)</td></tr>
+              <tr><td><code>state_bot_key</code></td><td>string</td><td>상태 저장에 사용하는 봇 식별 고유 키</td></tr>
+              <tr><td><code>pg_schema</code></td><td>string</td><td>PostgreSQL 스키마명 (<code>PGSCHEMA</code>)</td></tr>
+              <tr><td><code>grid_total_budget_krw</code></td><td>number</td><td>그리드 총예산 (KRW)</td></tr>
+              <tr><td><code>grid_tp_model</code></td><td>string</td><td>익절 모델 식별자 (예: <code>k</code>)</td></tr>
+              <tr><td><code>grid_tp_k_base</code></td><td>number</td><td>TP K 모델 기준 계수</td></tr>
+              <tr><td><code>grid_tp_k_floor</code></td><td>number</td><td>TP K 모델 하한 계수</td></tr>
+              <tr><td><code>upward_buy_enabled</code></td><td>bool</td><td>상승 추격 매수 활성화 여부</td></tr>
+              <tr><td><code>breakout_guard_enabled</code></td><td>bool</td><td>브레이크아웃 가드 활성화 여부</td></tr>
+              <tr><td><code>stop_loss_mode</code></td><td>string</td><td>손절 판정 모드 (예: <code>band_multiple</code>)</td></tr>
+              <tr><td><code>price_poll_interval</code></td><td>number</td><td>시세 폴링 주기 (초 단위)</td></tr>
+            </tbody>
+          </table>
           <h4>Request</h4>
           <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
 <pre><code>curl -s http://127.0.0.1:8086/v1/config \
@@ -1096,7 +1218,7 @@ export async function apiGet(path: string) {
           <span class="endpoint-summary">라이브 reset (매우 위험)</span>
         </div>
         <div class="endpoint-body">
-          <p>미체결 취소, BTC 청산, 그리드 재반영 경로라 매우 위험하다. 확인 문구 <code>"RESET"</code> 필수.</p>
+          <p>미체결 취소, 보유 코인(기초자산, cfg.SYMBOL 기준 · 예: BTC/USDT) 청산, 그리드 재반영 경로라 매우 위험하다. 확인 문구 <code>"RESET"</code> 필수.</p>
           <h4>Body 필드</h4>
           <table>
             <thead><tr><th>이름</th><th>타입</th><th>필수</th><th>설명</th></tr></thead>
@@ -1157,7 +1279,15 @@ export async function apiGet(path: string) {
           <span class="endpoint-summary">손절 상태 해제 (main.py reset-stop-loss)</span>
         </div>
         <div class="endpoint-body">
-          <p>손절 상태를 해제한다.</p>
+          <p>활성화된 L1/L2 손절 가드 락 상태를 초기화하여 정상 거래 가능 모드로 복구한다.</p>
+          <h4>Body 필드</h4>
+          <table>
+            <thead><tr><th>이름</th><th>타입</th><th>필수</th><th>설명</th></tr></thead>
+            <tbody>
+              <tr><td><code>force</code></td><td>bool</td><td>선택</td><td>강제 해제 여부</td></tr>
+              <tr><td><code>totp_code</code></td><td>string</td><td>조건부</td><td>TOTP secret 설정 시 필수</td></tr>
+            </tbody>
+          </table>
           <h4>Request</h4>
           <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
 <pre><code>curl -s -X POST http://127.0.0.1:8086/v1/commands/reset-stop-loss \
@@ -1231,7 +1361,7 @@ scripts/upbit_actual_assets.py --lookback-days 180</code></pre>
 <pre><code>cd /home/ubuntu/auto
 systemctl --user status auto-command-worker.service
 journalctl --user -u auto-command-worker.service -n 100 --no-pager
-docker exec auto-postgres psql -U auto -d auto \
+docker exec auto-postgres psql -U "$PGUSER" -d "$PGDATABASE" \
   -c "SELECT id, kind, status, requested_at, error FROM auto_trading.commands ORDER BY requested_at DESC LIMIT 10"</code></pre>
       </div>
 
@@ -1269,7 +1399,7 @@ tail -n 100 logs/trading-$(date +%F).log</code></pre>
     </section>
 
     <footer>
-      이 문서는 <code>docs/mobile-api.md</code> 를 기반으로 자동 생성된 API 레퍼런스 대시보드입니다 · 최종 갱신 2026-05-18
+      이 문서는 <code>docs/mobile-api.md</code> 를 기반으로 자동 생성된 API 레퍼런스 대시보드입니다 · 최종 갱신 2026-05-31
     </footer>
   </main>
 </div>

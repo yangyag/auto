@@ -489,6 +489,8 @@
         <li class="indent"><a href="#breakout">└ 브레이크아웃 가드</a></li>
         <li class="indent"><a href="#required-krw">└ 매수 필요 KRW 추정</a></li>
         <li class="indent"><a href="#adjust-budget">└ 라이브 예산 조정</a></li>
+        <li class="group-label">손절</li>
+        <li class="indent"><a href="#stop-loss">└ 손절(Stop Loss) 판정</a></li>
       </ul>
     </nav>
     <button class="theme-toggle" id="themeToggle">
@@ -502,9 +504,9 @@
       <h1>Strategy Formulas</h1>
       <p>auto 자동매매 봇의 전략 동작에 쓰이는 수식과 판정 조건을 코드 기준으로 정리</p>
       <div class="hero-meta">
-        <span class="chip">Σ 16 섹션</span>
+        <span class="chip">Σ 17 섹션</span>
         <span class="chip">📐 로그 간격 그리드</span>
-        <span class="chip">📦 KRW · BTC 단위</span>
+        <span class="chip">📦 KRW · 기초자산(cfg.SYMBOL) 단위</span>
         <span class="chip">🐍 app/strategy + app/core</span>
       </div>
     </div>
@@ -517,8 +519,8 @@
           <dt><span class="var">P</span></dt><dd>현재 평가 가격</dd>
           <dt><span class="var">B<sub>i</sub></span></dt><dd>buy_price (KRW)</dd>
           <dt><span class="var">S<sub>i</sub></span></dt><dd>sell_price (KRW)</dd>
-          <dt><span class="var">Q<sub>i</sub></span></dt><dd>planned_qty (BTC)</dd>
-          <dt><span class="var">H<sub>i</sub></span></dt><dd>held_qty (BTC)</dd>
+          <dt><span class="var">Q<sub>i</sub></span></dt><dd>planned_qty (기초자산, cfg.SYMBOL)</dd>
+          <dt><span class="var">H<sub>i</sub></span></dt><dd>held_qty (기초자산, cfg.SYMBOL)</dd>
         </dl>
       </div>
       <div class="card">
@@ -535,7 +537,7 @@
         <div class="card-title"><span class="card-icon">⚖</span>단위 규칙</div>
         <dl class="kv">
           <dt>가격</dt><dd>KRW (정수, 호가 단위)</dd>
-          <dt>수량</dt><dd>BTC, step 0.00000001</dd>
+          <dt>수량</dt><dd>기초자산(cfg.SYMBOL), step 0.00000001 (마켓 공통)</dd>
           <dt>주문 금액</dt><dd>step 1 KRW</dd>
           <dt>정규화</dt><dd>F<sub>norm</sub>(x)</dd>
           <dt>내림</dt><dd>F<sub>step</sub>(x, s)</dd>
@@ -577,8 +579,9 @@
           <tr><td class="sym">P</td><td>현재 전략 평가 가격</td><td>—</td><td>KRW</td></tr>
           <tr><td class="sym">B<sub>i</sub></td><td><span class="var">i</span>번 슬롯의 <code>buy_price</code></td><td>—</td><td>KRW</td></tr>
           <tr><td class="sym">S<sub>i</sub></td><td><span class="var">i</span>번 슬롯의 저장된 <code>sell_price</code></td><td>—</td><td>KRW</td></tr>
-          <tr><td class="sym">Q<sub>i</sub></td><td><span class="var">i</span>번 슬롯의 <code>planned_qty</code></td><td>—</td><td>BTC</td></tr>
-          <tr><td class="sym">H<sub>i</sub></td><td><span class="var">i</span>번 슬롯의 <code>held_qty</code></td><td>—</td><td>BTC</td></tr>
+          <tr><td class="sym">S<sub>i</sub><sup>eff</sup></td><td>이익 실현(TP)이 적용된 최종 매도가</td><td><code>effective_sell_price</code></td><td>KRW</td></tr>
+          <tr><td class="sym">Q<sub>i</sub></td><td><span class="var">i</span>번 슬롯의 <code>planned_qty</code></td><td>—</td><td>기초자산 (cfg.SYMBOL, 예: USDT)</td></tr>
+          <tr><td class="sym">H<sub>i</sub></td><td><span class="var">i</span>번 슬롯의 <code>held_qty</code></td><td>—</td><td>기초자산 (cfg.SYMBOL, 예: USDT)</td></tr>
           <tr><td class="sym">L</td><td>그리드 하단 가격</td><td>—</td><td>KRW</td></tr>
           <tr><td class="sym">U</td><td>그리드 상단 가격</td><td>—</td><td>KRW</td></tr>
           <tr><td class="sym">N</td><td>슬롯 수</td><td>—</td><td>정수</td></tr>
@@ -599,6 +602,10 @@
           <tr><td class="sym">A<sub>buffer</sub></td><td>수수료 버퍼</td><td><code>FEE_BUFFER_KRW</code></td><td>KRW</td></tr>
           <tr><td class="sym">A<sub>reserve</sub></td><td>잔고 최소 유보</td><td><code>MIN_BALANCE_RESERVE</code></td><td>KRW</td></tr>
           <tr><td class="sym">M</td><td>브레이크아웃 가드 연속 캔들 수</td><td><code>BREAKOUT_GUARD_CONSECUTIVE_CANDLES</code></td><td>정수</td></tr>
+          <tr><td class="sym">q<sub>min</sub></td><td>목표 재고 비중 하한</td><td><code>INVENTORY_TARGET_Q_MIN</code></td><td>비율 (기본 0.10)</td></tr>
+          <tr><td class="sym">q<sub>max</sub></td><td>목표 재고 비중 상한</td><td><code>INVENTORY_TARGET_Q_MAX</code></td><td>비율 (기본 0.85)</td></tr>
+          <tr><td class="sym">γ</td><td>목표 재고 곡선 감쇄 지수</td><td><code>INVENTORY_TARGET_GAMMA</code></td><td>실수 (기본 1.5)</td></tr>
+          <tr><td class="sym">ε</td><td>목표 재고 통과 임계 여유분</td><td><code>INVENTORY_TARGET_EPSILON</code></td><td>비율 (기본 0.03)</td></tr>
         </tbody>
       </table>
     </section>
@@ -646,14 +653,15 @@
       </div>
 
       <div class="callout info">
-        <div class="callout-title">🔢 워크드 예시 · p<sub>step</sub> = 1%, U = 100,000,000, L = 80,000,000</div>
-        <p>Δ<sub>log</sub> = ln(100,000,000 / 80,000,000) = ln(1.25) ≈ 0.22314</p>
+        <div class="callout-title">🔢 워크드 예시 (가상 수치) · p<sub>step</sub> = 1%, U = 1,530, L = 1,430</div>
+        <p>※ 계산 흐름 설명용 예시다. 실제 라이브 운영값은 <code>GRID_STEP_PCT = 0.2</code>, <code>MIN_BUY_PRICE = 1430</code>, <code>MAX_BUY_PRICE = 1530</code>이다.</p>
+        <p>Δ<sub>log</sub> = ln(1,530 / 1,430) = ln(1.06993) ≈ 0.06759</p>
         <p>δ<sub>log</sub> = ln(1 + 0.01) ≈ 0.00995</p>
-        <p>I<sub>raw</sub> ≈ 0.22314 / 0.00995 ≈ 22.42</p>
-        <p>𝓘<sub>cand</sub> = { 22, 23 }</p>
-        <p>E(22) = | 0.22314 / 22 − 0.00995 | ≈ 0.00019</p>
-        <p>E(23) = | 0.22314 / 23 − 0.00995 | ≈ 0.00025</p>
-        <p>→ <span class="var">I</span> = 22, <span class="var">N</span> = 23</p>
+        <p>I<sub>raw</sub> ≈ 0.06759 / 0.00995 ≈ 6.79</p>
+        <p>𝓘<sub>cand</sub> = { 6, 7 }</p>
+        <p>E(6) = | 0.06759 / 6 − 0.00995 | ≈ 0.00132</p>
+        <p>E(7) = | 0.06759 / 7 − 0.00995 | ≈ 0.00029</p>
+        <p>→ <span class="var">I</span> = 7, <span class="var">N</span> = 8</p>
       </div>
     </section>
 
@@ -747,7 +755,7 @@
         <span class="formula-label">[식 22]</span>
       </div>
       <div class="formula">
-        <div class="formula-body"><span class="var">Q<sub>i</sub></span> = F<sub>step</sub>( <span class="frac"><span class="num"><span class="var">B</span><sub>slot, <span class="var">i</span></sub></span><span class="den"><span class="var">B<sub>i</sub></span></span></span>, 0.00000001 BTC )</div>
+        <div class="formula-body"><span class="var">Q<sub>i</sub></span> = F<sub>step</sub>( <span class="frac"><span class="num"><span class="var">B</span><sub>slot, <span class="var">i</span></sub></span><span class="den"><span class="var">B<sub>i</sub></span></span></span>, 0.00000001 (기초자산 단위, cfg.SYMBOL) )</div>
         <span class="formula-label">[식 23]</span>
       </div>
       <div class="callout info">
@@ -946,15 +954,17 @@
     <!-- ============ 매도 조건 ============ -->
     <section class="section" id="sell">
       <h2>매도 조건</h2>
-      <p>보유 슬롯의 매도 후보:</p>
+      <p>보유 슬롯의 매도 후보 (최종 매도가 <span class="var">S<sub>i</sub><sup>eff</sup></span>는 <a href="#age-tp">Age TP 압축</a> 참조):</p>
       <div class="formula">
         <div class="formula-body"><span class="var">P</span> ≥ <span class="var">S<sub>i</sub><sup>eff</sup></span></div>
-        <span class="formula-label">[식 47]</span>
       </div>
       <p>TP 주문 생성 최소 금액 조건:</p>
       <div class="formula">
         <div class="formula-body"><span class="var">S<sub>i</sub><sup>eff</sup></span> <span class="var">H<sub>i</sub></span> ≥ <span class="var">A<sub>min</sub></span></div>
-        <span class="formula-label">[식 48]</span>
+      </div>
+      <div class="callout info">
+        <div class="callout-title">📌 식 번호 안내</div>
+        <p>이 두 판정식은 <code>docs/strategy-formulas.md</code>의 연속 번호(식 1~70) 체계에 포함되지 않은 보조 조건이라 별도 식 번호를 부여하지 않는다.</p>
       </div>
     </section>
 
@@ -964,7 +974,7 @@
       <p>보유 시간:</p>
       <div class="formula">
         <div class="formula-body"><span class="var">a</span> = <span class="var">t<sub>nowUtc</sub></span> − <span class="var">t<sub>filledUtc</sub></span></div>
-        <span class="formula-label">[식 49]</span>
+        <span class="formula-label">[식 47]</span>
       </div>
       <p><code>k</code> 압축량:</p>
       <div class="formula">
@@ -976,45 +986,46 @@
             <span class="case-val">0.0</span><span class="case-cond"><span class="var">a</span> &lt; 48 hours</span>
           </span>
         </div>
-        <span class="formula-label">[식 50]</span>
+        <span class="formula-label">[식 48]</span>
       </div>
       <p>유효 <span class="var">k</span>:</p>
       <div class="formula">
         <div class="formula-body"><span class="var">k<sub>eff</sub></span> = max( <span class="var">k<sub>base</sub></span> − <span class="var">d</span>(<span class="var">a</span>), <span class="var">k<sub>floor</sub></span> )</div>
-        <span class="formula-label">[식 51]</span>
+        <span class="formula-label">[식 49]</span>
       </div>
       <p>압축 매도 가격:</p>
       <div class="formula">
         <div class="formula-body"><span class="var">g<sub>base</sub></span> = ln( <span class="var">S<sub>i</sub></span> / <span class="var">B<sub>i</sub></span> )</div>
-        <span class="formula-label">[식 52]</span>
+        <span class="formula-label">[식 50]</span>
       </div>
       <div class="formula">
         <div class="formula-body"><span class="var">g<sub>compressed</sub></span> = <span class="var">g<sub>base</sub></span> · <span class="frac"><span class="num"><span class="var">k<sub>eff</sub></span></span><span class="den"><span class="var">k<sub>base</sub></span></span></span></div>
-        <span class="formula-label">[식 53]</span>
+        <span class="formula-label">[식 51]</span>
       </div>
       <div class="formula">
-        <div class="formula-body"><span style="text-decoration: overline;"><span class="var">S<sub>i</sub></span></span> = F<sub>norm</sub>( <span class="var">B<sub>i</sub></span> · <span class="var">e</span><sup><span class="var">g<sub>compressed</sub></span></sup> )</div>
-        <span class="formula-label">[식 54]</span>
+        <div class="formula-body"><span class="var">S<sub>i</sub></span>′ = F<sub>norm</sub>( <span class="var">B<sub>i</sub></span> · <span class="var">e</span><sup><span class="var">g<sub>compressed</sub></span></sup> )</div>
+        <span class="formula-label">[식 52]</span>
       </div>
       <p>최종 매도 가격:</p>
       <div class="formula">
         <div class="formula-body">
           <span class="var">S<sub>i</sub><sup>eff</sup></span> =
           <span class="cases">
-            <span class="case-val"><span style="text-decoration: overline;"><span class="var">S<sub>i</sub></span></span></span><span class="case-cond"><span class="var">B<sub>i</sub></span> &lt; <span style="text-decoration: overline;"><span class="var">S<sub>i</sub></span></span> &lt; <span class="var">S<sub>i</sub></span></span>
+            <span class="case-val"><span class="var">S<sub>i</sub></span>′</span><span class="case-cond"><span class="var">B<sub>i</sub></span> &lt; <span class="var">S<sub>i</sub></span>′ &lt; <span class="var">S<sub>i</sub></span></span>
             <span class="case-val"><span class="var">S<sub>i</sub></span></span><span class="case-cond">otherwise</span>
           </span>
         </div>
-        <span class="formula-label">[식 55]</span>
+        <span class="formula-label">[식 53]</span>
       </div>
       <div class="callout info">
-        <div class="callout-title">🔢 워크드 예시 · k<sub>base</sub> = 2.0, k<sub>floor</sub> = 1.0, a = 72h</div>
+        <div class="callout-title">🔢 워크드 예시 (가상 수치) · k<sub>base</sub> = 2.0, k<sub>floor</sub> = 1.0, a = 72h</div>
+        <p>※ 아래 가격·배수는 계산 흐름 설명용 가상 수치다. 실제 라이브 운영값은 <code>TP_K_BASE = 3.2</code>, <code>TP_K_FLOOR = 3.0</code>이며 마켓 스케일도 다르다.</p>
         <p>a = 72h → 48h ≤ a &lt; 7d 이므로 <span class="var">d</span>(a) = 0.5</p>
         <p><span class="var">k<sub>eff</sub></span> = max(2.0 − 0.5, 1.0) = 1.5</p>
-        <p>예: <span class="var">B<sub>i</sub></span> = 90,000,000, <span class="var">S<sub>i</sub></span> = 91,800,000</p>
-        <p><span class="var">g<sub>base</sub></span> = ln(91,800,000 / 90,000,000) ≈ 0.01980</p>
+        <p>예: <span class="var">B<sub>i</sub></span> = 1,450, <span class="var">S<sub>i</sub></span> = 1,479</p>
+        <p><span class="var">g<sub>base</sub></span> = ln(1,479 / 1,450) ≈ 0.01980</p>
         <p><span class="var">g<sub>compressed</sub></span> = 0.01980 × (1.5 / 2.0) ≈ 0.01485</p>
-        <p>e<sup>0.01485</sup> ≈ 1.01497 → 압축 매도가 ≈ 91,347,300 (정규화 전)</p>
+        <p>e<sup>0.01485</sup> ≈ 1.01496 → 압축 매도가 ≈ 1,471.7 (정규화 전)</p>
         <p><span class="var">B<sub>i</sub></span> &lt; 압축가 &lt; <span class="var">S<sub>i</sub></span> 이므로 <span class="var">S<sub>i</sub><sup>eff</sup></span> = 압축 매도가</p>
       </div>
       <div class="callout warn">
@@ -1030,17 +1041,17 @@
       <p>상단 이탈:</p>
       <div class="formula">
         <div class="formula-body"><span class="var">o<sub>upper</sub></span> = <span class="big-op">⋀</span><sub><span class="var">j</span>=1</sub><sup><span class="var">M</span></sup> ( <span class="var">C<sub>j</sub></span> &gt; <span class="var">U</span> )</div>
-        <span class="formula-label">[식 56]</span>
+        <span class="formula-label">[식 54]</span>
       </div>
       <p>하단 이탈:</p>
       <div class="formula">
         <div class="formula-body"><span class="var">o<sub>lower</sub></span> = <span class="big-op">⋀</span><sub><span class="var">j</span>=1</sub><sup><span class="var">M</span></sup> ( <span class="var">C<sub>j</sub></span> &lt; <span class="var">L</span> )</div>
-        <span class="formula-label">[식 57]</span>
+        <span class="formula-label">[식 55]</span>
       </div>
       <p>가드 활성:</p>
       <div class="formula">
         <div class="formula-body"><span class="var">b<sub>guard</sub></span> = <span class="var">o<sub>upper</sub></span> ∨ <span class="var">o<sub>lower</sub></span></div>
-        <span class="formula-label">[식 58]</span>
+        <span class="formula-label">[식 56]</span>
       </div>
       <div class="callout danger">
         <div class="callout-title">🚫 가드 활성화 시</div>
@@ -1059,22 +1070,22 @@
       <h4>시장가 예산매수</h4>
       <div class="formula">
         <div class="formula-body"><span class="var">A<sub>required</sub></span> = <span class="var">A<sub>spend</sub></span></div>
-        <span class="formula-label">[식 59]</span>
+        <span class="formula-label">[식 57]</span>
       </div>
       <h4>지정가 BUY</h4>
       <div class="formula">
         <div class="formula-body"><span class="var">A<sub>required</sub></span> = <span class="var">P<sub>order</sub></span> <span class="var">Q<sub>order</sub></span></div>
-        <span class="formula-label">[식 60]</span>
+        <span class="formula-label">[식 58]</span>
       </div>
       <p>수수료와 버퍼를 포함한 필요 금액:</p>
       <div class="formula">
         <div class="formula-body"><span class="var">A<sub>estimated</sub></span> = <span class="var">A<sub>required</sub></span>(1 + <span class="var">f<sub>upbit</sub></span>) + <span class="var">A<sub>buffer</sub></span></div>
-        <span class="formula-label">[식 61]</span>
+        <span class="formula-label">[식 59]</span>
       </div>
       <p>잔고 통과 조건:</p>
       <div class="formula">
         <div class="formula-body"><span class="var">A<sub>available</sub></span> ≥ <span class="var">A<sub>estimated</sub></span> + <span class="var">A<sub>reserve</sub></span></div>
-        <span class="formula-label">[식 62]</span>
+        <span class="formula-label">[식 60]</span>
       </div>
       <div class="callout info">
         <div class="callout-title">📌 사이클 내 누적 차감</div>
@@ -1095,16 +1106,16 @@
       <p><code>scripts/adjust_budget_live.py --target-budget X</code>는 기존 ladder와 보유 수량을 유지하고 <span class="var">Q<sub>i</sub></span>만 다시 계산한다.</p>
       <div class="formula">
         <div class="formula-body"><span class="var">B<sub>total</sub></span> ← <span class="var">X</span></div>
-        <span class="formula-label">[식 63]</span>
+        <span class="formula-label">[식 61]</span>
       </div>
       <p>슬롯별 예산 재배분:</p>
       <div class="formula">
         <div class="formula-body"><span class="var">B</span><sub>slot, <span class="var">i</span></sub> = <span class="var">B<sub>total</sub></span> · <span class="frac"><span class="num"><span class="var">w<sub>i</sub></span></span><span class="den"><span class="var">W</span></span></span></div>
-        <span class="formula-label">[식 64]</span>
+        <span class="formula-label">[식 62]</span>
       </div>
       <div class="formula">
-        <div class="formula-body"><span class="var">Q<sub>i</sub><sup>new</sup></span> = F<sub>step</sub>( <span class="frac"><span class="num"><span class="var">B</span><sub>slot, <span class="var">i</span></sub></span><span class="den"><span class="var">B<sub>i</sub></span></span></span>, 0.00000001 BTC )</div>
-        <span class="formula-label">[식 65]</span>
+        <div class="formula-body"><span class="var">Q<sub>i</sub><sup>new</sup></span> = F<sub>step</sub>( <span class="frac"><span class="num"><span class="var">B</span><sub>slot, <span class="var">i</span></sub></span><span class="den"><span class="var">B<sub>i</sub></span></span></span>, 0.00000001 (기초자산 단위, cfg.SYMBOL) )</div>
+        <span class="formula-label">[식 63]</span>
       </div>
       <div class="callout ok">
         <div class="callout-title">✅ 유지되는 값</div>
@@ -1112,8 +1123,88 @@
       </div>
     </section>
 
+    <!-- ============ 손절(Stop Loss) 판정 수식 ============ -->
+    <section class="section" id="stop-loss">
+      <h2>손절(Stop Loss) 판정 수식</h2>
+      <p>그리드 하한(<span class="var">L</span>) 아래로 시세가 추가 이탈할 때 단계별로 청산하는 자동 손절 서브시스템이다. 구현은 <code>app/strategy/stop_loss.py</code>, 파라미터 검증은 <code>app/core/grid_properties.py</code>의 <code>validate_stop_loss_config()</code>, 운영값은 <code>grid.properties</code>를 기준으로 한다. 여기서 <span class="var">L</span> = <code>MIN_BUY_PRICE</code>(최하단 슬롯 매수가), <span class="var">U</span> = <code>MAX_BUY_PRICE</code>(최상단 슬롯 매수가)다.</p>
+
+      <h3>손절 임계가 산출</h3>
+      <p>손절 모드는 <code>STOP_LOSS_MODE</code>로 선택하며 <code>band_multiple</code>(기본/권장), <code>fixed_pct</code>, <code>off</code> 세 가지다.</p>
+      <p><strong><code>band_multiple</code> 모드</strong> — 밴드 폭(하락률)에 배수 <span class="var">k<sub>band</sub></span>(<code>STOP_LOSS_BAND_MULTIPLE</code>)를 곱한 <strong>단일 임계가</strong>를 사용한다. 레벨에 무관하게 동일한 값이다.</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">T<sub>band</sub></span> = <span class="var">L</span> · ( 1 − <span class="var">k<sub>band</sub></span> ( 1 − <span class="frac"><span class="num"><span class="var">L</span></span><span class="den"><span class="var">U</span></span></span> ) )</div>
+        <span class="formula-label">[식 64]</span>
+      </div>
+      <p><strong><code>fixed_pct</code> 모드</strong> — 레벨별 하락 백분율 <span class="var">p<sub>Ln</sub></span>(<code>STOP_LOSS_Ln_PCT</code>)에 따라 레벨별 임계가를 산출한다.</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">T<sub>Ln</sub></span> = <span class="var">L</span> · ( 1 − <span class="frac"><span class="num"><span class="var">p<sub>Ln</sub></span></span><span class="den">100</span></span> ),&nbsp;&nbsp; <span class="var">n</span> ∈ { 0, 1, 2 }</div>
+        <span class="formula-label">[식 65]</span>
+      </div>
+
+      <h3>레벨 분기</h3>
+      <p>현재가 <span class="var">P</span>가 <span class="var">T<sub>L0</sub></span> 이상이면 미발동이다. 그 아래로 떨어지면 임계가 비교로 레벨을 분기한다.</p>
+      <div class="formula">
+        <div class="formula-body">
+          <span class="var">level</span> =
+          <span class="cases">
+            <span class="case-val">미발동</span><span class="case-cond"><span class="var">P</span> ≥ <span class="var">T<sub>L0</sub></span></span>
+            <span class="case-val">2</span><span class="case-cond"><span class="var">P</span> &lt; <span class="var">T<sub>L2</sub></span></span>
+            <span class="case-val">1</span><span class="case-cond"><span class="var">T<sub>L2</sub></span> ≤ <span class="var">P</span> &lt; <span class="var">T<sub>L1</sub></span></span>
+            <span class="case-val">0</span><span class="case-cond"><span class="var">T<sub>L1</sub></span> ≤ <span class="var">P</span> &lt; <span class="var">T<sub>L0</sub></span></span>
+          </span>
+        </div>
+        <span class="formula-label">[식 66]</span>
+      </div>
+      <div class="callout warn">
+        <div class="callout-title">⚠ <code>band_multiple</code> 모드의 L2 직행</div>
+        <p>식 64의 <span class="var">T<sub>band</sub></span>는 레벨과 무관한 단일값이므로 <span class="var">T<sub>L0</sub></span> = <span class="var">T<sub>L1</sub></span> = <span class="var">T<sub>L2</sub></span> = <span class="var">T<sub>band</sub></span>로 수렴한다. 따라서 시세가 단일 밴드 임계가 아래로 이탈하는 순간, 식 66에서 <span class="var">P</span> &lt; <span class="var">T<sub>L2</sub></span> 분기가 먼저 성립해 <strong>곧바로 L2(전량 시장가 청산)로 직행</strong>한다 (L0/L1 중간 단계 없음).</p>
+      </div>
+
+      <h3>연속 종가 컨펌</h3>
+      <p>레벨이 분기되어도 즉시 청산하지 않고, <code>STOP_LOSS_CANDLE_UNIT</code>(분) 단위 캔들의 <strong>연속 종가가 임계가 아래에서 마감</strong>되는지로 컨펌한다. 레벨별 필요 연속 종가 수는 <span class="var">n<sub>Ln</sub></span>(<code>STOP_LOSS_Ln_CONSECUTIVE_CLOSES</code>)다.</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">c<sub>arm</sub></span> = <span class="big-op">⋀</span><sub><span class="var">j</span>=1</sub><sup><span class="var">n<sub>Ln</sub></span></sup> ( <span class="var">C<sub>j</sub></span> &lt; <span class="var">T<sub>Ln</sub></span> )</div>
+        <span class="formula-label">[식 67]</span>
+      </div>
+      <ul>
+        <li><code>STOP_LOSS_L0_CONSECUTIVE_CLOSES</code> = 4 (검증: ≥ 2)</li>
+        <li><code>STOP_LOSS_L1_CONSECUTIVE_CLOSES</code> = 4 (검증: ≥ 2)</li>
+        <li><code>STOP_LOSS_L2_CONSECUTIVE_CLOSES</code> = 2 (검증: ≥ 1)</li>
+      </ul>
+      <p><span class="var">c<sub>arm</sub></span> = true일 때 해당 레벨이 ARM(무장)되며, <code>armed_at</code>(최초 무장 시각)이 기록·유지된다.</p>
+
+      <h3>arm-hold 시간 윈도우</h3>
+      <p>ARM 이후 실제 청산 실행까지의 시간 컨펌 윈도우 <span class="var">W<sub>Ln</sub></span>(<code>STOP_LOSS_Ln_ARM_HOLD_SECONDS</code>)다. 최초 무장 시각(<code>armed_at</code>)을 기준으로 한 시간 컨펌용 파라미터로, <code>validate_stop_loss_config()</code>에서 양수로 강제된다.</p>
+      <div class="formula">
+        <div class="formula-body"><span class="var">W<sub>L1</sub></span> = 3600 s,&nbsp;&nbsp; <span class="var">W<sub>L2</sub></span> = 1800 s</div>
+        <span class="formula-label">[식 68]</span>
+      </div>
+
+      <h3>레벨별 청산 동작</h3>
+      <ul>
+        <li><strong>L0</strong>: 신규 매수만 차단(no-op). 보유 재고는 청산하지 않는다.</li>
+        <li><strong>L1</strong>: 보유 슬롯을 임계가(<span class="var">T<sub>L1</sub></span>) 기준 <strong>지정가 부분 청산</strong>한다. 청산 비율 <span class="var">r<sub>L1</sub></span> = <code>STOP_LOSS_L1_LIQUIDATE_RATIO</code> = 0.5.</li>
+      </ul>
+      <div class="formula">
+        <div class="formula-body"><span class="var">q<sub>sell, i</sub></span> = <span class="var">H<sub>i</sub></span> · <span class="var">r<sub>L1</sub></span>,&nbsp;&nbsp; <span class="var">r<sub>L1</sub></span> = 0.5</div>
+        <span class="formula-label">[식 69]</span>
+      </div>
+      <ul>
+        <li><strong>L2</strong>: 보유 슬롯 <strong>전량 시장가 청산</strong>(<span class="var">r<sub>L2</sub></span> = 1). 청산 후 재시작 잠금 시간 <span class="var">τ<sub>lock</sub></span>(<code>STOP_LOSS_RESTART_LOCKOUT_HOURS</code>) 동안 봇 재가동이 잠긴다.</li>
+      </ul>
+      <div class="formula">
+        <div class="formula-body"><span class="var">τ<sub>lock</sub></span> = 24 hours</div>
+        <span class="formula-label">[식 70]</span>
+      </div>
+
+      <div class="callout danger">
+        <div class="callout-title">🚫 라이브 운영값</div>
+        <p>라이브 운영값은 <code>band_multiple</code> 모드 + <code>STOP_LOSS_BAND_MULTIPLE = 1.55</code>다 (코드 기본값은 <code>app/config/settings.py</code>의 <code>1.5</code>). <code>band_multiple</code>은 <code>validate_stop_loss_config()</code>에서 1.0~2.0 범위로 강제되며, 식 64의 <span class="var">T<sub>band</sub></span>가 0.5<span class="var">L</span> &lt; <span class="var">T<sub>band</sub></span> &lt; 0.9<span class="var">L</span> 구간에 들어야 정상 운영 구간 침범/하한 50% 초과 검증을 통과한다.</p>
+      </div>
+    </section>
+
     <footer>
-      이 문서는 <code>docs/strategy-formulas.md</code> 를 기반으로 자동 생성된 전략 수식 대시보드입니다 · 최종 갱신 2026-05-18
+      이 문서는 <code>docs/strategy-formulas.md</code> 를 기반으로 자동 생성된 전략 수식 대시보드입니다 · 최종 갱신 2026-05-31
     </footer>
   </main>
 </div>

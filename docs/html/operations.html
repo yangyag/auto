@@ -398,6 +398,7 @@
         <li><a href="#python">Python 환경</a></li>
         <li class="indent"><a href="#python-ec2">└ EC2</a></li>
         <li class="indent"><a href="#python-local">└ 로컬</a></li>
+        <li><a href="#mobile-api">모바일 API / 명령 워커</a></li>
         <li><a href="#ops-check">운영 점검 기준</a></li>
         <li><a href="#orders">주문 용어</a></li>
         <li><a href="#budget">예산 조정 주의</a></li>
@@ -512,6 +513,10 @@
           <tr><td><code>.env_sample</code></td><td>로컬 <code>.env</code> 작성 기준</td></tr>
           <tr><td><code>run.sh</code></td><td>백그라운드 실행</td></tr>
           <tr><td><code>stop.sh</code></td><td>백그라운드 종료</td></tr>
+          <tr><td><code>run-api.sh</code></td><td>모바일 FastAPI 서버 백그라운드 구동 (포트 8086)</td></tr>
+          <tr><td><code>stop-api.sh</code></td><td>가동 중인 FastAPI 서버 정상 종료</td></tr>
+          <tr><td><code>run-command-worker.sh</code></td><td>모바일 명령 워커 백그라운드 구동</td></tr>
+          <tr><td><code>stop-command-worker.sh</code></td><td>가동 중인 명령 워커 정상 종료</td></tr>
           <tr><td><code>tail-latest-log.sh</code></td><td>최신 날짜 로그 추적</td></tr>
           <tr><td><code>logs/trading-YYYY-MM-DD.log</code></td><td>운영 로그</td></tr>
         </tbody>
@@ -583,7 +588,7 @@ ps -eo pid,args | grep '[p]ython /home/ubuntu/auto/main.py' \
       </div>
       <ul>
         <li>배포 스크립트나 원격 명령처럼 activate 없이 실행할 때는 <code>.venv/bin/python</code> 절대 경로를 직접 호출한다.</li>
-        <li><code>run.sh</code> 도 <code>PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh</code> 형태로 넘긴다.</li>
+        <li><code>run.sh</code> 의 기본 <code>PYTHON_BIN</code> 은 <code>python3</code> 이므로, venv 파이썬으로 구동하려면 <code>PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh</code> 형태로 주입한다. (<code>run-api.sh</code>, <code>run-command-worker.sh</code> 도 기본값이 동일하므로 같은 방식으로 주입한다.)</li>
         <li><code>requirements.txt</code> 변경 시에도 <code>.venv</code> 를 재생성하지 말고 기존 venv 에 설치만 추가한다.</li>
       </ul>
       <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
@@ -609,6 +614,71 @@ ps -eo pid,args | grep '[p]ython /home/ubuntu/auto/main.py' \
 <pre><code>.venv/bin/python -m pip install -r requirements.txt
 .venv/bin/python -c "import main"
 .venv/bin/python -m unittest discover -s tests -v</code></pre>
+      </div>
+    </section>
+
+    <!-- 모바일 API / 명령 워커 -->
+    <section class="section" id="mobile-api">
+      <h2>모바일 API 서버 / 명령 워커 운영</h2>
+      <p>봇 본체(<code>main.py</code>)와 별개로, 모바일 앱 연동을 위한 <strong>FastAPI 서버</strong>와 <strong>명령 워커</strong> 프로세스를 운영한다. 상세 엔드포인트 명세는 <code>mobile-api.html</code> 을 참조한다.</p>
+
+      <h3>FastAPI 서버 (run-api.sh / stop-api.sh)</h3>
+      <ul>
+        <li><strong>구동:</strong> <code>run-api.sh</code> — <code>uvicorn app.api.main:app</code> 을 백그라운드로 기동한다.
+          <ul>
+            <li>PID 파일: <code>.auto-api.pid</code></li>
+            <li>기본 바인딩: HOST <code>0.0.0.0</code> / PORT <code>8086</code> (환경변수 <code>MOBILE_API_HOST</code> / <code>MOBILE_API_PORT</code> 로 변경 가능)</li>
+            <li>로그: <code>logs/api.log</code></li>
+            <li>본체와 동일하게 기본 <code>PYTHON_BIN</code> 은 <code>python3</code> 이므로 venv 로 구동하려면 <code>PYTHON_BIN=.venv/bin/python ./run-api.sh</code> 로 주입한다.</li>
+          </ul>
+        </li>
+        <li><strong>종료:</strong> <code>stop-api.sh</code> — <code>.auto-api.pid</code> 를 읽어 정상 종료(필요 시 강제 종료)한다.</li>
+      </ul>
+
+      <h3>명령 워커 (run-command-worker.sh / stop-command-worker.sh)</h3>
+      <ul>
+        <li><strong>구동:</strong> <code>run-command-worker.sh</code> — <code>python -m app.api.command_worker</code> 를 백그라운드로 기동한다.
+          <ul>
+            <li>PID 파일: <code>.auto-command-worker.pid</code></li>
+            <li>로그: <code>logs/command-worker.log</code></li>
+            <li>venv 구동 시 <code>PYTHON_BIN=.venv/bin/python ./run-command-worker.sh</code> 로 주입한다.</li>
+          </ul>
+        </li>
+        <li><strong>종료:</strong> <code>stop-command-worker.sh</code> — <code>.auto-command-worker.pid</code> 를 읽어 정상 종료(필요 시 강제 종료)한다.</li>
+      </ul>
+
+      <h3>systemd user 유닛 운영</h3>
+      <p>배포 저장소에 두 개의 systemd <strong>user 유닛</strong>이 포함되어 있다. 셸 스크립트 대신 systemd 로 상시 운영하면 부팅/재시작 자동 복구(<code>Restart=on-failure</code>)가 적용된다.</p>
+      <ul>
+        <li><code>deploy/systemd/user/auto-api.service</code> — FastAPI 서버
+          <ul><li><code>ExecStart=%h/auto/.venv/bin/python -m uvicorn app.api.main:app --host 0.0.0.0 --port 8086</code></li></ul>
+        </li>
+        <li><code>deploy/systemd/user/auto-command-worker.service</code> — 명령 워커
+          <ul><li><code>ExecStart=%h/auto/.venv/bin/python -m app.api.command_worker</code></li></ul>
+        </li>
+      </ul>
+      <p><code>systemctl --user</code> 는 <code>~/.config/systemd/user/</code> 만 읽으므로, 저장소의 유닛 파일을 해당 경로로 복사(또는 심볼릭 링크)한 뒤 활성화한다:</p>
+      <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code># 1. user 유닛 디렉터리에 배치
+mkdir -p ~/.config/systemd/user
+cp /home/ubuntu/auto/deploy/systemd/user/auto-api.service ~/.config/systemd/user/
+cp /home/ubuntu/auto/deploy/systemd/user/auto-command-worker.service ~/.config/systemd/user/
+
+# 2. 유닛 재로딩 및 활성화/시작
+systemctl --user daemon-reload
+systemctl --user enable --now auto-api.service
+systemctl --user enable --now auto-command-worker.service
+
+# 3. 상태 확인
+systemctl --user status auto-api.service
+systemctl --user status auto-command-worker.service
+
+# 4. 로그아웃 후에도 user 서비스가 유지되도록 linger 활성화
+loginctl enable-linger "$(whoami)"</code></pre>
+      </div>
+      <div class="callout info">
+        <div class="callout-title">📌 동시 구동 주의</div>
+        <p>동일 프로세스를 셸 스크립트(<code>run-api.sh</code> 등)와 systemd 유닛으로 <strong>동시에 띄우면 포트(8086) 충돌</strong>이 발생할 수 있다. 한 가지 방식을 선택해 운영한다.</p>
       </div>
     </section>
 
@@ -665,7 +735,7 @@ ps -eo pid,args | grep '[p]ython /home/ubuntu/auto/main.py' \
     <!-- ============ STOP LOSS ============ -->
     <section class="section" id="stoploss">
       <h2>손절(Stop-Loss) 운영 가이드</h2>
-      <p>손절 기능은 현재가가 그리드 최하단 아래로 내려갔을 때 단계별 자동 대응을 제공한다. 설정된 임계값에 도달하고 컨펌 조건이 만족되면 자동으로 포지션을 청산한다. 자세한 설계와 이론은 <a href="stop-loss-design.md">docs/stop-loss-design.md</a> 를 참조한다.</p>
+      <p>손절 기능은 현재가가 그리드 최하단 아래로 내려갔을 때 단계별 자동 대응을 제공한다. 설정된 임계값에 도달하고 컨펌 조건이 만족되면 자동으로 포지션을 청산한다. 자세한 설계와 이론은 <a href="strategy-formulas.html">strategy-formulas.html</a> 의 관련 섹션을 참조한다.</p>
 
       <h3>손절 모드 활성화</h3>
       <p><code>grid.properties</code> 또는 환경변수로 제어된다. 기본값은 <code>band_multiple</code> 모드:</p>
@@ -681,9 +751,22 @@ STOP_LOSS_L0_PCT=10
 STOP_LOSS_L1_PCT=20
 STOP_LOSS_L2_PCT=30</code></pre>
       </div>
+      <div class="callout info">
+        <div class="callout-title">📌 라이브 값 참고</div>
+        <p>위 <code>STOP_LOSS_BAND_MULTIPLE=1.5</code> 는 <strong>코드 기본값</strong>이다. 현재 라이브 <code>grid.properties</code> 는 <code>STOP_LOSS_BAND_MULTIPLE=1.55</code> 로 운용 중이다.</p>
+      </div>
 
       <!-- L0/L1/L2 visual cards -->
       <h3 id="sl-levels">L0 / L1 / L2 트리거 시 봇 거동</h3>
+      <div class="callout warn">
+        <div class="callout-title">⚠ 모드별 거동 차이</div>
+        <p>아래 L0 → L1 → L2 3단계 점진 구조는 <strong>모드에 따라 다르게 동작</strong>한다.</p>
+        <ul style="margin: 0.3rem 0;">
+          <li><strong><code>band_multiple</code> (기본·권장) 모드:</strong> L0/L1/L2 임계값이 모두 <strong>동일한 단일 밴드 값</strong>으로 산출된다(임계값 = <code>min × (1 − k × band_ratio)</code>, level 인자 미사용). 따라서 아래 <strong>L0(신규 매수 차단)·L1(50% 부분청산) 완충 단계가 발동하지 않고</strong>, 시세가 밴드를 하회하면 완충 단계를 건너뛰고 곧바로 <strong>L2(전량 시장가 청산) 단계로 직행</strong>한다(연속 종가 컨펌은 L2 기준 2회, 대기 시간 30분이 그대로 적용됨).</li>
+          <li><strong><code>fixed_pct</code> 모드:</strong> L0/L1/L2 가 각각 −10% / −20% / −30% 의 <strong>별개 가격대</strong>로 동작하여, 아래 3단계 점진 구조가 그대로 성립한다.</li>
+          <li>아래 LEVEL 0~2 카드 설명은 단계가 모두 구분되는 <strong><code>fixed_pct</code> 모드 기준</strong> 서술이다.</li>
+        </ul>
+      </div>
       <div class="sl-grid">
         <div class="sl-card sl-l0">
           <div class="sl-label">LEVEL 0 · 경계</div>
@@ -699,7 +782,7 @@ STOP_LOSS_L2_PCT=30</code></pre>
           <div class="sl-name">L1</div>
           <div class="sl-thresh">현재가 &lt; L1 임계값 (기본 −20%)</div>
           <div class="sl-body">
-            컨펌 후 <strong>1시간 대기</strong>하여 보유 BTC <strong>50%</strong>를 threshold 가격 지정가 매도. 매수 영구 차단.<br>
+            컨펌 후 <strong>1시간 대기</strong>하여 보유 기초자산(<code>cfg.SYMBOL</code>)의 <strong>50%</strong>를 threshold 가격 지정가 매도. 매수 영구 차단.<br>
             <strong>재개:</strong> <code>reset-stop-loss</code> CLI. lockout 미경과면 exit 2.
           </div>
         </div>
@@ -799,8 +882,8 @@ PYTHON_BIN=/home/ubuntu/auto/.venv/bin/python ./run.sh
         <li><strong>형식:</strong> <code>[STOP_LOSS] L{n} armed at ...</code> / <code>[STOP_LOSS] L{n} triggered</code></li>
       </ul>
       <div class="code-wrap"><div class="code-head"><span class="code-lang">log</span><button class="copy-btn">Copy</button></div>
-<pre><code>2026-05-06 10:30:45,123 [main] ERROR [STOP_LOSS] L1 armed at 2026-05-06T10:30:45+00:00 (threshold=87300000)
-2026-05-06 11:30:46,456 [main] ERROR [STOP_LOSS] L1 triggered: 50% liquidate (sold 0.0005 BTC)</code></pre>
+<pre><code>2026-05-06 10:30:45,123 [main] ERROR [STOP_LOSS] L1 armed at 2026-05-06T10:30:45+00:00 (threshold=1285)
+2026-05-06 11:30:46,456 [main] ERROR [STOP_LOSS] L1 triggered: 50% liquidate (sold 3500 USDT)</code></pre>
       </div>
 
       <h3 id="sl-notify">외부 알림 (Slack / Webhook)</h3>
@@ -852,7 +935,7 @@ STOP_LOSS_NOTIFICATION_ENABLED=True</code></pre>
     </section>
 
     <footer>
-      이 문서는 <code>docs/operations.md</code> 를 기반으로 자동 생성된 운영 대시보드입니다 · 최종 갱신 2026-05-18
+      이 문서는 <code>docs/operations.md</code> 를 기반으로 자동 생성된 운영 대시보드입니다 · 최종 갱신 2026-05-31
     </footer>
   </main>
 </div>

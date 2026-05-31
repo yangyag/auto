@@ -474,7 +474,7 @@
     <input type="text" id="search" class="search-box" placeholder="섹션 / 엔드포인트 검색…">
     <nav class="toc" id="toc">
       <ul>
-        <li class="group"><a href="#개요">개요</a></li>
+        <li class="group"><a href="#purpose">개요</a></li>
         <li class="indent"><a href="#purpose">문서 목적</a></li>
         <li class="indent"><a href="#official-docs">공식 문서 진입점</a></li>
         <li class="indent"><a href="#repo-scope">이 저장소 기준 범위</a></li>
@@ -513,7 +513,7 @@
         <li class="indent"><a href="#ep-orders-cancel-all">DELETE /v1/orders</a></li>
         <li class="indent"><a href="#ep-cancel-and-new">POST /v1/orders/cancel_and_new</a></li>
 
-        <li class="group"><a href="#운영">운영</a></li>
+        <li class="group"><a href="#rate-limits">운영</a></li>
         <li class="indent"><a href="#rate-limits">요청 수 제한</a></li>
         <li class="indent"><a href="#krw-market">KRW 마켓 운영 메모</a></li>
         <li class="indent"><a href="#checklist">구현 체크리스트</a></li>
@@ -535,7 +535,7 @@
         <span class="chip">📅 공식 문서 확인일 2026-05-04</span>
         <span class="chip">📦 API v1.6.2 계열</span>
         <span class="chip">🌐 REST · WebSocket</span>
-        <span class="chip">🏛 거래소 업비트 (KRW-BTC)</span>
+        <span class="chip">🏛 거래소 업비트 · cfg.SYMBOL (라이브 KRW-USDT)</span>
       </div>
     </div>
 
@@ -768,10 +768,25 @@
           <tr><td>개별 주문 취소</td><td><span class="method-badge delete">DELETE</span></td><td><code>/v1/order</code></td><td>필요</td><td><code>uuid</code> 또는 <code>identifier</code> 중 하나</td></tr>
           <tr><td>체결 대기 주문 조회</td><td><span class="method-badge get">GET</span></td><td><code>/v1/orders/open</code></td><td>필요</td><td>미체결 주문 목록</td></tr>
           <tr><td>종료 주문 목록 조회</td><td><span class="method-badge get">GET</span></td><td><code>/v1/orders/closed</code></td><td>필요</td><td>체결/취소 완료 주문 목록</td></tr>
-          <tr><td>ID로 주문 목록 조회</td><td><span class="method-badge get">GET</span></td><td><code>/v1/orders/uuids</code></td><td>필요</td><td>uuid 또는 identifier 배열</td></tr>
-          <tr><td>ID로 주문 목록 취소</td><td><span class="method-badge delete">DELETE</span></td><td><code>/v1/orders/uuids</code></td><td>필요</td><td>uuid 또는 identifier 배열</td></tr>
-          <tr><td>주문 일괄 취소</td><td><span class="method-badge delete">DELETE</span></td><td><code>/v1/orders</code></td><td>필요</td><td>전체 미체결 주문 취소</td></tr>
-          <tr><td>취소 후 재주문</td><td><span class="method-badge post">POST</span></td><td><code>/v1/orders/cancel_and_new</code></td><td>필요</td><td>취소와 신규 주문 원자 실행</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout info">
+        <div class="callout-title">📌 리셋 스크립트의 취소 방식</div>
+        <p>리셋 스크립트(<code>scripts/reset_live.py</code>)는 일괄 취소 API(<code>DELETE /v1/orders</code>)를 쓰지 않는다. 미체결 주문을 <code>app/exchange/crypto.py::cancel_order</code>를 통해 <strong>단건(<code>DELETE /v1/order</code>)으로 순회 취소</strong>한다.</p>
+      </div>
+
+      <h3>참고용 (업비트 제공, 현재 봇 미사용)</h3>
+      <p>아래 엔드포인트는 업비트가 제공하지만 본 저장소 코드 어디에서도 호출하지 않는다. 향후 확장 시 참고용으로만 정리한다.</p>
+      <table>
+        <thead>
+          <tr><th>기능</th><th>Method</th><th>Path</th><th>인증</th><th>비고</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>선택 주문 조회</td><td><span class="method-badge get">GET</span></td><td><code>/v1/orders/uuids</code></td><td>필요</td><td>ID 배열을 전달해 다수 주문 일괄 상태 조회 (봇 미사용)</td></tr>
+          <tr><td>선택 주문 취소</td><td><span class="method-badge delete">DELETE</span></td><td><code>/v1/orders/uuids</code></td><td>필요</td><td>ID 배열을 전달해 다수 주문 일괄 취소 (봇 미사용)</td></tr>
+          <tr><td>주문 일괄 취소</td><td><span class="method-badge delete">DELETE</span></td><td><code>/v1/orders</code></td><td>필요</td><td>미체결 주문 전체 취소 (봇 미사용; 리셋은 단건 <code>DELETE /v1/order</code> 순회)</td></tr>
+          <tr><td>취소 후 재주문</td><td><span class="method-badge post">POST</span></td><td><code>/v1/orders/cancel_and_new</code></td><td>필요</td><td>기존 주문 취소와 동시에 신규 지정가 교체 발주 (봇 미사용)</td></tr>
         </tbody>
       </table>
     </section>
@@ -1040,7 +1055,7 @@
               <td><code>limit</code> 지정가 / <code>price</code> 시장가 매수(KRW) / <code>market</code> 시장가 매도(수량) / <code>best</code> 최유리 지정가 (2024-04-22 추가)</td>
             </tr>
             <tr><td><code>volume</code></td><td>string</td><td>조건부</td><td>주문 수량 (시장가 매수 제외 시 필수)</td><td><code>0.01</code></td></tr>
-            <tr><td><code>price</code></td><td>string</td><td>조건부</td><td>주문 단가 또는 KRW 총액 (시장가 매도 제외 시 필수)</td><td><code>100000000</code></td></tr>
+            <tr><td><code>price</code></td><td>string</td><td>조건부</td><td>주문 단가 또는 KRW 총액 (시장가 매도 제외 시 필수)</td><td><code>1450</code></td></tr>
             <tr>
               <td><code>time_in_force</code></td><td>string</td><td>선택</td>
               <td>주문 유효 옵션</td>
@@ -1104,7 +1119,7 @@
         <h4>자산 잠금</h4>
         <ul>
           <li>매수 주문 생성 시 호가 자산(KRW)이 잠긴다.</li>
-          <li>매도 주문 생성 시 기준 자산(BTC)이 잠긴다.</li>
+          <li>매도 주문 생성 시 기준 자산(cfg.SYMBOL 마켓의 코인, 라이브 KRW-USDT에서는 USDT)이 잠긴다.</li>
           <li>잠금은 전량 체결, 취소, 또는 <code>time_in_force</code> 조건에 의한 만료 전까지 유지될 수 있다.</li>
         </ul>
 
@@ -1316,6 +1331,7 @@
             <span class="tag auth-required">🔐 인증 필요</span>
             <span class="tag scope">권한: 주문조회</span>
             <span class="tag">Rate: default (30/s)</span>
+            <span class="tag">봇 미사용</span>
           </div>
         </div>
         <div class="endpoint-summary">ID로 주문 목록을 조회한다. uuid 또는 identifier 배열 입력.</div>
@@ -1333,6 +1349,7 @@
             <span class="tag auth-required">🔐 인증 필요</span>
             <span class="tag scope">권한: 주문하기</span>
             <span class="tag">Rate: order (8/s)</span>
+            <span class="tag">봇 미사용</span>
           </div>
         </div>
         <div class="endpoint-summary">ID로 주문 목록을 취소한다. uuid 또는 identifier 배열 입력.</div>
@@ -1349,9 +1366,10 @@
             <span class="tag auth-required">🔐 인증 필요</span>
             <span class="tag scope">권한: 주문하기</span>
             <span class="tag">Rate: order-cancel-all (1/2s)</span>
+            <span class="tag">봇 미사용</span>
           </div>
         </div>
-        <div class="endpoint-summary">전체 미체결 주문을 일괄 취소한다.</div>
+        <div class="endpoint-summary">전체 미체결 주문을 일괄 취소한다. 봇은 사용하지 않으며, 리셋은 단건 <code>DELETE /v1/order</code> 순회로 처리한다.</div>
         <div class="callout danger">
           <div class="callout-title">⚠ 호출 빈도 제한</div>
           <p>일괄 취소는 <strong>2초당 1회</strong>로 가장 엄격한 Rate Limit 그룹에 속한다. 반복 호출 시 즉시 <code>429</code> 발생 위험이 있다.</p>
@@ -1366,6 +1384,7 @@
             <span class="tag auth-required">🔐 인증 필요</span>
             <span class="tag scope">권한: 주문하기</span>
             <span class="tag">Rate: order (8/s)</span>
+            <span class="tag">봇 미사용</span>
           </div>
         </div>
         <div class="endpoint-summary">기존 주문 취소와 신규 주문 생성을 원자적으로 실행한다. 취소가 완료돼야 신규 주문이 생성된다.</div>
@@ -1467,7 +1486,7 @@
           <tr><td>0.00001 미만</td><td>0.00000001</td></tr>
         </tbody>
       </table>
-      <p>BTC 현재가가 1억원 수준이면 <strong>1,000원 단위</strong>가 적용된다. 그리드 전략에서 <code>buy_price</code>, <code>sell_price</code>를 생성할 때 반드시 이 단위로 절사/반올림해야 한다.</p>
+      <p>호가 간격은 마켓 종류와 무관하게 <strong>가격대로만 결정</strong>된다. 가격대가 100만 원 이상이면 <strong>1,000원 단위</strong>로 고정되고, 현재 마켓인 KRW-USDT처럼 시세가 1,000~5,000원 구간에 있으면 <strong>1원 단위</strong>가 적용된다. 그리드 전략에서 <code>buy_price</code>, <code>sell_price</code>를 생성할 때 반드시 해당 가격대 단위로 절사/반올림해야 한다.</p>
 
       <h3>기타 운영 주의</h3>
       <ul>
@@ -1525,7 +1544,7 @@
     </section>
 
     <footer>
-      이 문서는 <code>docs/UPBIT_API_REFERENCE.md</code> 를 기반으로 자동 생성된 API 레퍼런스 대시보드입니다 · 공식 문서 확인일 2026-05-04 · 최종 갱신 2026-05-18
+      이 문서는 <code>docs/UPBIT_API_REFERENCE.md</code> 를 기반으로 자동 생성된 API 레퍼런스 대시보드입니다 · 공식 문서 확인일 2026-05-04 · 최종 갱신 2026-05-31
     </footer>
   </main>
 </div>
