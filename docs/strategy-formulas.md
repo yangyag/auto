@@ -1,21 +1,22 @@
 # Strategy Formulas
 
-[auto](file:///C:/dev/mobileAuto/auto) 자동매매 봇의 전략 동작에 사용되는 수식과 판정 조건을 실제 파이썬 코드 구현을 기준으로 정리한 기술 문서입니다.
+[auto](..) 자동매매 봇의 전략 동작에 사용되는 수식과 판정 조건을 실제 파이썬 코드 구현을 기준으로 정리한 기술 문서입니다.
 
 ---
 
 ## 📌 전략 인프라 요약
 
 ### 📐 핵심 전략 모듈
-- **전략 평가 엔진**: [grid_strategy.py](file:///C:/dev/mobileAuto/auto/app/strategy/grid_strategy.py)
-- **그리드 구조 연산**: [grid.py](file:///C:/dev/mobileAuto/auto/app/core/grid.py)
-- **그리드 속성 파싱**: [grid_properties.py](file:///C:/dev/mobileAuto/auto/app/core/grid_properties.py)
-- **이탈 가드 (Breakout Guard)**: [breakout_guard.py](file:///C:/dev/mobileAuto/auto/app/strategy/breakout_guard.py)
-- **전체 제어 진입점**: [main.py](file:///C:/dev/mobileAuto/auto/app/main.py)
+- **전략 평가 엔진**: [grid_strategy.py](../app/strategy/grid_strategy.py)
+- **그리드 구조 연산**: [grid.py](../app/core/grid.py)
+- **그리드 속성 파싱**: [grid_properties.py](../app/core/grid_properties.py)
+- **이탈 가드 (Breakout Guard)**: [breakout_guard.py](../app/strategy/breakout_guard.py)
+- **전체 제어 진입점**: [main.py](../app/main.py)
 
 ### ⚖ 수량 및 가격 단위 규칙
 - **가격 (Price)**: KRW 기준 (정수, 업비트 호가 단위 정규화 반영)
-- **수량 (Quantity)**: BTC 단위 (최소 소수점 8자리, Step `0.00000001` 지정)
+- **수량 (Quantity)**: 기초자산(base asset) 단위 — `cfg.SYMBOL` 기준 (예: `KRW-USDT`이면 USDT). 최소 소수점 8자리, Step `0.00000001` 지정
+  - Step `0.00000001`은 마켓에 무관한 공통 수량 step이다 ([decimal_utils.py](../app/utils/decimal_utils.py)의 `BTC_QUANTITY_STEP` — 이름만 BTC일 뿐 모든 마켓에 동일 적용)
 - **주문 금액**: 최소 원화 1원 단위
 - **호가 단위 정규화**: $F_{norm}(x)$ (업비트 가격 규칙에 맞춤)
 - **소수점 단위 내림**: $F_{step}(x, s)$ (지정 단위 $s$ 기준 내림 연산)
@@ -33,8 +34,8 @@
 | $B_i$ | $i$번 그리드 슬롯의 매수 기준가 | `buy_price` | KRW |
 | $S_i$ | $i$번 그리드 슬롯의 매도 기준가 | `sell_price` | KRW |
 | $S_i^{eff}$ | 이익 실현(TP)이 적용된 최종 매도가 | `effective_sell_price` | KRW |
-| $Q_i$ | $i$번 슬롯의 목표 매수량 | `planned_qty` | BTC |
-| $H_i$ | $i$번 슬롯의 체결 재고량 | `held_qty` | BTC |
+| $Q_i$ | $i$번 슬롯의 목표 매수량 | `planned_qty` | 기초자산 (cfg.SYMBOL, 예: USDT) |
+| $H_i$ | $i$번 슬롯의 체결 재고량 | `held_qty` | 기초자산 (cfg.SYMBOL, 예: USDT) |
 | $L$ | 그리드 최하단 한계 가격 | `MIN_BUY_PRICE` | KRW |
 | $U$ | 그리드 최상단 한계 가격 | `MAX_BUY_PRICE` | KRW |
 | $N$ | 그리드 슬롯 총 개수 | `GRID_COUNT` | 정수 |
@@ -52,6 +53,10 @@
 | $A_{buffer}$ | 주문 예비 수수료 버퍼 | `FEE_BUFFER_KRW` | KRW |
 | $A_{reserve}$ | 계정 최소 안전 유보금 | `MIN_BALANCE_RESERVE` | KRW |
 | $M$ | 브레이크아웃 가드 분석 캔들 개수 | `BREAKOUT_GUARD_CONSECUTIVE_CANDLES` | 정수 |
+| $q_{min}$ | 목표 재고 비중 하한 | `INVENTORY_TARGET_Q_MIN` | 비율 (기본 0.10) |
+| $q_{max}$ | 목표 재고 비중 상한 | `INVENTORY_TARGET_Q_MAX` | 비율 (기본 0.85) |
+| $\gamma$ | 목표 재고 곡선 감쇄 지수 | `INVENTORY_TARGET_GAMMA` | 실수 (기본 1.5) |
+| $\epsilon$ | 목표 재고 통과 임계 여유분 | `INVENTORY_TARGET_EPSILON` | 비율 (기본 0.03) |
 
 ---
 
@@ -144,7 +149,7 @@ $$W = \sum_{i=0}^{N-1} w_i \tag{식 21}$$
 
 $$B_{slot, i} = B_{total} \cdot \frac{w_i}{W} \tag{식 22}$$
 
-$$Q_i = F_{step}\left( \frac{B_{slot, i}}{B_i}, 0.00000001 \text{ BTC} \right) \tag{식 23}$$
+$$Q_i = F_{step}\left( \frac{B_{slot, i}}{B_i}, 0.00000001 \text{ (기초자산 단위, cfg.SYMBOL)} \right) \tag{식 23}$$
 
 ---
 
@@ -273,27 +278,27 @@ $$t_{previousPrice} \leftarrow t_{monotonicNow} \tag{식 46}$$
 
 보유 시간 연산 (현재시각 - 체결 완료 시각):
 
-$$a = t_{nowUtc} - t_{filledUtc} \tag{식 49}$$
+$$a = t_{nowUtc} - t_{filledUtc} \tag{식 47}$$
 
 보유 연령에 따른 $k$ 감쇄 변량 $d(a)$:
 
-$$d(a) = \begin{cases} 1.0 & \text{if } a \ge 7 \text{ days} \\ 0.5 & \text{if } 48 \text{ hours} \le a < 7 \text{ days} \\ 0.0 & \text{if } a < 48 \text{ hours} \end{cases} \tag{식 50}$$
+$$d(a) = \begin{cases} 1.0 & \text{if } a \ge 7 \text{ days} \\ 0.5 & \text{if } 48 \text{ hours} \le a < 7 \text{ days} \\ 0.0 & \text{if } a < 48 \text{ hours} \end{cases} \tag{식 48}$$
 
 감쇄가 반영된 유효 배수 $k_{eff}$:
 
-$$k_{eff} = \max(k_{base} - d(a), k_{floor}) \tag{식 51}$$
+$$k_{eff} = \max(k_{base} - d(a), k_{floor}) \tag{식 49}$$
 
 압축 매도 가격 산출:
 
-$$g_{base} = \ln\left(\frac{S_i}{B_i}\right) \tag{식 52}$$
+$$g_{base} = \ln\left(\frac{S_i}{B_i}\right) \tag{식 50}$$
 
-$$g_{compressed} = g_{base} \cdot \frac{k_{eff}}{k_{base}} \tag{식 53}$$
+$$g_{compressed} = g_{base} \cdot \frac{k_{eff}}{k_{base}} \tag{식 51}$$
 
-$$S_i' = F_{norm}(B_i \cdot e^{g_{compressed}}) \tag{식 54}$$
+$$S_i' = F_{norm}(B_i \cdot e^{g_{compressed}}) \tag{식 52}$$
 
 최종 적용할 매도 호가 $S_i^{eff}$:
 
-$$S_i^{eff} = \begin{cases} S_i' & \text{if } B_i < S_i' < S_i \\ S_i & \text{otherwise} \end{cases} \tag{식 55}$$
+$$S_i^{eff} = \begin{cases} S_i' & \text{if } B_i < S_i' < S_i \\ S_i & \text{otherwise} \end{cases} \tag{식 53}$$
 
 ---
 
@@ -303,15 +308,15 @@ $$S_i^{eff} = \begin{cases} S_i' & \text{if } B_i < S_i' < S_i \\ S_i & \text{ot
 
 - **상단 이탈**: $M$개 연속 캔들이 그리드 상단 $U$ 위에서 마감
 
-$$o_{upper} = \bigwedge_{j=1}^M (C_j > U) \tag{식 56}$$
+$$o_{upper} = \bigwedge_{j=1}^M (C_j > U) \tag{식 54}$$
 
 - **하단 이탈**: $M$개 연속 캔들이 그리드 하단 $L$ 아래에서 마감
 
-$$o_{lower} = \bigwedge_{j=1}^M (C_j < L) \tag{식 57}$$
+$$o_{lower} = \bigwedge_{j=1}^M (C_j < L) \tag{식 55}$$
 
 가드 작동 판정:
 
-$$b_{guard} = o_{upper} \lor o_{lower} \tag{식 58}$$
+$$b_{guard} = o_{upper} \lor o_{lower} \tag{식 56}$$
 
 > [!WARNING]
 > 가드가 활성화($b_{guard} = true$)되면 **신규 매수(BUY) 주문 제출은 전면 차단**되며, 이미 진입해 있는 재고의 청산(SELL)은 정상 유지됩니다.
@@ -324,19 +329,19 @@ $$b_{guard} = o_{upper} \lor o_{lower} \tag{식 58}$$
 
 - **시장가 매수 시 필요 원금**:
 
-$$A_{required} = A_{spend} \tag{식 59}$$
+$$A_{required} = A_{spend} \tag{식 57}$$
 
 - **지정가 매수 시 필요 원금**:
 
-$$A_{required} = P_{order} Q_{order} \tag{식 60}$$
+$$A_{required} = P_{order} Q_{order} \tag{식 58}$$
 
 수수료 및 안전 버퍼를 감안한 예상 투입 금액 $A_{estimated}$:
 
-$$A_{estimated} = A_{required}(1 + f_{upbit}) + A_{buffer} \tag{식 61}$$
+$$A_{estimated} = A_{required}(1 + f_{upbit}) + A_{buffer} \tag{식 59}$$
 
 최종 잔고 가용성 조건 검증:
 
-$$A_{available} \ge A_{estimated} + A_{reserve} \tag{식 62}$$
+$$A_{available} \ge A_{estimated} + A_{reserve} \tag{식 60}$$
 
 ---
 
@@ -344,8 +349,67 @@ $$A_{available} \ge A_{estimated} + A_{reserve} \tag{식 62}$$
 
 운영 중 예산 개편 명령 발생 시 호출되는 로직입니다. 보유 수량($H_i$)은 고정하고, 빈 슬롯의 목표량($Q_{i, new}$)만 재산출합니다.
 
-$$B_{total} \leftarrow X \quad (\text{조정 예산 주입}) \tag{식 63}$$
+$$B_{total} \leftarrow X \quad (\text{조정 예산 주입}) \tag{식 61}$$
 
-$$B_{slot, i} = B_{total} \cdot \frac{w_i}{W} \tag{식 64}$$
+$$B_{slot, i} = B_{total} \cdot \frac{w_i}{W} \tag{식 62}$$
 
-$$Q_{i, new} = F_{step}\left( \frac{B_{slot, i}}{B_i}, 0.00000001 \text{ BTC} \right) \tag{식 65}$$
+$$Q_{i, new} = F_{step}\left( \frac{B_{slot, i}}{B_i}, 0.00000001 \text{ (기초자산 단위, cfg.SYMBOL)} \right) \tag{식 63}$$
+
+---
+
+## 14. 손절(Stop Loss) 판정 수식
+
+그리드 하한($L$) 아래로 시세가 추가 이탈할 때 단계별로 청산하는 자동 손절 서브시스템입니다. 구현은 [stop_loss.py](../app/strategy/stop_loss.py), 파라미터 검증은 [grid_properties.py](../app/core/grid_properties.py)의 `validate_stop_loss_config()`, 운영값은 [grid.properties](../grid.properties)를 기준으로 합니다. 여기서 $L = $ `MIN_BUY_PRICE`(최하단 슬롯 매수가), $U = $ `MAX_BUY_PRICE`(최상단 슬롯 매수가)입니다.
+
+### 14-1. 손절 임계가 산출
+
+손절 모드는 `STOP_LOSS_MODE`로 선택하며 `band_multiple`(기본/권장), `fixed_pct`, `off` 세 가지입니다.
+
+- **`band_multiple` 모드** — 밴드 폭(하락률)에 배수 $k_{band}$(`STOP_LOSS_BAND_MULTIPLE`)를 곱한 **단일 임계가**를 사용합니다. 레벨에 무관하게 동일한 값입니다.
+
+$$T_{band} = L \cdot \left( 1 - k_{band} \left( 1 - \frac{L}{U} \right) \right) \tag{식 64}$$
+
+- **`fixed_pct` 모드** — 레벨별 하락 백분율 $p_{Ln}$(`STOP_LOSS_Ln_PCT`)에 따라 레벨별 임계가를 산출합니다.
+
+$$T_{Ln} = L \cdot \left( 1 - \frac{p_{Ln}}{100} \right), \quad n \in \{0, 1, 2\} \tag{식 65}$$
+
+### 14-2. 레벨 분기
+
+현재가 $P$가 $T_{L0}$ 이상이면 미발동입니다. 그 아래로 떨어지면 임계가 비교로 레벨을 분기합니다.
+
+$$level = \begin{cases} \text{미발동} & \text{if } P \ge T_{L0} \\ 2 & \text{if } P < T_{L2} \\ 1 & \text{if } T_{L2} \le P < T_{L1} \\ 0 & \text{if } T_{L1} \le P < T_{L0} \end{cases} \tag{식 66}$$
+
+> [!IMPORTANT]
+> **`band_multiple` 모드의 L2 직행**: 식 64의 $T_{band}$는 레벨과 무관한 단일값이므로 $T_{L0} = T_{L1} = T_{L2} = T_{band}$로 수렴합니다. 따라서 시세가 단일 밴드 임계가 아래로 이탈하는 순간, 식 66에서 $P < T_{L2}$ 분기가 먼저 성립해 **곧바로 L2(전량 시장가 청산)로 직행**합니다 (L0/L1 중간 단계 없음).
+
+### 14-3. 연속 종가 컨펌
+
+레벨이 분기되어도 즉시 청산하지 않고, `STOP_LOSS_CANDLE_UNIT`(분) 단위 캔들의 **연속 종가가 임계가 아래에서 마감**되는지로 컨펌합니다. 레벨별 필요 연속 종가 수는 $n_{Ln}$(`STOP_LOSS_Ln_CONSECUTIVE_CLOSES`)입니다.
+
+$$c_{arm} = \bigwedge_{j=1}^{n_{Ln}} (C_j < T_{Ln}) \tag{식 67}$$
+
+- `STOP_LOSS_L0_CONSECUTIVE_CLOSES` = 4 (검증: ≥ 2)
+- `STOP_LOSS_L1_CONSECUTIVE_CLOSES` = 4 (검증: ≥ 2)
+- `STOP_LOSS_L2_CONSECUTIVE_CLOSES` = 2 (검증: ≥ 1)
+
+$c_{arm} = true$일 때 해당 레벨이 ARM(무장)되며, `armed_at`(최초 무장 시각)이 기록·유지됩니다.
+
+### 14-4. arm-hold 시간 윈도우
+
+ARM 이후 실제 청산 실행까지의 시간 컨펌 윈도우 $W_{Ln}$(`STOP_LOSS_Ln_ARM_HOLD_SECONDS`)입니다. 최초 무장 시각(`armed_at`)을 기준으로 한 시간 컨펌용 파라미터로, `validate_stop_loss_config()`에서 양수로 강제됩니다.
+
+$$W_{L1} = 3600 \text{ s}, \quad W_{L2} = 1800 \text{ s} \tag{식 68}$$
+
+### 14-5. 레벨별 청산 동작
+
+- **L0**: 신규 매수만 차단(no-op). 보유 재고는 청산하지 않습니다.
+- **L1**: 보유 슬롯을 임계가($T_{L1}$) 기준 **지정가 부분 청산**합니다. 청산 비율 $r_{L1}$ = `STOP_LOSS_L1_LIQUIDATE_RATIO` = 0.5.
+
+$$q_{sell, i} = H_i \cdot r_{L1}, \quad r_{L1} = 0.5 \tag{식 69}$$
+
+- **L2**: 보유 슬롯 **전량 시장가 청산**($r_{L2} = 1$). 청산 후 재시작 잠금 시간 $\tau_{lock}$(`STOP_LOSS_RESTART_LOCKOUT_HOURS`) 동안 봇 재가동이 잠깁니다.
+
+$$\tau_{lock} = 24 \text{ hours} \tag{식 70}$$
+
+> [!WARNING]
+> 라이브 운영값은 `band_multiple` 모드 + `STOP_LOSS_BAND_MULTIPLE = 1.55`입니다 (코드 기본값은 [settings.py](../app/config/settings.py)의 `1.5`). `band_multiple`은 `validate_stop_loss_config()`에서 1.0~2.0 범위로 강제되며, 식 64의 $T_{band}$가 $0.5L < T_{band} < 0.9L$ 구간에 들어야 정상 운영 구간 침범/하한 50% 초과 검증을 통과합니다.

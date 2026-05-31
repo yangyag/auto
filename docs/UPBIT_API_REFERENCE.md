@@ -1,6 +1,6 @@
 # Upbit Open API 레퍼런스
 
-[auto](file:///C:/dev/mobileAuto/auto) 자동매매 봇이 사용하는 업비트 Open API 엔드포인트, 인증 헤더 생성 가이드, Rate Limit 및 KRW 마켓 관련 실무 요약 문서입니다.
+[auto](..) 자동매매 봇이 사용하는 업비트 Open API 엔드포인트, 인증 헤더 생성 가이드, Rate Limit 및 KRW 마켓 관련 실무 요약 문서입니다.
 
 ---
 
@@ -11,7 +11,7 @@
 | :--- | :--- | :--- |
 | **REST API** | `https://api.upbit.com/v1` | POST 요청은 JSON 전송 필수 (Form 방식 지원 종료) |
 | **WebSocket 시세 (공개)** | `wss://api.upbit.com/websocket/v1` | 현재가 ticker 및 분 캔들 실시간 캐싱용 |
-| **WebSocket 개인 (인증)** | `wss://api.upbit.com/websocket/v1/private` | 자산 잔고 및 주문 접수/체결 실시간 캐싱용 |
+| **WebSocket 개인 (인증)** | `wss://api.upbit.com/websocket/v1/private` | 자산 잔고 및 주문 접수/체결 실시간 캐싱용 (자산/주문 WS는 기본 비활성 — `UPBIT_WS_ASSET_ENABLED`/`UPBIT_WS_ORDER_ENABLED` 기본 `False`. 주문 상태 캐시는 항상 `None`을 반환하고 상태 판정은 REST가 authoritative) |
 | **보안 환경** | TLS 1.2 이상 필수 | — |
 
 ### 🔐 API 인증 방식
@@ -58,11 +58,11 @@
 
 ## 이 저장소 기준 구현 범위
 
-- **설정**: [settings.py](file:///C:/dev/mobileAuto/auto/app/config/settings.py) 내 `EXCHANGE_TYPE = "crypto"` 지정 시 작동
+- **설정**: [settings.py](../app/config/settings.py) 내 `EXCHANGE_TYPE = "crypto"` 지정 시 작동
 - **핵심 연동 소스**:
-  - **REST API 구현**: [crypto.py](file:///C:/dev/mobileAuto/auto/app/exchange/crypto.py)
-  - **WebSocket 캐시 구현**: [upbit_ws.py](file:///C:/dev/mobileAuto/auto/app/exchange/upbit_ws.py)
-  - **메인 평가 루프**: [main.py](file:///C:/dev/mobileAuto/auto/app/main.py)
+  - **REST API 구현**: [crypto.py](../app/exchange/crypto.py)
+  - **WebSocket 캐시 구현**: [upbit_ws.py](../app/exchange/upbit_ws.py)
+  - **메인 평가 루프**: [main.py](../app/main.py)
 
 ---
 
@@ -99,20 +99,30 @@ Exchange API 호출을 위해서는 JWT 토큰 생성이 요구됩니다.
 
 | 대상 기능 | HTTP Method | API Path | 인증 필요 | 관련 파일 및 연결부 |
 | :--- | :---: | :--- | :---: | :--- |
-| **현재가 단건 조회** | GET | `/v1/ticker` | 불필요 | [crypto.py](file:///C:/dev/mobileAuto/auto/app/exchange/crypto.py)::`get_current_price` |
-| **분 캔들 조회** | GET | `/v1/candles/minutes/{unit}` | 불필요 | [crypto.py](file:///C:/dev/mobileAuto/auto/app/exchange/crypto.py)::`get_minute_candle_closes` |
-| **계정 잔고 조회** | GET | `/v1/accounts` | **필요** | [crypto.py](file:///C:/dev/mobileAuto/auto/app/exchange/crypto.py)::`get_balance` |
-| **주문 가능 정보** | GET | `/v1/orders/chance` | **필요** | [crypto.py](file:///C:/dev/mobileAuto/auto/app/exchange/crypto.py)::`place_order` 사전 검증 |
-| **신규 주문 생성** | POST | `/v1/orders` | **필요** | [crypto.py](file:///C:/dev/mobileAuto/auto/app/exchange/crypto.py)::`place_order` |
+| **현재가 단건 조회** | GET | `/v1/ticker` | 불필요 | [crypto.py](../app/exchange/crypto.py)::`get_current_price` |
+| **분 캔들 조회** | GET | `/v1/candles/minutes/{unit}` | 불필요 | [crypto.py](../app/exchange/crypto.py)::`get_minute_candle_closes` |
+| **계정 잔고 조회** | GET | `/v1/accounts` | **필요** | [crypto.py](../app/exchange/crypto.py)::`get_balance` |
+| **주문 가능 정보** | GET | `/v1/orders/chance` | **필요** | [crypto.py](../app/exchange/crypto.py)::`place_order` 사전 검증 |
+| **신규 주문 생성** | POST | `/v1/orders` | **필요** | [crypto.py](../app/exchange/crypto.py)::`place_order` |
 | **주문 형식 검증** | POST | `/v1/orders/test` | **필요** | 주문 제출 전 모의 사전 테스트 검증 |
-| **단건 주문 조회** | GET | `/v1/order` | **필요** | [crypto.py](file:///C:/dev/mobileAuto/auto/app/exchange/crypto.py)::`get_order_status` |
-| **단건 주문 취소** | DELETE | `/v1/order` | **필요** | [crypto.py](file:///C:/dev/mobileAuto/auto/app/exchange/crypto.py)::`cancel_order` |
+| **단건 주문 조회** | GET | `/v1/order` | **필요** | [crypto.py](../app/exchange/crypto.py)::`get_order_status` |
+| **단건 주문 취소** | DELETE | `/v1/order` | **필요** | [crypto.py](../app/exchange/crypto.py)::`cancel_order` |
 | **대기 주문 목록** | GET | `/v1/orders/open` | **필요** | 미체결 주문 동기화 및 부외 주문 대조 취소 |
 | **종료 주문 목록** | GET | `/v1/orders/closed` | **필요** | 과거 주문/체결 완료 이력 동기화 검증 |
-| **선택 주문 조회** | GET | `/v1/orders/uuids` | **필요** | ID 배열을 전달해 다수 주문 일괄 상태 조회 |
-| **선택 주문 취소** | DELETE | `/v1/orders/uuids` | **필요** | ID 배열을 전달해 다수 주문 일괄 취소 |
-| **주문 일괄 취소** | DELETE | `/v1/orders` | **필요** | 미체결 주문 전체 취소 (리셋 스크립트 등) |
-| **취소 후 재주문** | POST | `/v1/orders/cancel_and_new` | **필요** | 기존 주문 취소와 동시에 신규 지정가 교체 발주 |
+
+> [!NOTE]
+> 리셋 스크립트([reset_live.py](../scripts/reset_live.py))는 일괄 취소 API(`DELETE /v1/orders`)를 쓰지 않습니다. 미체결 주문을 [crypto.py](../app/exchange/crypto.py)::`cancel_order`를 통해 **단건(`DELETE /v1/order`)으로 순회 취소**합니다.
+
+### 참고용 (업비트 제공, 현재 봇 미사용)
+
+아래 엔드포인트는 업비트가 제공하지만 본 저장소 코드 어디에서도 호출하지 않습니다. 향후 확장 시 참고용으로만 정리합니다.
+
+| 대상 기능 | HTTP Method | API Path | 인증 필요 | 비고 |
+| :--- | :---: | :--- | :---: | :--- |
+| **선택 주문 조회** | GET | `/v1/orders/uuids` | **필요** | ID 배열을 전달해 다수 주문 일괄 상태 조회 (봇 미사용) |
+| **선택 주문 취소** | DELETE | `/v1/orders/uuids` | **필요** | ID 배열을 전달해 다수 주문 일괄 취소 (봇 미사용) |
+| **주문 일괄 취소** | DELETE | `/v1/orders` | **필요** | 미체결 주문 전체 취소 (봇 미사용; 리셋은 단건 `DELETE /v1/order` 순회) |
+| **취소 후 재주문** | POST | `/v1/orders/cancel_and_new` | **필요** | 기존 주문 취소와 동시에 신규 지정가 교체 발주 (봇 미사용) |
 
 ---
 
@@ -122,7 +132,7 @@ Exchange API 호출을 위해서는 JWT 토큰 생성이 요구됩니다.
 - **Query Parameter**: `markets` (필수, 예: `KRW-BTC`)
 - **봇 제어 방식**:
   - `UPBIT_WS_PUBLIC_ENABLED=true` 설정 시, REST API 호출을 중단하고 WebSocket `ticker` 스트림으로부터 캐싱한 최신 데이터를 우선 참조합니다.
-  - WebSocket 시세 스트림 유실이나 지연 감지 시, `PRICE_POLL_INTERVAL=5` 설정에 따라 초당 5초 주기의 REST ticker 요청 방식으로 자동 Fallback 구동됩니다.
+  - WebSocket 의존성 누락, 시작 실패, 연결 오류, 이벤트 없음, stale tick 상황에서는 `PRICE_POLL_INTERVAL=5` 설정에 따라 5초 주기의 REST ticker 요청 방식으로 자동 Fallback 구동됩니다.
 
 ### 1-2. 분 캔들 조회 (`GET /v1/candles/minutes/{unit}`)
 - **Path Parameter**: `unit` (필수, 예: `15`)
@@ -187,14 +197,20 @@ Exchange API 호출을 위해서는 JWT 토큰 생성이 요구됩니다.
 | **100 ~ 1,000 미만** | 1 |
 | **10 ~ 100 미만** | 0.1 |
 | **1 ~ 10 미만** | 0.01 |
+| **0.1 ~ 1 미만** | 0.001 |
+| **0.01 ~ 0.1 미만** | 0.0001 |
+| **0.001 ~ 0.01 미만** | 0.00001 |
+| **0.0001 ~ 0.001 미만** | 0.000001 |
+| **0.00001 ~ 0.0001 미만** | 0.0000001 |
+| **0.00001 미만** | 0.00000001 |
 
 > [!NOTE]
-> BTC 시세가 1억 원 영역에 있을 경우, 원화 마켓의 호가 간격은 **1,000원 단위**로 고정됩니다.
+> 호가 간격은 마켓 종류와 무관하게 **가격대로만 결정**됩니다. 가격대가 100만 원 이상이면 **1,000원 단위**로 고정되고, 현재 마켓인 KRW-USDT처럼 시세가 1,000~5,000원 구간에 있으면 **1원 단위**가 적용됩니다.
 
 ---
 
 ## 🛠 안전 가동 핵심 체크리스트
 
-1. [main.py](file:///C:/dev/mobileAuto/auto/app/main.py)를 단독 실행하는 조치는 실주문 발주가 이루어질 수 있으므로 개발 테스트 시에는 반드시 업비트 모의 테스트 모듈(`orders/test`)을 경유하거나 가상 환경 모의 검증(Mock test) 환경을 이용하세요.
-2. 모든 API Key, DB 접속 정보 등은 형상 관리 유출 방지를 위해 [.env](file:///C:/dev/mobileAuto/auto/.env)를 통해 환경변수로 주입하여 운영하고, 디버깅 로그에 중요 Key의 평문이 찍히지 않도록 마스킹 처리하여 보존해야 합니다.
+1. [main.py](../app/main.py)를 단독 실행하는 조치는 실주문 발주가 이루어질 수 있으므로 개발 테스트 시에는 반드시 업비트 모의 테스트 모듈(`orders/test`)을 경유하거나 가상 환경 모의 검증(Mock test) 환경을 이용하세요.
+2. 모든 API Key, DB 접속 정보 등은 형상 관리 유출 방지를 위해 [.env](../.env)를 통해 환경변수로 주입하여 운영하고, 디버깅 로그에 중요 Key의 평문이 찍히지 않도록 마스킹 처리하여 보존해야 합니다.
 3. 주문 생성 후 네트워크 타임아웃 등으로 정상 응답 수집에 실패하여 누락된 거래가 의심되는 경우, 임의 재주문을 내지 말고 고유 식별자(`identifier`) 필드를 대조해 `/v1/order`로 먼저 재조회하여 복구 판정을 수행해야 합니다.

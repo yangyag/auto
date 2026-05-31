@@ -1,6 +1,6 @@
 # auto 빠른 명령어 모음 (Cheat Sheet)
 
-[auto](file:///C:/dev/mobileAuto/auto) 자동매매 봇의 운영 중 자주 사용되는 핵심 명령어들을 신속하게 복사 및 실행하기 위한 치트 시트입니다.
+[auto](..) 자동매매 봇의 운영 중 자주 사용되는 핵심 명령어들을 신속하게 복사 및 실행하기 위한 치트 시트입니다.
 
 ---
 
@@ -23,7 +23,7 @@
 ### 🛠 그리드 도구
 - **그리드 반영**: `python3 scripts/apply_grid_properties_to_postgres.py --force`
 - **그리드 상태**: `python3 scripts/show_grid_state.py`
-- **설정 파일**: [grid.properties](file:///C:/dev/mobileAuto/auto/grid.properties)
+- **설정 파일**: [grid.properties](../grid.properties)
 
 ---
 
@@ -75,7 +75,7 @@ tail -f logs/trading-$(date +%F).log
 기록된 PID 파일 검증 및 실제 실행 중인 파이썬 프로세스 목록을 확인합니다.
 ```bash
 test -f .auto-trading.pid && cat .auto-trading.pid || true
-ps -eo pid,args | grep '[p]ython.*/home/yangyag/auto/main.py'
+ps -eo pid,args | grep '[p]ython.*/auto/main.py'
 ```
 
 ---
@@ -167,7 +167,7 @@ scripts/upbit_actual_assets.py --lookback-days 180
 > **웹(Web) 및 API 확인**: 
 > 본 정보는 아래의 비 CLI 경로를 통해서도 동일하게 실시간 모니터링할 수 있습니다:
 > - **브라우저 전용 콘솔**: `http://<EC2_IP>:8086/ops` 접속 후 -> `매도 대기` 버튼 클릭
-> - **모바일 API**: JWT 토큰 인증 후 `GET /v1/monitor/open-sells` 엔드포인트 호출 ([mobile-api.md](file:///C:/dev/mobileAuto/auto/docs/mobile-api.md) 참조)
+> - **모바일 API**: JWT 토큰 인증 후 `GET /v1/monitor/open-sells` 엔드포인트 호출 ([mobile-api.md](../docs/mobile-api.md) 참조)
 
 ---
 
@@ -262,10 +262,12 @@ python3 main.py reset-stop-loss --force
 ```
 
 ### `[status]` 실시간 손절 상태 모니터링
-그리드 상태 확인 스크립트 출력 상단에서 `stop_loss_active` 등의 플래그 상태를 확인합니다.
+손절/브레이크아웃 가드 적용 여부는 모바일 API 봇 상태 엔드포인트로 확인합니다. (`show_grid_state.py`는 손절 플래그를 출력하지 않습니다.)
 ```bash
-python3 scripts/show_grid_state.py
+curl -s http://127.0.0.1:8086/v1/bot/status \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
+> 상세 인증 및 응답 필드는 [mobile-api.md](../docs/mobile-api.md)의 `GET /v1/bot/status` 항목을 참조하십시오.
 
 ---
 
@@ -314,20 +316,21 @@ PY
 
 ## 12. 환경 설정 파일 구성 가이드
 
-### [grid.properties](file:///C:/dev/mobileAuto/auto/grid.properties) 설정 템플릿
+### [grid.properties](../grid.properties) 설정 템플릿
 ```properties
-MIN_BUY_PRICE=91623000
-MAX_BUY_PRICE=127886000
-TOTAL_BUDGET_KRW=4000000
-GRID_STEP_PCT=1.770527625862
+MIN_BUY_PRICE=1430
+MAX_BUY_PRICE=1530
+TOTAL_BUDGET_KRW=10000000
+GRID_STEP_PCT=0.2
 TP_MODEL=k
-TP_K_BASE=9.0
-TP_K_FLOOR=7.0
+TP_K_BASE=3.2
+TP_K_FLOOR=3.0
 ```
+> 위 값은 현재 `cfg.SYMBOL`(KRW-USDT) 기준 예시이며, 실제 운영값은 [grid.properties](../grid.properties)를 직접 확인하십시오.
 
 ---
 
-## 13. KRW-BTC 라이브 리셋 및 갱신
+## 13. 라이브 리셋 및 갱신 (현재 SYMBOL)
 
 보유 자산을 즉시 현금화(시장가 전량 청산)하고, 봇 정지 및 그리드 신규 구조 재반영 작업을 단일 트랜잭션으로 진행합니다.
 
