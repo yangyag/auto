@@ -2,7 +2,7 @@
 
 이 프로젝트의 전체 설명과 주요 로직은 `README.md`를 기준으로 확인한다.
 
-더 세부적인 운영, 명령어, API, 전략 수식 관련 내용은 `docs/` 폴더의 각 Markdown 문서를 참조한다. 원본 HTML은 `docs/html/` 에 보존되어 있다 (브라우저로 직접 열어볼 수 있다).
+더 세부적인 운영, 명령어, API, 전략 수식 관련 내용은 `docs/` 폴더의 각 Markdown 문서를 참조한다. **Markdown 문서가 정본이며**, `docs/html/` 의 HTML은 동일 내용을 브라우저로 열어보기 위한 미러다 — 생성기가 없으므로 Markdown을 수정하면 대응 HTML도 함께 수동 갱신해야 한다.
 
 - `docs/setup.md` — 설치 / 초기 설정 가이드. `.env`, PostgreSQL, 가상환경 준비가 필요할 때 본다.
 - `docs/operations.md` — 운영 / 인프라 가이드. EC2 접속, 배포, `run.sh`/`venv` 절차 등 서버 운영 전반.
