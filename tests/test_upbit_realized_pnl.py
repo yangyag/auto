@@ -465,6 +465,173 @@ class UpbitRealizedPnlTest(unittest.TestCase):
         self.assertIn("매도수량(USDT)", output)
         self.assertNotIn("매도수량(BTC)", output)
 
+    def test_group_realized_by_slot_sums_pnl_qty_and_counts_distinct_sells(self):
+        lines = [
+            {
+                "time_key": datetime(2026, 5, 5, 10, 0, tzinfo=KST),
+                "realized_pnl": Decimal("100"),
+                "matched_qty": Decimal("0.01"),
+                "sell_uuid": "sell-a",
+                "slot": 2,
+            },
+            {
+                "time_key": datetime(2026, 5, 5, 11, 0, tzinfo=KST),
+                "realized_pnl": Decimal("50"),
+                "matched_qty": Decimal("0.02"),
+                "sell_uuid": "sell-a",
+                "slot": 2,
+            },
+            {
+                "time_key": datetime(2026, 5, 5, 12, 0, tzinfo=KST),
+                "realized_pnl": Decimal("-30"),
+                "matched_qty": Decimal("0.005"),
+                "sell_uuid": "sell-b",
+                "slot": 2,
+            },
+            {
+                "time_key": datetime(2026, 5, 5, 13, 0, tzinfo=KST),
+                "realized_pnl": Decimal("999"),
+                "matched_qty": Decimal("0.1"),
+                "sell_uuid": "sell-c",
+                "slot": 1,
+            },
+        ]
+
+        groups = pnl.group_realized_by_slot(lines)
+
+        # slot 오름차순 정렬
+        self.assertEqual([g["slot"] for g in groups], [1, 2])
+
+        slot1 = groups[0]
+        self.assertEqual(slot1["realized_pnl_krw"], Decimal("999"))
+        self.assertEqual(slot1["matched_qty"], Decimal("0.1"))
+        self.assertEqual(slot1["order_count"], 1)
+
+        slot2 = groups[1]
+        # 합계: 100 + 50 + (-30)
+        self.assertEqual(slot2["realized_pnl_krw"], Decimal("120"))
+        # 합계: 0.01 + 0.02 + 0.005
+        self.assertEqual(slot2["matched_qty"], Decimal("0.035"))
+        # distinct sell_uuid: sell-a, sell-b → 2
+        self.assertEqual(slot2["order_count"], 2)
+
+    def test_group_realized_by_slot_returns_empty_for_no_lines(self):
+        self.assertEqual(pnl.group_realized_by_slot([]), [])
+
+    def test_group_realized_by_slot_pnl_sum_is_decimal_typed(self):
+        lines = [
+            {
+                "time_key": datetime(2026, 5, 5, 10, 0, tzinfo=KST),
+                "realized_pnl": Decimal("100"),
+                "matched_qty": Decimal("0.01"),
+                "sell_uuid": "sell-a",
+                "slot": 7,
+            },
+        ]
+
+        groups = pnl.group_realized_by_slot(lines)
+
+        self.assertIsInstance(groups[0]["realized_pnl_krw"], Decimal)
+        self.assertIsInstance(groups[0]["matched_qty"], Decimal)
+
+    def test_realized_to_sell_lines_orders_by_time_then_sell_uuid(self):
+        lines = [
+            {
+                "time_key": datetime(2026, 5, 5, 12, 0, tzinfo=KST),
+                "realized_pnl": Decimal("30"),
+                "matched_qty": Decimal("0.003"),
+                "sell_uuid": "sell-late",
+                "sell_trade_count": 1,
+                "slot": 3,
+            },
+            {
+                "time_key": datetime(2026, 5, 5, 10, 0, tzinfo=KST),
+                "realized_pnl": Decimal("10"),
+                "matched_qty": Decimal("0.001"),
+                "sell_uuid": "sell-b",
+                "sell_trade_count": 1,
+                "slot": 1,
+            },
+            {
+                "time_key": datetime(2026, 5, 5, 10, 0, tzinfo=KST),
+                "realized_pnl": Decimal("20"),
+                "matched_qty": Decimal("0.002"),
+                "sell_uuid": "sell-a",
+                "sell_trade_count": 1,
+                "slot": 2,
+            },
+        ]
+
+        sells = pnl.realized_to_sell_lines(lines)
+
+        # 같은 시각이면 sell_uuid 오름차순(tie-break), 이후 시각 오름차순
+        self.assertEqual(
+            [s["sell_uuid"] for s in sells],
+            ["sell-a", "sell-b", "sell-late"],
+        )
+
+    def test_realized_to_sell_lines_projects_only_detail_fields(self):
+        lines = [
+            {
+                "time_key": datetime(2026, 5, 5, 10, 0, tzinfo=KST),
+                "realized_pnl": Decimal("10"),
+                "matched_qty": Decimal("0.001"),
+                "sell_uuid": "sell-a",
+                "sell_trade_count": 2,
+                "slot": 5,
+            },
+        ]
+
+        sells = pnl.realized_to_sell_lines(lines)
+
+        self.assertEqual(len(sells), 1)
+        line = sells[0]
+        self.assertEqual(
+            set(line.keys()),
+            {"time_key", "slot", "matched_qty", "realized_pnl", "sell_uuid"},
+        )
+        self.assertEqual(line["slot"], 5)
+        self.assertEqual(line["matched_qty"], Decimal("0.001"))
+        self.assertEqual(line["realized_pnl"], Decimal("10"))
+        self.assertEqual(line["sell_uuid"], "sell-a")
+
+    def test_group_and_sell_lines_consume_run_fifo_output(self):
+        orders = [
+            _order(
+                uuid="buy-1",
+                side="bid",
+                identifier=_identifier("buy", 1, "aaa"),
+                qty="0.01",
+                funds="1000000",
+                fee="500",
+                seconds=1,
+            ),
+            _order(
+                uuid="sell-1",
+                side="ask",
+                identifier=_identifier("sell", 1, "bbb"),
+                qty="0.005",
+                funds="600000",
+                fee="300",
+                seconds=2,
+            ),
+        ]
+
+        realized_lines, *_ = pnl.run_fifo(orders)
+
+        groups = pnl.group_realized_by_slot(realized_lines)
+        sells = pnl.realized_to_sell_lines(realized_lines)
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]["slot"], 1)
+        self.assertEqual(groups[0]["order_count"], 1)
+        self.assertEqual(groups[0]["matched_qty"], Decimal("0.005"))
+        self.assertEqual(groups[0]["realized_pnl_krw"], Decimal("99450.000"))
+
+        self.assertEqual(len(sells), 1)
+        self.assertEqual(sells[0]["sell_uuid"], "sell-1")
+        self.assertEqual(sells[0]["slot"], 1)
+
     def test_print_report_uses_market_base_currency_in_all_quantity_sections(self):
         realized_lines = [
             {

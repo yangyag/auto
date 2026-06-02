@@ -918,6 +918,43 @@ ps -eo pid,args | grep '[p]ython.*/auto/main.py'</code></pre>
         <p><code>reset_live.py</code> 로 발생한 reset 전량 시장가 매도는 <code>{STATE_BOT_KEY}-reset-sell-...</code> identifier 로 자동 인식된다. reset 직전에 취소된 봇 TP SELL 주문들이 있으면 해당 슬롯/수량을 우선 사용해 청산 손익을 매칭한다.</p>
         <p>코드 반영 전 발생한 과거 reset 매도처럼 identifier 가 없는 청산 주문도 직전 취소 TP SELL 수량으로 일부 자동 추론되며, 자동 추론이 애매한 경우는 <code>--reset-sell-uuid &lt;UUID&gt;</code> 를 반복 지정해서 reset 청산 경계로 포함한다.</p>
       </div>
+
+      <h3>슬롯별 실현손익 (upbit_pnl_by_slot.py)</h3>
+      <p>어떤 그리드(슬롯)를 팔아 생긴 실현손익인지 슬롯 단위로 본다. <code>upbit_realized_pnl.py</code> 와 같은 슬롯 1:1 FIFO 매칭 결과를 슬롯별로 묶어 <code>[ 슬롯별 실현손익 ]</code>(슬롯·그리드매수가(참고)·매도주문수·실현손익(KRW)·매도수량 + 합계행)과 <code>[ 매도별 상세 ]</code>(체결시각KST·슬롯·매도수량·실현손익·sell_uuid) 2개 섹션을 출력한다. 인자 의미(<code>--period d/w/m/y</code>, <code>--from/--to</code>, <code>--market</code>, <code>--lookback</code>, <code>--reset-sell-uuid</code>)는 <code>upbit_realized_pnl.py</code> 와 동일하다.</p>
+      <div class="cmd-grid">
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">d</span>오늘 슬롯별 실현손익</div>
+          <div class="cmd-tile-desc"><code>--period d</code></div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/upbit_pnl_by_slot.py --period d</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">m</span>이번달 슬롯별 실현손익</div>
+          <div class="cmd-tile-desc"><code>--period m</code></div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/upbit_pnl_by_slot.py --period m</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">range</span>직접 지정 기간 + lookback 45일</div>
+          <div class="cmd-tile-desc">기간 1개 + 안전 마진.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/upbit_pnl_by_slot.py --from 2026-05-01 --to 2026-05-31 --lookback 45</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">btc</span>과거 KRW-BTC 라이브 장부</div>
+          <div class="cmd-tile-desc">조회 마켓과 봇 키를 과거 KRW-BTC 라이브 장부로 명시한다.</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>STATE_BOT_KEY=krw-btc-live .venv/bin/python scripts/upbit_pnl_by_slot.py --market KRW-BTC</code></pre>
+          </div>
+        </div>
+      </div>
+      <div class="callout warn">
+        <div class="callout-title">⚠ 그리드매수가는 참고가</div>
+        <p><code>그리드매수가</code> 컬럼은 <strong>현재 PostgreSQL 그리드 상태 기준 참고가</strong>이며, 현재 그리드 스냅샷(<code>load_grid_snapshot</code>)에서 슬롯 가격을 끌어온다. 리센터링 이력이 있으면 과거 매도 당시의 슬롯 가격과 다를 수 있으나, 실현손익 숫자 자체는 실제 체결 FIFO 매칭 기반이라 정확하며 이 참고가에 영향받지 않는다. DB 미연결/빈 스냅샷이면 해당 컬럼을 <code>-</code> 로 두고 정상 진행한다.</p>
+      </div>
     </section>
 
     <!-- ============ STOP LOSS ============ -->

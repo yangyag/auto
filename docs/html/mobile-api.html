@@ -452,6 +452,7 @@
         <li class="indent"><a href="#ep-orders-pending">└ GET /v1/orders/pending</a></li>
         <li class="indent"><a href="#ep-orders-recent">└ GET /v1/orders/recent</a></li>
         <li class="indent"><a href="#ep-pnl">└ GET /v1/pnl/realized</a></li>
+        <li class="indent"><a href="#ep-pnl-by-slot">└ GET /v1/pnl/by-slot</a></li>
         <li class="indent"><a href="#ep-open-sells">└ GET /v1/monitor/open-sells</a></li>
         <li class="indent"><a href="#ep-config">└ GET /v1/config</a></li>
         <li><a href="#cmd-api">명령 API</a></li>
@@ -540,7 +541,7 @@
         <thead><tr><th>경로</th><th>역할</th></tr></thead>
         <tbody>
           <tr><td><code>app/api/main.py</code></td><td>FastAPI 인스턴스 생성, 라우터 등록</td></tr>
-          <tr><td><code>app/api/routers/</code></td><td>인증, 상태 조회, 그리드, 주문, 손익, 명령 API 라우터</td></tr>
+          <tr><td><code>app/api/routers/</code></td><td>인증, 상태 조회, 그리드, 주문, 손익, 명령 API 라우터. 손익 라우터(<code>routers/pnl.py</code>)는 기간별 합계 <code>GET /v1/pnl/realized</code> 와 슬롯별 <code>GET /v1/pnl/by-slot</code> 을 함께 제공</td></tr>
           <tr><td><code>app/api/schemas/</code></td><td>API 요청/응답 Pydantic 모델</td></tr>
           <tr><td><code>app/api/services/</code></td><td>기존 봇 저장소/스크립트 로직을 HTTP 응답으로 가공하는 서비스 계층</td></tr>
           <tr><td><code>app/api/command_worker.py</code></td><td><code>commands</code> 테이블에 쌓인 운영 명령 실행</td></tr>
@@ -894,6 +895,7 @@ export async function apiGet(path: string) {
           <tr><td><code>GET /v1/orders/pending</code></td><td>DB 기준 미체결 주문</td><td>봇이 관리하는 open 주문 목록이다.</td></tr>
           <tr><td><code>GET /v1/orders/recent?limit=50</code></td><td>최근 주문 이력</td><td>DB에 기록된 주문 기준이다.</td></tr>
           <tr><td><code>GET /v1/pnl/realized?period=d</code></td><td>오늘 실현손익</td><td><code>d/w/m/y/all</code> 기간을 지원한다. Upbit 키가 필요하다.</td></tr>
+          <tr><td><code>GET /v1/pnl/by-slot?period=d&amp;detail=true</code></td><td>슬롯별 실현손익</td><td>슬롯(그리드)별 실현손익 합계와 <code>detail=true</code> 시 매도별 상세를 반환한다. Upbit 키가 필요하다.</td></tr>
           <tr><td><code>GET /v1/monitor/open-sells</code></td><td>매도 대기 현황</td><td>체결 대기 중인 SELL 주문과 봇 매수 슬롯 원가를 정합해 미실현 손익 구조를 보여준다.</td></tr>
           <tr><td><code>GET /v1/config</code></td><td>앱에 보여줘도 되는 핵심 설정</td><td>secret은 반환하지 않는다.</td></tr>
         </tbody>
@@ -1044,6 +1046,87 @@ export async function apiGet(path: string) {
           <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
 <pre><code>curl -s "http://127.0.0.1:8086/v1/pnl/realized?period=d" \
   -H "Authorization: Bearer &lt;access_token&gt;"</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="endpoint" id="ep-pnl-by-slot">
+        <div class="endpoint-head">
+          <span class="method get">GET</span>
+          <span class="endpoint-path">/v1/pnl/by-slot?period=d&amp;detail=true</span>
+          <span class="endpoint-summary">슬롯별 실현손익 (Upbit private API)</span>
+        </div>
+        <div class="endpoint-body">
+          <p>어떤 그리드(슬롯)를 팔아 생긴 실현손익인지 슬롯(그리드) 단위로 묶어 반환한다. <code>/v1/pnl/realized</code> 와 같은 슬롯 1:1 FIFO 매칭 결과를 사용하되, 기간별 합계 대신 슬롯별 합계와 (옵션) 매도별 상세를 제공한다. Upbit 키가 없으면 <span class="status-chip s5">503</span> 을 반환한다.</p>
+          <h4>Query</h4>
+          <table>
+            <thead><tr><th>이름</th><th>타입</th><th>기본값</th><th>설명</th></tr></thead>
+            <tbody>
+              <tr><td><code>period</code></td><td>enum</td><td><code>d</code></td><td><code>d</code> / <code>w</code> / <code>m</code> / <code>y</code> / <code>all</code></td></tr>
+              <tr><td><code>detail</code></td><td>bool</td><td><code>false</code></td><td><code>true</code> 면 <code>sells</code>(매도별 상세 라인)를 채우고, <code>false</code> 면 <code>sells</code>는 빈 배열</td></tr>
+            </tbody>
+          </table>
+          <h4>Status</h4>
+          <p>
+            <span class="status-chip s2">200</span> 정상
+            <span class="status-chip s4">401</span> 토큰 없음/만료
+            <span class="status-chip s5">503</span> Upbit 키 누락
+          </p>
+          <div class="endpoint-grid">
+            <div>
+              <h4>Request</h4>
+              <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>curl -s "http://127.0.0.1:8086/v1/pnl/by-slot?period=d&amp;detail=true" \
+  -H "Authorization: Bearer &lt;access_token&gt;"</code></pre>
+              </div>
+            </div>
+            <div>
+              <h4>Response (detail=true)</h4>
+              <div class="code-wrap"><div class="code-head"><span class="code-lang">json</span><button class="copy-btn">Copy</button></div>
+<pre><code>{
+  "period": "d",
+  "market": "KRW-USDT",
+  "base_currency": "USDT",
+  "total_realized_pnl_krw": "12340",
+  "slots": [
+    {
+      "slot": 3,
+      "grid_buy_price": "1432",
+      "order_count": 2,
+      "realized_pnl_krw": "8200",
+      "matched_qty": "12.50000000"
+    },
+    {
+      "slot": 5,
+      "grid_buy_price": null,
+      "order_count": 1,
+      "realized_pnl_krw": "4140",
+      "matched_qty": "6.00000000"
+    }
+  ],
+  "sells": [
+    {
+      "time": "2026-06-03T10:21:05+09:00",
+      "slot": 3,
+      "matched_qty": "7.50000000",
+      "realized_pnl_krw": "5000",
+      "sell_uuid": "a1b2c3d4-0000-0000-0000-000000000001"
+    },
+    {
+      "time": "2026-06-03T11:02:40+09:00",
+      "slot": 3,
+      "matched_qty": "5.00000000",
+      "realized_pnl_krw": "3200",
+      "sell_uuid": "a1b2c3d4-0000-0000-0000-000000000002"
+    }
+  ]
+}</code></pre>
+              </div>
+            </div>
+          </div>
+          <div class="callout warn">
+            <div class="callout-title">⚠ grid_buy_price 는 참고가</div>
+            <p><code>slots[].grid_buy_price</code> 는 <strong>현재 PostgreSQL 그리드 상태 기준 참고가</strong>다. 리센터링 이력이 있으면 과거 매도 당시의 슬롯 가격과 다를 수 있으나, <code>realized_pnl_krw</code> 등 실현손익 숫자 자체는 실제 체결 FIFO 매칭 기반이라 정확하며 이 참고가에 영향받지 않는다. 현재 스냅샷에 없거나 DB 미연결이면 <code>null</code> 로 응답한다.</p>
           </div>
         </div>
       </div>
@@ -1341,10 +1424,13 @@ systemctl --user restart auto-api.service</code></pre>
       </div>
 
       <h3>PnL API가 실패할 때</h3>
+      <p><code>/v1/pnl/realized</code> 와 <code>/v1/pnl/by-slot</code> 은 모두 업비트 private 주문 조회 API를 사용하므로 키가 비어 있으면 <span class="status-chip s5">503</span> 을 반환한다.</p>
       <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
 <pre><code>cd /home/ubuntu/auto
 awk -F= '/^(UPBIT_ACCESS_KEY|UPBIT_SECRET_KEY)=/ {print $1"=&lt;set&gt;"}' .env
-.venv/bin/python scripts/upbit_realized_pnl.py --period d</code></pre>
+.venv/bin/python scripts/upbit_realized_pnl.py --period d
+# 슬롯(그리드)별로 어떤 슬롯이 손익을 냈는지 확인
+.venv/bin/python scripts/upbit_pnl_by_slot.py --period d</code></pre>
       </div>
 
       <h3>총 평가액과 장부 원금이 다르게 보일 때</h3>

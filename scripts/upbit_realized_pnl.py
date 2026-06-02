@@ -784,6 +784,102 @@ def run_fifo(
     )
 
 
+# ── 전처리 / 집계 공용 코어 ──────────────────────────────────
+
+def prepare_sorted_orders(
+    raw_orders: list[dict], api_key: str, api_secret: str
+) -> list[dict]:
+    """closed orders 원본을 검증·time_key 결정·정렬해 run_fifo 입력으로 만든다.
+
+    체결 0건 필터, 수치 검증, _time_key 결정(SELL은 /v1/order 추가 호출)을 거친 뒤
+    (_time_key, uuid) 기준으로 정렬한 리스트를 반환한다.
+    """
+    valid_orders: list[dict] = []
+    for order in raw_orders:
+        exec_vol = _to_decimal(order.get("executed_volume", "0"))
+
+        # 체결 0건 cancel SELL은 reset 매칭용 후보로 보존한다.
+        if exec_vol == Decimal("0"):
+            if is_cancelled_tp_sell_candidate(order):
+                order["executed_funds"] = order.get("executed_funds") or "0"
+                order["paid_fee"] = order.get("paid_fee") or "0"
+                order["_time_key"] = to_kst(order["created_at"])
+                order["_cancelled_tp_sell_candidate"] = True
+                valid_orders.append(order)
+            continue
+
+        exec_funds = order.get("executed_funds")
+        paid_fee = order.get("paid_fee")
+
+        if exec_funds is None:
+            warn_anomaly(order["uuid"], exec_vol, None, "executed_funds None")
+            continue
+        if paid_fee is None:
+            warn_anomaly(order["uuid"], exec_vol, _to_decimal(exec_funds), "paid_fee None")
+            continue
+
+        exec_funds_d = _to_decimal(exec_funds)
+
+        # exec_funds == 0 ∧ exec_vol > 0 → 이상치 경고 후 skip
+        if exec_funds_d == Decimal("0") and exec_vol > Decimal("0"):
+            warn_anomaly(
+                order["uuid"], exec_vol, exec_funds_d,
+                "executed_funds=0 이면서 executed_volume>0"
+            )
+            continue
+
+        # time_key 결정 (SELL의 경우 /v1/order 추가 호출)
+        try:
+            order["_time_key"] = _extract_time_key(order, api_key, api_secret)
+        except AssertionError as e:
+            warn_anomaly(order["uuid"], exec_vol, exec_funds_d, str(e))
+            continue
+
+        valid_orders.append(order)
+
+    return sorted(valid_orders, key=lambda o: (o["_time_key"], o["uuid"]))
+
+
+def group_realized_by_slot(lines: list[dict]) -> list[dict]:
+    """realized_lines를 slot 기준으로 그룹핑한다.
+
+    각 dict: slot, realized_pnl_krw(합), matched_qty(합),
+    order_count(distinct sell_uuid). slot 오름차순.
+    """
+    groups: dict = defaultdict(list)
+    for line in lines:
+        groups[line["slot"]].append(line)
+
+    result: list[dict] = []
+    for slot in sorted(groups.keys()):
+        items = groups[slot]
+        result.append({
+            "slot": slot,
+            "realized_pnl_krw": sum((i["realized_pnl"] for i in items), Decimal("0")),
+            "matched_qty": sum((i["matched_qty"] for i in items), Decimal("0")),
+            "order_count": len({i["sell_uuid"] for i in items}),
+        })
+    return result
+
+
+def realized_to_sell_lines(lines: list[dict]) -> list[dict]:
+    """realized_lines를 매도별 상세로 변환한다.
+
+    각 dict: time_key, slot, matched_qty, realized_pnl, sell_uuid. 시각 오름차순.
+    """
+    selected = [
+        {
+            "time_key": line["time_key"],
+            "slot": line["slot"],
+            "matched_qty": line["matched_qty"],
+            "realized_pnl": line["realized_pnl"],
+            "sell_uuid": line["sell_uuid"],
+        }
+        for line in lines
+    ]
+    return sorted(selected, key=lambda item: (item["time_key"], item["sell_uuid"]))
+
+
 # ── 출력 ─────────────────────────────────────────────────────
 
 def _fmt_krw(val: Decimal) -> str:
@@ -1183,63 +1279,18 @@ def main(argv: list[str] | None = None) -> int:
     raw_orders = fetch_closed_orders(api_key, api_secret, market, fetch_start_dt, display_end_dt)
     print(f"  수집 완료: {len(raw_orders)}건 (cancel+done 포함)")
 
-    # 2단계: 체결 0건 필터, 수치 검증, time_key 결정
-    valid_orders: list[dict] = []
-    for order in raw_orders:
-        exec_vol = _to_decimal(order.get("executed_volume", "0"))
-
-        # 체결 0건 cancel SELL은 reset 매칭용 후보로 보존한다.
-        if exec_vol == Decimal("0"):
-            if is_cancelled_tp_sell_candidate(order):
-                order["executed_funds"] = order.get("executed_funds") or "0"
-                order["paid_fee"] = order.get("paid_fee") or "0"
-                order["_time_key"] = to_kst(order["created_at"])
-                order["_cancelled_tp_sell_candidate"] = True
-                valid_orders.append(order)
-            continue
-
-        exec_funds = order.get("executed_funds")
-        paid_fee = order.get("paid_fee")
-
-        if exec_funds is None:
-            warn_anomaly(order["uuid"], exec_vol, None, "executed_funds None")
-            continue
-        if paid_fee is None:
-            warn_anomaly(order["uuid"], exec_vol, _to_decimal(exec_funds), "paid_fee None")
-            continue
-
-        exec_funds_d = _to_decimal(exec_funds)
-        paid_fee_d = _to_decimal(paid_fee)
-
-        # exec_funds == 0 ∧ exec_vol > 0 → 이상치 경고 후 skip
-        if exec_funds_d == Decimal("0") and exec_vol > Decimal("0"):
-            warn_anomaly(
-                order["uuid"], exec_vol, exec_funds_d,
-                "executed_funds=0 이면서 executed_volume>0"
-            )
-            continue
-
-        # time_key 결정 (SELL의 경우 /v1/order 추가 호출)
-        try:
-            order["_time_key"] = _extract_time_key(order, api_key, api_secret)
-        except AssertionError as e:
-            warn_anomaly(order["uuid"], exec_vol, exec_funds_d, str(e))
-            continue
-
-        valid_orders.append(order)
+    # 2~3단계: 체결 0건 필터, 수치 검증, time_key 결정, 정렬
+    sorted_orders = prepare_sorted_orders(raw_orders, api_key, api_secret)
 
     valid_trade_count = sum(
-        1 for order in valid_orders
+        1 for order in sorted_orders
         if not order.get("_cancelled_tp_sell_candidate")
     )
-    reset_candidate_count = len(valid_orders) - valid_trade_count
+    reset_candidate_count = len(sorted_orders) - valid_trade_count
     print(
         f"  유효 주문: {valid_trade_count}건 "
         f"(reset 매칭 후보 {reset_candidate_count}건 별도 보존)"
     )
-
-    # 3단계: time_key + uuid 기준 정렬
-    sorted_orders = sorted(valid_orders, key=lambda o: (o["_time_key"], o["uuid"]))
 
     # 4단계: 슬롯별 매칭 (확장 fetch 전체 사용)
     (

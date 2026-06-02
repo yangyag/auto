@@ -218,6 +218,7 @@ loginctl enable-linger "$(whoami)"
 - **제어 표준**: 백그라운드 프로세스 제어는 임의의 `nohup`이나 백그라운드 커맨드가 아닌, 표준 관리 스크립트인 [run.sh](../run.sh) 및 [stop.sh](../stop.sh)를 사용해야 정상 종료 및 PID 추적이 원활합니다.
 - **최저가 모니터링**: [check_daily_low.py](../scripts/check_daily_low.py) 스크립트를 주기적으로 구동하여 날짜별 실제 최저점 도달 여부와 그리드 매수 라인을 점검할 수 있습니다.
 - **매도 잔량 검토**: [upbit_open_sell_monitor.py](../scripts/upbit_open_sell_monitor.py)를 구동하면 업비트의 가중평균 단가 착시를 우회하고, 개별 그리드 슬롯별 실제 취득 단가 대비 실시간 미실현 손익을 명확히 조회할 수 있습니다.
+- **슬롯별 실현손익 검토**: [upbit_pnl_by_slot.py](../scripts/upbit_pnl_by_slot.py)를 `--period d/w/m/y` 로 구동하면 어떤 그리드(슬롯)를 팔아 실현손익이 났는지 슬롯별 합계와 매도별 상세로 확인할 수 있습니다(모바일 API `GET /v1/pnl/by-slot` 또는 `/ops` "슬롯별 손익" 버튼과 동일). `그리드매수가` 컬럼은 현재 그리드 기준 참고가라 리센터링 시 과거와 다를 수 있으나, 실현손익 숫자 자체는 정확합니다.
 
 ---
 

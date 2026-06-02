@@ -40,7 +40,7 @@ React Native Android 앱에서 자동매매 상태를 조회하고 운영 명령
 | 경로 | 역할 |
 | :--- | :--- |
 | [main.py](../app/api/main.py) | FastAPI 인스턴스 초기화 및 API 라우터 일괄 등록 |
-| [routers/](../app/api/routers) | 인증, 상태 조회, 그리드 제어, 주문 정보, 손익 및 제어 명령 라우터 구현부 |
+| [routers/](../app/api/routers) | 인증, 상태 조회, 그리드 제어, 주문 정보, 손익 및 제어 명령 라우터 구현부. 손익 라우터(`routers/pnl.py`)는 기간별 합계 `GET /v1/pnl/realized` 와 슬롯별 `GET /v1/pnl/by-slot` 을 함께 제공 |
 | [schemas/](../app/api/schemas) | API 요청/응답 검증용 Pydantic 스키마 모델 |
 | [services/](../app/api/services) | 기존 봇 모듈 및 조회 스크립트 결과를 HTTP 응답에 맞춰 가공하는 서비스 계층 |
 | [command_worker.py](../app/api/command_worker.py) | 데이터베이스 `commands` 테이블 큐에 등록된 운영 제어 스크립트 실행기 |
@@ -281,6 +281,82 @@ curl -s "http://127.0.0.1:8086/v1/pnl/realized?period=d" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
+### 2-7-1. 슬롯별 실현 손익 (`GET /v1/pnl/by-slot`)
+어떤 그리드(슬롯)를 팔아 생긴 실현손익인지 슬롯(그리드) 단위로 묶어 반환합니다. `GET /v1/pnl/realized` 와 같은 슬롯 1:1 FIFO 매칭 결과를 사용하되, 기간별 합계 대신 슬롯별 합계와 (옵션) 매도별 상세를 제공합니다. (업비트 API 연동 활성화 필수, 키가 없으면 `503`)
+
+- **Query Parameters**:
+  | 파라미터 | 타입 | 기본값 | 상세 값 범위 |
+  | :--- | :---: | :---: | :--- |
+  | `period` | enum | `d` | `d` (오늘) / `w` (이번주) / `m` (이번달) / `y` (올해) / `all` (전체) |
+  | `detail` | bool | `false` | `true` 면 `sells`(매도별 상세 라인)를 채우고, `false` 면 `sells`는 빈 배열 |
+
+- **응답 데이터 필드 정보**:
+  | 필드명 | 타입 | 상세 설명 |
+  | :--- | :---: | :--- |
+  | `period` | string | 요청한 기간 프리셋 (`d/w/m/y/all`) |
+  | `market` | string | 분석 대상 업비트 마켓 코드 (`cfg.SYMBOL`) |
+  | `base_currency` | string | 수량 라벨용 기초자산 (`KRW-USDT` 이면 `USDT`) |
+  | `total_realized_pnl_krw` | number | 슬롯 합계 실현손익 (KRW) |
+  | `slots[].slot` | int | 그리드 슬롯 번호 |
+  | `slots[].grid_buy_price` | number\|null | **현재 그리드 기준 참고가** (아래 주의 참조). 현재 스냅샷에 없으면 `null` |
+  | `slots[].order_count` | int | 해당 슬롯에서 체결된 매도 주문 수 (distinct `sell_uuid`) |
+  | `slots[].realized_pnl_krw` | number | 해당 슬롯의 실현손익 합계 (KRW) |
+  | `slots[].matched_qty` | number | 해당 슬롯에서 매칭된 매도 수량 (`base_currency` 기준) |
+  | `sells[].time` | string | 매도 체결 시각 (KST ISO 8601, `detail=true` 일 때만) |
+  | `sells[].slot` | int | 매도가 속한 슬롯 번호 |
+  | `sells[].matched_qty` | number | 해당 매도의 매칭 수량 |
+  | `sells[].realized_pnl_krw` | number | 해당 매도의 실현손익 (KRW) |
+  | `sells[].sell_uuid` | string | 업비트 매도 주문 UUID |
+
+- **응답 예시 (JSON, `detail=true`)**:
+  ```json
+  {
+    "period": "d",
+    "market": "KRW-USDT",
+    "base_currency": "USDT",
+    "total_realized_pnl_krw": "12340",
+    "slots": [
+      {
+        "slot": 3,
+        "grid_buy_price": "1432",
+        "order_count": 2,
+        "realized_pnl_krw": "8200",
+        "matched_qty": "12.50000000"
+      },
+      {
+        "slot": 5,
+        "grid_buy_price": null,
+        "order_count": 1,
+        "realized_pnl_krw": "4140",
+        "matched_qty": "6.00000000"
+      }
+    ],
+    "sells": [
+      {
+        "time": "2026-06-03T10:21:05+09:00",
+        "slot": 3,
+        "matched_qty": "7.50000000",
+        "realized_pnl_krw": "5000",
+        "sell_uuid": "a1b2c3d4-0000-0000-0000-000000000001"
+      },
+      {
+        "time": "2026-06-03T11:02:40+09:00",
+        "slot": 3,
+        "matched_qty": "5.00000000",
+        "realized_pnl_krw": "3200",
+        "sell_uuid": "a1b2c3d4-0000-0000-0000-000000000002"
+      }
+    ]
+  }
+  ```
+
+```bash
+curl -s "http://127.0.0.1:8086/v1/pnl/by-slot?period=d&detail=true" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+> **`grid_buy_price` 참고가 주의**: `slots[].grid_buy_price`는 **현재 PostgreSQL 그리드 상태 기준 참고가**입니다. 리센터링 이력이 있으면 과거 매도 당시의 슬롯 가격과 다를 수 있으나, `realized_pnl_krw` 등 실현손익 숫자 자체는 실제 체결 FIFO 매칭 기반이라 정확하며 이 참고가에 영향받지 않습니다. 현재 스냅샷에 없거나 DB 미연결이면 `null` 로 응답합니다.
+
 ### 2-8. 매도 대기 실시간 현황 (`GET /v1/monitor/open-sells`)
 체결 대기 중인 모든 SELL 주문과 봇의 실제 매수 슬롯 원가를 정합하여 미실현 손익 구조를 한눈에 볼 수 있도록 가공해 반환합니다.
 
@@ -455,10 +531,13 @@ curl -s http://127.0.0.1:8086/v1/commands/YOUR_COMMAND_ID \
   ```
 
 ### 3. 모바일에서 손익 정보(PnL) 조회 실패 시
+- `/v1/pnl/realized` 와 `/v1/pnl/by-slot` 은 모두 업비트 private 주문 조회 API를 사용하므로 키가 비어 있으면 `503` 을 반환합니다.
 - 업비트 API 키 주입 여부 확인 및 수동 손익 조회 테스트:
   ```bash
   awk -F= '/^(UPBIT_ACCESS_KEY|UPBIT_SECRET_KEY)=/ {print $1"=<set>"}' .env
   .venv/bin/python scripts/upbit_realized_pnl.py --period d
+  # 슬롯(그리드)별로 어떤 슬롯이 손익을 냈는지 확인
+  .venv/bin/python scripts/upbit_pnl_by_slot.py --period d
   ```
 
 ### 4. 제어 명령어가 앱에서 작동하지 않을 때 (명령 락 현상)

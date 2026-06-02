@@ -17,3 +17,28 @@ class RealizedPnlResponse(DecimalModel):
     period: str
     market: str
     buckets: list[PnlBucket]
+
+
+class SlotPnlBucket(DecimalModel):
+    slot: int
+    grid_buy_price: Decimal | None
+    order_count: int
+    realized_pnl_krw: Decimal
+    matched_qty: Decimal
+
+
+class SellLine(DecimalModel):
+    time: str
+    slot: int
+    matched_qty: Decimal
+    realized_pnl_krw: Decimal
+    sell_uuid: str
+
+
+class PnlBySlotResponse(DecimalModel):
+    period: str
+    market: str
+    base_currency: str
+    total_realized_pnl_krw: Decimal
+    slots: list[SlotPnlBucket]
+    sells: list[SellLine]

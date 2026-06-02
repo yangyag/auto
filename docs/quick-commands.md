@@ -239,6 +239,26 @@ STATE_BOT_KEY=krw-btc-live .venv/bin/python scripts/upbit_realized_pnl.py --mark
 > **lookback 부족 위험 경고**: 
 > 계산 시작일 이전에 완료된 과거 매수 건을 매칭해야 하므로 `--lookback` 일수를 넉넉히 주어야 정확합니다. 경계선 부근에서 매수 기록이 검출되어 경고 메시지가 발생할 경우 lookback 일수를 늘려 다시 실행하십시오.
 
+### 슬롯별 실현손익 (`upbit_pnl_by_slot.py`)
+어떤 그리드(슬롯)를 팔아 생긴 실현손익인지 슬롯 단위로 본다. `upbit_realized_pnl.py` 와 같은 슬롯 1:1 FIFO 매칭 결과를 슬롯별로 묶어 `[ 슬롯별 실현손익 ]`(슬롯·그리드매수가(참고)·매도주문수·실현손익(KRW)·매도수량 + 합계행)과 `[ 매도별 상세 ]`(체결시각KST·슬롯·매도수량·실현손익·sell_uuid) 2개 섹션을 출력한다. 인자 의미(`--period d/w/m/y`, `--from/--to`, `--market`, `--lookback`, `--reset-sell-uuid`)는 `upbit_realized_pnl.py` 와 동일하다.
+
+```bash
+# 오늘 슬롯별 실현손익
+.venv/bin/python scripts/upbit_pnl_by_slot.py --period d
+
+# 이번 달 슬롯별 실현손익
+.venv/bin/python scripts/upbit_pnl_by_slot.py --period m
+
+# 특정 기간 + lookback 마진 확장
+.venv/bin/python scripts/upbit_pnl_by_slot.py --from 2026-05-01 --to 2026-05-31 --lookback 45
+
+# 과거 KRW-BTC 라이브 장부 명시 조회
+STATE_BOT_KEY=krw-btc-live .venv/bin/python scripts/upbit_pnl_by_slot.py --market KRW-BTC
+```
+
+> [!NOTE]
+> **그리드매수가는 참고가**: `그리드매수가` 컬럼은 **현재 PostgreSQL 그리드 상태 기준 참고가**이며, 현재 그리드 스냅샷(`load_grid_snapshot`)에서 슬롯 가격을 끌어온다. 리센터링 이력이 있으면 과거 매도 당시의 슬롯 가격과 다를 수 있으나, 실현손익 숫자 자체는 실제 체결 FIFO 매칭 기반이라 정확하며 이 참고가에 영향받지 않는다. DB 미연결/빈 스냅샷이면 해당 컬럼을 `-` 로 두고 정상 진행한다.
+
 ---
 
 ## 9. 손절(Stop-Loss) 관련 명령

@@ -259,10 +259,12 @@ OPS_DASHBOARD_HTML = """<!doctype html>
           </select>
         </label>
         <button id="pnlBtn" type="button">실현손익</button>
+        <button id="slotPnlBtn" type="button">슬롯별 손익</button>
       </div>
       <div id="facts" class="facts"></div>
       <div id="gridTableWrap" class="table-wrap" hidden></div>
       <div id="monitorTableWrap" class="table-wrap" hidden></div>
+      <div id="slotPnlTableWrap" class="table-wrap" hidden></div>
     </section>
 
     <section>
@@ -281,6 +283,7 @@ OPS_DASHBOARD_HTML = """<!doctype html>
     const facts = document.getElementById("facts");
     const gridTableWrap = document.getElementById("gridTableWrap");
     const monitorTableWrap = document.getElementById("monitorTableWrap");
+    const slotPnlTableWrap = document.getElementById("slotPnlTableWrap");
 
     baseUrlInput.value = window.location.origin;
     usernameInput.value = window.localStorage.getItem("autoOpsUsername") || "admin";
@@ -320,6 +323,11 @@ OPS_DASHBOARD_HTML = """<!doctype html>
     function clearMonitorTable() {
       monitorTableWrap.hidden = true;
       monitorTableWrap.innerHTML = "";
+    }
+
+    function clearSlotPnlTable() {
+      slotPnlTableWrap.hidden = true;
+      slotPnlTableWrap.innerHTML = "";
     }
 
     function valueOrDash(value) {
@@ -477,6 +485,97 @@ OPS_DASHBOARD_HTML = """<!doctype html>
       gridTableWrap.hidden = false;
     }
 
+    function renderSlotPnlTable(data) {
+      const slots = data.slots || [];
+      const sells = data.sells || [];
+      slotPnlTableWrap.innerHTML = "";
+      const market = data.market || "KRW-BTC";
+      const baseCurrency = data.base_currency || (market.includes("-") ? market.split("-")[1].toUpperCase() : market.toUpperCase());
+
+      const slotTable = document.createElement("table");
+      const slotThead = document.createElement("thead");
+      const slotHeaderRow = document.createElement("tr");
+      const slotHeaders = [
+        "슬롯", "그리드 매수가(참고)", "매도주문수", "실현손익(KRW)", `매도수량(${baseCurrency})`
+      ];
+      for (const header of slotHeaders) {
+        const cell = document.createElement("th");
+        cell.textContent = header;
+        slotHeaderRow.appendChild(cell);
+      }
+      slotThead.appendChild(slotHeaderRow);
+      slotTable.appendChild(slotThead);
+
+      const slotTbody = document.createElement("tbody");
+      for (const slot of slots) {
+        const row = document.createElement("tr");
+        appendCell(row, valueOrDash(slot.slot));
+        appendCell(row, formatKrw(slot.grid_buy_price));
+        appendCell(row, valueOrDash(slot.order_count));
+
+        const pnlCell = document.createElement("td");
+        const realized = slot.realized_pnl_krw;
+        if (realized == null) {
+          pnlCell.textContent = "-";
+        } else {
+          pnlCell.textContent = formatKrw(realized);
+          pnlCell.style.color = Number(realized) >= 0 ? "#167a3a" : "#b42318";
+        }
+        row.appendChild(pnlCell);
+
+        appendCell(row, valueOrDash(slot.matched_qty));
+        slotTbody.appendChild(row);
+      }
+      slotTable.appendChild(slotTbody);
+      slotPnlTableWrap.appendChild(slotTable);
+
+      if (sells.length) {
+        const caption = document.createElement("h2");
+        caption.textContent = "매도별 상세";
+        caption.style.margin = "12px 10px 4px";
+        slotPnlTableWrap.appendChild(caption);
+
+        const sellTable = document.createElement("table");
+        const sellThead = document.createElement("thead");
+        const sellHeaderRow = document.createElement("tr");
+        const sellHeaders = [
+          "체결시각", "슬롯", `매도수량(${baseCurrency})`, "실현손익(KRW)", "sell_uuid"
+        ];
+        for (const header of sellHeaders) {
+          const cell = document.createElement("th");
+          cell.textContent = header;
+          sellHeaderRow.appendChild(cell);
+        }
+        sellThead.appendChild(sellHeaderRow);
+        sellTable.appendChild(sellThead);
+
+        const sellTbody = document.createElement("tbody");
+        for (const sell of sells) {
+          const row = document.createElement("tr");
+          appendCell(row, valueOrDash(sell.time));
+          appendCell(row, valueOrDash(sell.slot));
+          appendCell(row, valueOrDash(sell.matched_qty));
+
+          const sellPnlCell = document.createElement("td");
+          const sellRealized = sell.realized_pnl_krw;
+          if (sellRealized == null) {
+            sellPnlCell.textContent = "-";
+          } else {
+            sellPnlCell.textContent = formatKrw(sellRealized);
+            sellPnlCell.style.color = Number(sellRealized) >= 0 ? "#167a3a" : "#b42318";
+          }
+          row.appendChild(sellPnlCell);
+
+          appendCell(row, valueOrDash(sell.sell_uuid));
+          sellTbody.appendChild(row);
+        }
+        sellTable.appendChild(sellTbody);
+        slotPnlTableWrap.appendChild(sellTable);
+      }
+
+      slotPnlTableWrap.hidden = false;
+    }
+
     async function request(path, options = {}) {
       const base = baseUrlInput.value.replace(/\\/$/, "");
       const headers = Object.assign({"Content-Type": "application/json"}, options.headers || {});
@@ -501,6 +600,7 @@ OPS_DASHBOARD_HTML = """<!doctype html>
     async function run(name, callback) {
       clearGridTable();
       clearMonitorTable();
+      clearSlotPnlTable();
       show(name + "...");
       try {
         const data = await callback();
@@ -611,6 +711,21 @@ OPS_DASHBOARD_HTML = """<!doctype html>
         {label: "실현손익(KRW)", value: first.realized_pnl_krw},
         {label: `매칭 ${baseCurrency}`, value: first.matched_qty_btc}
       ]);
+    });
+
+    document.getElementById("slotPnlBtn").addEventListener("click", async () => {
+      const period = document.getElementById("pnlPeriod").value;
+      const data = await run("슬롯별 손익", () => request("/v1/pnl/by-slot?period=" + encodeURIComponent(period) + "&detail=true"));
+      const market = data.market || "KRW-BTC";
+      const baseCurrency = data.base_currency || (market.includes("-") ? market.split("-")[1].toUpperCase() : market.toUpperCase());
+      const slots = data.slots || [];
+      showFacts([
+        {label: "기간", value: data.period},
+        {label: "마켓", value: market},
+        {label: "슬롯 수", value: slots.length},
+        {label: "총 실현손익(KRW)", value: formatKrw(data.total_realized_pnl_krw)}
+      ]);
+      renderSlotPnlTable(data);
     });
 
     setStatus(token() ? "세션 토큰 불러옴" : "로그인 전", token() ? "ok" : "");
