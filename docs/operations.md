@@ -268,7 +268,7 @@ STOP_LOSS_L2_PCT=30
 ```
 
 > [!NOTE]
-> 위 `STOP_LOSS_BAND_MULTIPLE=1.5`는 **코드 기본값**입니다. 현재 라이브 [grid.properties](../grid.properties)는 `STOP_LOSS_BAND_MULTIPLE=1.55`로 운용 중입니다.
+> 위 `STOP_LOSS_BAND_MULTIPLE=1.5`는 **코드 기본값**입니다. 현재 라이브 [grid.properties](../grid.properties)는 `STOP_LOSS_MODE=off`로 운용 중입니다(그리드 폭 1450~1500 ≈ 3.45%가 좁아 `band_multiple` 적용 불가). `STOP_LOSS_BAND_MULTIPLE`은 `1.55`로 기재돼 있으나 `off` 모드라 현재 미사용입니다.
 
 ---
 

@@ -406,4 +406,4 @@ $$q_{sell, i} = H_i \cdot r_{L1}, \quad r_{L1} = 0.5 \tag{식 68}$$
 $$\tau_{lock} = 24 \text{ hours} \tag{식 69}$$
 
 > [!WARNING]
-> 라이브 운영값은 `band_multiple` 모드 + `STOP_LOSS_BAND_MULTIPLE = 1.55`입니다 (코드 기본값은 [settings.py](../app/config/settings.py)의 `1.5`). `band_multiple`은 `validate_stop_loss_config()`에서 1.0~2.0 범위로 강제되며, 식 64의 $T_{band}$가 $0.5L < T_{band} < 0.9L$ 구간에 들어야 정상 운영 구간 침범/하한 50% 초과 검증을 통과합니다.
+> 현재 라이브는 `STOP_LOSS_MODE = off`로 운용 중입니다 (그리드 폭이 `MIN_BUY_PRICE = 1450`~`MAX_BUY_PRICE = 1500` ≈ 3.45%로 좁아 `band_multiple`을 적용할 수 없기 때문). 참고로 `band_multiple`은 `validate_stop_loss_config()`에서 1.0~2.0 범위로 강제되며, 식 64의 $T_{band}$가 $0.5L < T_{band} < 0.9L$ 구간에 들어야 정상 운영 구간 침범/하한 50% 초과 검증을 통과합니다 (코드 기본값은 [settings.py](../app/config/settings.py)의 `1.5`). 좁은 그리드에서는 이 두 검증을 동시에 만족하는 배수가 존재하지 않아(대략 그리드 폭 5.26% 이상이어야 성립) `band_multiple` 적용이 불가합니다.
