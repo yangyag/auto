@@ -662,7 +662,7 @@ tail -f logs/trading-$(date +%F).log</code></pre>
         <li>그리드 전체 조회: 슬롯별 매수가, 계획 매수 기초자산(cfg.SYMBOL, 예: BTC/USDT)/KRW, 보유 기초자산/KRW, 매도가, 미체결 주문</li>
         <li>현재가 조회</li>
         <li>미체결 주문 조회</li>
-        <li>오늘/이번주/이번달/올해/전체 실현손익 조회</li>
+        <li>오늘/이번주/지난주/이번달/올해/전체 실현손익 조회</li>
       </ul>
       <div class="callout info">
         <div class="callout-title">📌 조회 전용</div>
@@ -894,7 +894,7 @@ export async function apiGet(path: string) {
           <tr><td><code>GET /v1/grid/summary</code></td><td>그리드 요약</td><td>보유 슬롯 수, 총 재고, 원가, 평균 매수가 등을 보여준다.</td></tr>
           <tr><td><code>GET /v1/orders/pending</code></td><td>DB 기준 미체결 주문</td><td>봇이 관리하는 open 주문 목록이다.</td></tr>
           <tr><td><code>GET /v1/orders/recent?limit=50</code></td><td>최근 주문 이력</td><td>DB에 기록된 주문 기준이다.</td></tr>
-          <tr><td><code>GET /v1/pnl/realized?period=d</code></td><td>오늘 실현손익</td><td><code>d/w/m/y/all</code> 기간을 지원한다. Upbit 키가 필요하다.</td></tr>
+          <tr><td><code>GET /v1/pnl/realized?period=d</code></td><td>오늘 실현손익</td><td><code>d/w/lw/m/y/all</code> 기간을 지원한다(<code>last-week</code>도 가능). Upbit 키가 필요하다.</td></tr>
           <tr><td><code>GET /v1/pnl/by-slot?period=d&amp;detail=true</code></td><td>슬롯별 실현손익</td><td>슬롯(그리드)별 실현손익 합계와 <code>detail=true</code> 시 매도별 상세를 반환한다. Upbit 키가 필요하다.</td></tr>
           <tr><td><code>GET /v1/monitor/open-sells</code></td><td>매도 대기 현황</td><td>체결 대기 중인 SELL 주문과 봇 매수 슬롯 원가를 정합해 미실현 손익 구조를 보여준다.</td></tr>
           <tr><td><code>GET /v1/config</code></td><td>앱에 보여줘도 되는 핵심 설정</td><td>secret은 반환하지 않는다.</td></tr>
@@ -1028,12 +1028,12 @@ export async function apiGet(path: string) {
           <span class="endpoint-summary">실현손익 (Upbit private API)</span>
         </div>
         <div class="endpoint-body">
-          <p><code>d/w/m/y/all</code> 기간을 지원한다. Upbit 키가 필요하다.</p>
+          <p><code>d/w/lw/m/y/all</code> 기간을 지원한다. <code>last-week</code> 요청은 <code>lw</code>로 정규화된다. Upbit 키가 필요하다.</p>
           <h4>Query</h4>
           <table>
             <thead><tr><th>이름</th><th>타입</th><th>필수</th><th>설명</th></tr></thead>
             <tbody>
-              <tr><td><code>period</code></td><td>enum</td><td>선택</td><td><code>d</code> / <code>w</code> / <code>m</code> / <code>y</code> / <code>all</code> (기본 <code>d</code>)</td></tr>
+              <tr><td><code>period</code></td><td>enum</td><td>선택</td><td><code>d</code> / <code>w</code> / <code>lw</code> 또는 <code>last-week</code> / <code>m</code> / <code>y</code> / <code>all</code> (기본 <code>d</code>)</td></tr>
             </tbody>
           </table>
           <h4>Status</h4>
@@ -1062,7 +1062,7 @@ export async function apiGet(path: string) {
           <table>
             <thead><tr><th>이름</th><th>타입</th><th>기본값</th><th>설명</th></tr></thead>
             <tbody>
-              <tr><td><code>period</code></td><td>enum</td><td><code>d</code></td><td><code>d</code> / <code>w</code> / <code>m</code> / <code>y</code> / <code>all</code></td></tr>
+              <tr><td><code>period</code></td><td>enum</td><td><code>d</code></td><td><code>d</code> / <code>w</code> / <code>lw</code> 또는 <code>last-week</code> / <code>m</code> / <code>y</code> / <code>all</code></td></tr>
               <tr><td><code>detail</code></td><td>bool</td><td><code>false</code></td><td><code>true</code> 면 <code>sells</code>(매도별 상세 라인)를 채우고, <code>false</code> 면 <code>sells</code>는 빈 배열</td></tr>
             </tbody>
           </table>

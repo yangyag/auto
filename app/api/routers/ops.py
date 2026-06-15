@@ -253,6 +253,7 @@ OPS_DASHBOARD_HTML = """<!doctype html>
           <select id="pnlPeriod">
             <option value="d">오늘</option>
             <option value="w">이번 주</option>
+            <option value="lw">지난주</option>
             <option value="m">이번 달</option>
             <option value="y">올해</option>
             <option value="all">전체</option>

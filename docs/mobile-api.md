@@ -274,7 +274,7 @@ curl -s "http://127.0.0.1:8086/v1/orders/recent?limit=50" \
 - **Query Parameters**:
   | 파라미터 | 타입 | 기본값 | 상세 값 범위 |
   | :--- | :---: | :---: | :--- |
-  | `period` | enum | `d` | `d` (오늘) / `w` (이번주) / `m` (이번달) / `y` (올해) / `all` (전체) |
+  | `period` | enum | `d` | `d` (오늘) / `w` (이번주) / `lw` 또는 `last-week` (지난주) / `m` (이번달) / `y` (올해) / `all` (전체) |
 
 ```bash
 curl -s "http://127.0.0.1:8086/v1/pnl/realized?period=d" \
@@ -287,13 +287,13 @@ curl -s "http://127.0.0.1:8086/v1/pnl/realized?period=d" \
 - **Query Parameters**:
   | 파라미터 | 타입 | 기본값 | 상세 값 범위 |
   | :--- | :---: | :---: | :--- |
-  | `period` | enum | `d` | `d` (오늘) / `w` (이번주) / `m` (이번달) / `y` (올해) / `all` (전체) |
+  | `period` | enum | `d` | `d` (오늘) / `w` (이번주) / `lw` 또는 `last-week` (지난주) / `m` (이번달) / `y` (올해) / `all` (전체) |
   | `detail` | bool | `false` | `true` 면 `sells`(매도별 상세 라인)를 채우고, `false` 면 `sells`는 빈 배열 |
 
 - **응답 데이터 필드 정보**:
   | 필드명 | 타입 | 상세 설명 |
   | :--- | :---: | :--- |
-  | `period` | string | 요청한 기간 프리셋 (`d/w/m/y/all`) |
+  | `period` | string | 요청한 기간 프리셋 (`d/w/lw/m/y/all`, `last-week` 요청은 `lw`로 정규화) |
   | `market` | string | 분석 대상 업비트 마켓 코드 (`cfg.SYMBOL`) |
   | `base_currency` | string | 수량 라벨용 기초자산 (`KRW-USDT` 이면 `USDT`) |
   | `total_realized_pnl_krw` | number | 슬롯 합계 실현손익 (KRW) |

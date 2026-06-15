@@ -8,10 +8,11 @@ from app.api.services.pnl_service import calculate_pnl_by_slot, calculate_realiz
 
 
 router = APIRouter(prefix="/v1/pnl", tags=["pnl"], dependencies=[Depends(get_current_user)])
+PNL_PERIOD_PATTERN = "^(d|w|m|y|lw|last-week|all)$"
 
 
 @router.get("/realized", response_model=RealizedPnlResponse)
-def realized_pnl(period: str = Query(default="d", pattern="^(d|w|m|y|all)$")) -> RealizedPnlResponse:
+def realized_pnl(period: str = Query(default="d", pattern=PNL_PERIOD_PATTERN)) -> RealizedPnlResponse:
     try:
         return calculate_realized_pnl(period=period)
     except RuntimeError as exc:
@@ -20,7 +21,7 @@ def realized_pnl(period: str = Query(default="d", pattern="^(d|w|m|y|all)$")) ->
 
 @router.get("/by-slot", response_model=PnlBySlotResponse)
 def pnl_by_slot(
-    period: str = Query(default="d", pattern="^(d|w|m|y|all)$"),
+    period: str = Query(default="d", pattern=PNL_PERIOD_PATTERN),
     detail: bool = Query(default=False),
 ) -> PnlBySlotResponse:
     try:

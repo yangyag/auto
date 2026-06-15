@@ -16,6 +16,12 @@ from app.api.schemas.pnl import (
 from scripts import upbit_realized_pnl as pnl
 
 
+def _normalize_period(period: str) -> str:
+    if period == "all":
+        return "all"
+    return pnl.parse_period_preset(period)
+
+
 def _window_args(period: str) -> Namespace:
     if period == "all":
         return Namespace(
@@ -40,7 +46,8 @@ def calculate_realized_pnl(*, period: str) -> RealizedPnlResponse:
     if not cfg.API_KEY or not cfg.API_SECRET:
         raise RuntimeError("UPBIT_ACCESS_KEY / UPBIT_SECRET_KEY is not configured")
 
-    args = _window_args(period)
+    normalized_period = _normalize_period(period)
+    args = _window_args(normalized_period)
     today_kst = datetime.now(pnl.KST).date()
     report_window = pnl.resolve_report_window(args, today_kst)
     user_from_date = report_window.from_date
@@ -90,7 +97,7 @@ def calculate_realized_pnl(*, period: str) -> RealizedPnlResponse:
         item for item in realized_lines if display_start_dt <= item["time_key"] <= display_end_dt
     ]
 
-    group_period = "all" if period == "all" else pnl.PERIOD_PRESET_TO_GROUP[period]
+    group_period = "all" if normalized_period == "all" else pnl.PERIOD_PRESET_TO_GROUP[normalized_period]
     groups: dict[str, list[dict]] = defaultdict(list)
     for line in display_realized_lines:
         groups[pnl.group_key(line["time_key"], group_period)].append(line)
@@ -123,7 +130,7 @@ def calculate_realized_pnl(*, period: str) -> RealizedPnlResponse:
             )
         )
 
-    return RealizedPnlResponse(period=period, market=args.market, buckets=buckets)
+    return RealizedPnlResponse(period=normalized_period, market=args.market, buckets=buckets)
 
 
 def _load_grid_buy_prices() -> dict[int, Decimal]:
@@ -144,7 +151,8 @@ def calculate_pnl_by_slot(*, period: str, detail: bool) -> PnlBySlotResponse:
     if not cfg.API_KEY or not cfg.API_SECRET:
         raise RuntimeError("UPBIT_ACCESS_KEY / UPBIT_SECRET_KEY is not configured")
 
-    args = _window_args(period)
+    normalized_period = _normalize_period(period)
+    args = _window_args(normalized_period)
     today_kst = datetime.now(pnl.KST).date()
     report_window = pnl.resolve_report_window(args, today_kst)
     user_from_date = report_window.from_date
@@ -224,7 +232,7 @@ def calculate_pnl_by_slot(*, period: str, detail: bool) -> PnlBySlotResponse:
             )
 
     return PnlBySlotResponse(
-        period=period,
+        period=normalized_period,
         market=args.market,
         base_currency=pnl.market_base_currency(args.market),
         total_realized_pnl_krw=total_realized_pnl_krw,

@@ -1,5 +1,6 @@
+import re
 import unittest
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -55,6 +56,14 @@ class MobileApiPnlBySlotRouteTest(unittest.TestCase):
         with self.assertRaises(HTTPException) as ctx:
             get_current_user(creds)
         self.assertEqual(ctx.exception.status_code, 401)
+
+    def test_pnl_routes_accept_last_week_period_aliases(self):
+        for endpoint in (pnl_router.realized_pnl, pnl_router.pnl_by_slot):
+            period_query = endpoint.__defaults__[0]
+            pattern = period_query.metadata[0].pattern
+
+            self.assertIsNotNone(re.fullmatch(pattern, "lw"))
+            self.assertIsNotNone(re.fullmatch(pattern, "last-week"))
 
 
 class CalculatePnlBySlotTest(unittest.TestCase):
@@ -193,12 +202,37 @@ class CalculatePnlBySlotTest(unittest.TestCase):
         self.assertEqual(response.sells, [])
         self.assertEqual(response.total_realized_pnl_krw, Decimal("0"))
 
+    def test_last_week_alias_is_normalized_in_by_slot_response(self):
+        response = self._run(
+            period="last-week",
+            detail=True,
+            realized_lines=[],
+            grid_prices={},
+        )
+
+        self.assertEqual(response.period, "lw")
+
     def test_missing_api_credentials_raises_runtime_error(self):
         with patch.object(pnl_service.cfg, "API_KEY", ""), patch.object(
             pnl_service.cfg, "API_SECRET", ""
         ):
             with self.assertRaises(RuntimeError):
                 pnl_service.calculate_pnl_by_slot(period="d", detail=False)
+
+
+class CalculateRealizedPnlTest(unittest.TestCase):
+    def test_last_week_alias_is_normalized_in_realized_response(self):
+        with patch.object(pnl_service.cfg, "API_KEY", "test-key"), \
+             patch.object(pnl_service.cfg, "API_SECRET", "test-secret"), \
+             patch.object(pnl_service.pnl, "fetch_closed_orders", return_value=[]), \
+             patch.object(pnl_service.pnl, "prepare_sorted_orders", return_value=[]), \
+             patch.object(pnl_service.pnl, "run_fifo", return_value=([], [], [], [], {}, [])), \
+             patch.object(pnl_service, "datetime") as datetime_mock:
+            datetime_mock.now.return_value.date.return_value = date(2026, 6, 15)
+            response = pnl_service.calculate_realized_pnl(period="last-week")
+
+        self.assertEqual(response.period, "lw")
+        self.assertEqual(response.buckets[0].key, "(none)")
 
 
 if __name__ == "__main__":

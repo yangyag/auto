@@ -47,6 +47,12 @@ class MobileApiOpsDashboardTest(unittest.TestCase):
         self.assertIn("market.includes", body)
         self.assertIn("baseCurrency", body)
 
+    def test_ops_dashboard_includes_last_week_pnl_period_option(self):
+        response = ops_dashboard()
+        body = response.body.decode("utf-8")
+
+        self.assertIn('<option value="lw">지난주</option>', body)
+
 
 class MonitorRouterDefaultMarketTest(unittest.TestCase):
     def test_open_sells_market_default_is_cfg_symbol_not_hardcoded(self):
