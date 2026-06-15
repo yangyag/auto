@@ -220,6 +220,11 @@ python3 scripts/show_grid_state.py
 .venv/bin/python scripts/upbit_realized_pnl.py --period w
 ```
 
+### `[lw]` 지난주 수익 조회 (지난 월요일~일요일)
+```bash
+.venv/bin/python scripts/upbit_realized_pnl.py --period lw
+```
+
 ### `[m]` 이번 달 누적 수익 조회 (1일~오늘)
 ```bash
 .venv/bin/python scripts/upbit_realized_pnl.py --period m
@@ -240,11 +245,14 @@ STATE_BOT_KEY=krw-btc-live .venv/bin/python scripts/upbit_realized_pnl.py --mark
 > 계산 시작일 이전에 완료된 과거 매수 건을 매칭해야 하므로 `--lookback` 일수를 넉넉히 주어야 정확합니다. 경계선 부근에서 매수 기록이 검출되어 경고 메시지가 발생할 경우 lookback 일수를 늘려 다시 실행하십시오.
 
 ### 슬롯별 실현손익 (`upbit_pnl_by_slot.py`)
-어떤 그리드(슬롯)를 팔아 생긴 실현손익인지 슬롯 단위로 본다. `upbit_realized_pnl.py` 와 같은 슬롯 1:1 FIFO 매칭 결과를 슬롯별로 묶어 `[ 슬롯별 실현손익 ]`(슬롯·그리드매수가(참고)·매도주문수·실현손익(KRW)·매도수량 + 합계행)과 `[ 매도별 상세 ]`(체결시각KST·슬롯·매도수량·실현손익·sell_uuid) 2개 섹션을 출력한다. 인자 의미(`--period d/w/m/y`, `--from/--to`, `--market`, `--lookback`, `--reset-sell-uuid`)는 `upbit_realized_pnl.py` 와 동일하다.
+어떤 그리드(슬롯)를 팔아 생긴 실현손익인지 슬롯 단위로 본다. `upbit_realized_pnl.py` 와 같은 슬롯 1:1 FIFO 매칭 결과를 슬롯별로 묶어 `[ 슬롯별 실현손익 ]`(슬롯·그리드매수가(참고)·매도주문수·실현손익(KRW)·매도수량 + 합계행)과 `[ 매도별 상세 ]`(체결시각KST·슬롯·매도수량·실현손익·sell_uuid) 2개 섹션을 출력한다. 인자 의미(`--period d/w/m/y/lw`, `--from/--to`, `--market`, `--lookback`, `--reset-sell-uuid`)는 `upbit_realized_pnl.py` 와 동일하며 `--period last-week`도 지원한다.
 
 ```bash
 # 오늘 슬롯별 실현손익
 .venv/bin/python scripts/upbit_pnl_by_slot.py --period d
+
+# 지난주 슬롯별 실현손익
+.venv/bin/python scripts/upbit_pnl_by_slot.py --period lw
 
 # 이번 달 슬롯별 실현손익
 .venv/bin/python scripts/upbit_pnl_by_slot.py --period m

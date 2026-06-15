@@ -99,7 +99,10 @@ class CalculatePnlBySlotTest(unittest.TestCase):
         self.assertIsInstance(response, PnlBySlotResponse)
         self.assertEqual(response.period, "d")
         self.assertEqual(response.market, pnl_service.pnl.DEFAULT_MARKET)
-        self.assertEqual(response.base_currency, "BTC")
+        self.assertEqual(
+            response.base_currency,
+            pnl_service.pnl.market_base_currency(response.market),
+        )
 
         # slots: slot 오름차순, 슬롯별 합산
         self.assertEqual([s.slot for s in response.slots], [1, 2])

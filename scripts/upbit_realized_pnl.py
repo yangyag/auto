@@ -12,13 +12,13 @@ STATE_BOT_KEY 는 cfg.STATE_BOT_KEY 로 동적 참조 (운영 환경별 호환).
 tie-break 로 SELL 이 먼저 처리될 가능성 (운영상 거의 불가능, 안내 노트).
 
 사용법:
-    .venv/bin/python scripts/upbit_realized_pnl.py [--period d|w|m|y]
+    .venv/bin/python scripts/upbit_realized_pnl.py [--period d|w|m|y|lw|last-week]
         [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--market MARKET]
         [--reset-sell-uuid UUID] [--lookback DAYS]
 
 기본값:
     옵션 없음 : 오늘 기준 최근 90일, daily/weekly/monthly/yearly/ALL 5개 섹션 출력
-    --period  : d=오늘, w=이번주, m=이번달, y=이번년
+    --period  : d=오늘, w=이번주, m=이번달, y=이번년, lw/last-week=지난주
     --from/to : 사용자가 직접 지정한 기간 1개 합산 출력
     --market   : app.config.settings.SYMBOL
     --lookback : 30일 (default: DEFAULT_LOOKBACK_DAYS = 30)
@@ -40,6 +40,7 @@ tie-break 로 SELL 이 먼저 처리될 가능성 (운영상 거의 불가능, �
     예:
     - 오늘 손익만 분석: --period d
     - 이번주 손익만 분석: --period w
+    - 지난주 손익만 분석: --period lw
     - 5월 1일~31일 손익 + 4월 중 BUY: --from 2026-05-01 --to 2026-05-31 --lookback 30
     - 4월 중 의심 주문 정산 시 lookback 60일로 안전 마진 추가:
       --from 2026-04-01 --to 2026-04-30 --lookback 60
@@ -139,12 +140,14 @@ PERIOD_PRESET_TO_GROUP = {
     "w": "weekly",
     "m": "monthly",
     "y": "yearly",
+    "lw": "weekly",
 }
 PERIOD_PRESET_LABELS = {
     "d": "오늘",
     "w": "이번주",
     "m": "이번달",
     "y": "이번년",
+    "lw": "지난주",
 }
 PERIOD_PRESET_ALIASES = {
     "d": "d",
@@ -154,6 +157,8 @@ PERIOD_PRESET_ALIASES = {
     "w": "w",
     "week": "w",
     "weekly": "w",
+    "lw": "lw",
+    "last-week": "lw",
     "m": "m",
     "month": "m",
     "monthly": "m",
@@ -452,7 +457,7 @@ def group_key(time_key: datetime, period: str) -> str:
 
 
 def parse_period_preset(value: str) -> str:
-    """CLI --period 값을 d/w/m/y 프리셋으로 정규화한다."""
+    """CLI --period 값을 d/w/m/y/lw 프리셋으로 정규화한다."""
     normalized = PERIOD_PRESET_ALIASES.get(value.lower())
     if normalized is None:
         valid = ", ".join(PERIOD_PRESET_TO_GROUP.keys())
@@ -464,7 +469,7 @@ def resolve_report_window(args: argparse.Namespace, today_kst: date) -> ReportWi
     """CLI 옵션을 표시 범위와 출력 집계 단위로 변환한다.
 
     - 옵션 없음: 기존 운영 기본값처럼 최근 90일 전체 섹션 출력
-    - --period d/w/m/y: 오늘/이번주/이번달/이번년 프리셋
+    - --period d/w/m/y/lw: 오늘/이번주/이번달/이번년/지난주 프리셋
     - --from/--to: 사용자가 지정한 기간 하나를 합산 출력
     """
     has_custom_range = bool(args.from_date or args.to_date)
@@ -494,11 +499,17 @@ def resolve_report_window(args: argparse.Namespace, today_kst: date) -> ReportWi
             from_date = date(today_kst.year, today_kst.month, 1)
         elif args.period == "y":
             from_date = date(today_kst.year, 1, 1)
+        elif args.period == "lw":
+            this_week_start = today_kst - timedelta(days=today_kst.weekday())
+            from_date = this_week_start - timedelta(days=7)
+            to_date = from_date + timedelta(days=6)
         else:
             raise ValueError(f"알 수 없는 --period 값: {args.period}")
+        if args.period != "lw":
+            to_date = today_kst
         return ReportWindow(
             from_date=from_date,
-            to_date=today_kst,
+            to_date=to_date,
             periods_to_show=[PERIOD_PRESET_TO_GROUP[args.period]],
             mode_label=PERIOD_PRESET_LABELS[args.period],
         )
@@ -1204,8 +1215,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--period",
         type=parse_period_preset,
-        metavar="{d,w,m,y}",
-        help="기간 프리셋: d=오늘, w=이번주, m=이번달, y=이번년 (옵션 없으면 최근 90일 전체)",
+        metavar="{d,w,m,y,lw,last-week}",
+        help="기간 프리셋: d=오늘, w=이번주, m=이번달, y=이번년, lw/last-week=지난주 (옵션 없으면 최근 90일 전체)",
     )
     parser.add_argument(
         "--market",

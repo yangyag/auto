@@ -106,11 +106,12 @@ PYTHON_BIN=.venv/bin/python ./run.sh
 .venv/bin/python scripts/upbit_realized_pnl.py
 ```
 
-오늘/이번주/이번달만 보려면:
+오늘/이번주/지난주/이번달만 보려면:
 
 ```bash
 .venv/bin/python scripts/upbit_realized_pnl.py --period d
 .venv/bin/python scripts/upbit_realized_pnl.py --period w
+.venv/bin/python scripts/upbit_realized_pnl.py --period lw
 .venv/bin/python scripts/upbit_realized_pnl.py --period m
 ```
 
@@ -227,8 +228,8 @@ L1 손절 이후 매수 차단을 해제할 때 사용한다. L2 24시간 잠금
 | | `adjust_budget_live.py` | 현재 DB 그리드의 가격 구조와 보유 수량은 유지한 채 `planned_qty`만 재계산하여 예산을 보수적으로 증액/감액. `--target-budget` (절대 총액) 으로 지정 |
 | | `upbit_actual_assets.py` | 실행 권한이 있어 `scripts/upbit_actual_assets.py` 로 바로 실행 가능. 업비트 잔고와 현재가, `avg_buy_price` 기준 원가, 봇 슬롯별 잔여 BUY 원가를 비교해 BTC 보유 중 총자산 착시를 점검한다. 기본 lookback 은 120일이며 수량 불일치가 있을 때만 `--lookback-days` 를 늘린다 |
 | | `upbit_open_sell_monitor.py` | 실행 권한이 있어 `scripts/upbit_open_sell_monitor.py` 로 바로 실행 가능. 현재 설정된 `SYMBOL`의 미체결 매도 주문을 슬롯별로 매칭해 실제 매수원가 대비 미실현 손익을 보여준다. 수량 컬럼은 선택 마켓의 기초자산 기준으로 표시한다. 과거 BTC 장부는 `--market KRW-BTC --bot-key krw-btc-live` 로 명시 조회한다 |
-| | `upbit_realized_pnl.py` | 업비트 `GET /v1/orders/closed` + `/v1/order` 로 현재 설정된 `SYMBOL` 기준 실현 손익을 산출. 옵션 없이 실행하면 최근 90일을 일/주/월/년/전체로 모두 출력하고, `--period d/w/m/y` 로 오늘/이번주/이번달/이번년만 조회한다. 직접 지정 기간은 `--from/--to` 로 1개 범위를 합산 출력한다. 봇 주문 identifier의 슬롯 번호를 기준으로 같은 슬롯 안에서만 FIFO 매칭한다 (수수료 차감, read-only 분석). lookback 마진(기본 30일)으로 과거 BUY를 포함해 정확한 매칭을 보장한다. reset 청산 매도는 reset identifier 또는 직전 취소 TP SELL 수량으로 자동 인식하며, 과거 reset 주문은 `--reset-sell-uuid`로 지정 가능. 과거 BTC 장부는 `STATE_BOT_KEY=krw-btc-live ... --market KRW-BTC` 로 명시 조회한다. 일별 버킷팅은 SELL `_time_key`(=최대 체결 시각, KST) 기준 |
-| | `upbit_pnl_by_slot.py` | `upbit_realized_pnl.py` 와 같은 슬롯 1:1 FIFO 매칭 결과를 **슬롯(그리드) 단위로** 노출하는 read-only 스크립트. `--period d/w/m/y`, `--from/--to`, `--market`, `--lookback`, `--reset-sell-uuid` 인자 의미는 `upbit_realized_pnl.py` 와 동일하며 공용 헬퍼를 재사용한다. `[ 슬롯별 실현손익 ]`(슬롯·그리드매수가(참고)·매도주문수·실현손익(KRW)·매도수량 + 합계행)과 `[ 매도별 상세 ]`(체결시각KST·슬롯·매도수량·실현손익·sell_uuid) 2개 섹션을 출력한다. `그리드매수가` 컬럼은 현재 그리드 스냅샷(`load_grid_snapshot`) 기준 참고가이며 DB 미연결/빈 스냅샷이면 `-` 로 표시하고 정상 진행한다 (리센터링 시 과거와 다를 수 있으나 실현손익 숫자 자체는 정확). 수량 라벨은 선택 마켓의 기초자산 기준 |
+| | `upbit_realized_pnl.py` | 업비트 `GET /v1/orders/closed` + `/v1/order` 로 현재 설정된 `SYMBOL` 기준 실현 손익을 산출. 옵션 없이 실행하면 최근 90일을 일/주/월/년/전체로 모두 출력하고, `--period d/w/m/y/lw` 로 오늘/이번주/이번달/이번년/지난주를 조회한다(`last-week`도 지원). 직접 지정 기간은 `--from/--to` 로 1개 범위를 합산 출력한다. 봇 주문 identifier의 슬롯 번호를 기준으로 같은 슬롯 안에서만 FIFO 매칭한다 (수수료 차감, read-only 분석). lookback 마진(기본 30일)으로 과거 BUY를 포함해 정확한 매칭을 보장한다. reset 청산 매도는 reset identifier 또는 직전 취소 TP SELL 수량으로 자동 인식하며, 과거 reset 주문은 `--reset-sell-uuid`로 지정 가능. 과거 BTC 장부는 `STATE_BOT_KEY=krw-btc-live ... --market KRW-BTC` 로 명시 조회한다. 일별 버킷팅은 SELL `_time_key`(=최대 체결 시각, KST) 기준 |
+| | `upbit_pnl_by_slot.py` | `upbit_realized_pnl.py` 와 같은 슬롯 1:1 FIFO 매칭 결과를 **슬롯(그리드) 단위로** 노출하는 read-only 스크립트. `--period d/w/m/y/lw`, `--from/--to`, `--market`, `--lookback`, `--reset-sell-uuid` 인자 의미는 `upbit_realized_pnl.py` 와 동일하며 공용 헬퍼를 재사용한다(`last-week`도 지원). `[ 슬롯별 실현손익 ]`(슬롯·그리드매수가(참고)·매도주문수·실현손익(KRW)·매도수량 + 합계행)과 `[ 매도별 상세 ]`(체결시각KST·슬롯·매도수량·실현손익·sell_uuid) 2개 섹션을 출력한다. `그리드매수가` 컬럼은 현재 그리드 스냅샷(`load_grid_snapshot`) 기준 참고가이며 DB 미연결/빈 스냅샷이면 `-` 로 표시하고 정상 진행한다 (리센터링 시 과거와 다를 수 있으나 실현손익 숫자 자체는 정확). 수량 라벨은 선택 마켓의 기초자산 기준 |
 | **app/utils/** | `upbit_market.py` | 업비트 마켓의 최소 주문 단위, 호가 단위 등 시장 정보 관리 |
 | | `grid_reporting.py` | 수익률, 재고 현황 등 그리드 운영 성과 리포팅 유틸리티 |
 | | `decimal_utils.py` | 정밀한 수치 계산을 위한 Decimal 변환 및 절사(Truncate) 도구 |

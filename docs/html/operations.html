@@ -693,7 +693,7 @@ loginctl enable-linger "$(whoami)"</code></pre>
         <li>운영 로그는 <code>logs/trading-YYYY-MM-DD.log</code>를 기준으로 본다.</li>
         <li>날짜별 최저 현재가는 <code>scripts/check_daily_low.py</code> 로 빠르게 확인할 수 있다 (매수 라인 도달 여부 점검용).</li>
         <li>매도 대기 주문의 슬롯별 미실현 손익은 <code>.venv/bin/python scripts/upbit_open_sell_monitor.py</code> 로 확인한다. 업비트 평균매수가 기준과 달리 각 슬롯의 실제 매수원가 대비 손익을 보여준다.</li>
-        <li>슬롯별 <em>실현</em>손익은 <code>.venv/bin/python scripts/upbit_pnl_by_slot.py --period d</code> 로 확인한다. 어떤 그리드(슬롯)를 팔아 실현손익이 났는지 슬롯별 합계와 매도별 상세를 보여준다(모바일 API <code>GET /v1/pnl/by-slot</code> 또는 <code>/ops</code> "슬롯별 손익" 버튼과 동일). <code>그리드매수가</code> 컬럼은 현재 그리드 기준 참고가라 리센터링 시 과거와 다를 수 있으나, 실현손익 숫자 자체는 정확하다.</li>
+        <li>슬롯별 <em>실현</em>손익은 <code>.venv/bin/python scripts/upbit_pnl_by_slot.py --period d</code> 로 확인한다. 지난주는 <code>--period lw</code> 또는 <code>--period last-week</code> 를 쓴다. 어떤 그리드(슬롯)를 팔아 실현손익이 났는지 슬롯별 합계와 매도별 상세를 보여준다(모바일 API <code>GET /v1/pnl/by-slot</code> 또는 <code>/ops</code> "슬롯별 손익" 버튼과 동일). <code>그리드매수가</code> 컬럼은 현재 그리드 기준 참고가라 리센터링 시 과거와 다를 수 있으나, 실현손익 숫자 자체는 정확하다.</li>
         <li>테스트 로그가 같은 날짜 파일에 남을 수 있으므로 로거 이름 <code>__main__</code> / <code>main</code> 도 함께 확인한다.</li>
       </ul>
       <div class="callout danger">

@@ -808,7 +808,7 @@ ps -eo pid,args | grep '[p]ython.*/auto/main.py'</code></pre>
       <p>업비트 API 기준 read-only 분석. 봇 주문 <code>identifier</code> 의 슬롯 번호를 기준으로 같은 슬롯 안에서만 BUY/SELL 을 FIFO 매칭해 수수료 차감 순손익을 산출한다. 기본 마켓은 현재 환경의 <code>SYMBOL</code> 이며, 수량 라벨은 해당 마켓의 기초자산(<code>KRW-USDT</code> 이면 <code>USDT</code>)으로 표시된다.</p>
 
       <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
-<pre><code>.venv/bin/python scripts/upbit_realized_pnl.py [--period d|w|m|y] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--reset-sell-uuid UUID] [--lookback DAYS]</code></pre>
+<pre><code>.venv/bin/python scripts/upbit_realized_pnl.py [--period d|w|m|y|lw|last-week] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--reset-sell-uuid UUID] [--lookback DAYS]</code></pre>
       </div>
 
       <div class="callout info">
@@ -830,6 +830,7 @@ ps -eo pid,args | grep '[p]ython.*/auto/main.py'</code></pre>
         <tbody>
           <tr><td><code>--period d</code></td><td>오늘</td></tr>
           <tr><td><code>--period w</code></td><td>이번주(월요일~오늘)</td></tr>
+          <tr><td><code>--period lw</code> / <code>--period last-week</code></td><td>지난주(지난 월요일~일요일)</td></tr>
           <tr><td><code>--period m</code></td><td>이번달(1일~오늘)</td></tr>
           <tr><td><code>--period y</code></td><td>이번년(1월 1일~오늘)</td></tr>
           <tr><td><code>--from YYYY-MM-DD --to YYYY-MM-DD</code></td><td>직접 지정 기간 1개 합산 출력</td></tr>
@@ -884,6 +885,13 @@ ps -eo pid,args | grep '[p]ython.*/auto/main.py'</code></pre>
           </div>
         </div>
         <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">lw</span>지난주 손익만</div>
+          <div class="cmd-tile-desc"><code>--period lw</code> (지난 월요일~일요일)</div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/upbit_realized_pnl.py --period lw</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
           <div class="cmd-tile-title"><span class="tag">m</span>이번달 손익만</div>
           <div class="cmd-tile-desc"><code>--period m</code> (1일~오늘)</div>
           <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
@@ -920,13 +928,20 @@ ps -eo pid,args | grep '[p]ython.*/auto/main.py'</code></pre>
       </div>
 
       <h3>슬롯별 실현손익 (upbit_pnl_by_slot.py)</h3>
-      <p>어떤 그리드(슬롯)를 팔아 생긴 실현손익인지 슬롯 단위로 본다. <code>upbit_realized_pnl.py</code> 와 같은 슬롯 1:1 FIFO 매칭 결과를 슬롯별로 묶어 <code>[ 슬롯별 실현손익 ]</code>(슬롯·그리드매수가(참고)·매도주문수·실현손익(KRW)·매도수량 + 합계행)과 <code>[ 매도별 상세 ]</code>(체결시각KST·슬롯·매도수량·실현손익·sell_uuid) 2개 섹션을 출력한다. 인자 의미(<code>--period d/w/m/y</code>, <code>--from/--to</code>, <code>--market</code>, <code>--lookback</code>, <code>--reset-sell-uuid</code>)는 <code>upbit_realized_pnl.py</code> 와 동일하다.</p>
+      <p>어떤 그리드(슬롯)를 팔아 생긴 실현손익인지 슬롯 단위로 본다. <code>upbit_realized_pnl.py</code> 와 같은 슬롯 1:1 FIFO 매칭 결과를 슬롯별로 묶어 <code>[ 슬롯별 실현손익 ]</code>(슬롯·그리드매수가(참고)·매도주문수·실현손익(KRW)·매도수량 + 합계행)과 <code>[ 매도별 상세 ]</code>(체결시각KST·슬롯·매도수량·실현손익·sell_uuid) 2개 섹션을 출력한다. 인자 의미(<code>--period d/w/m/y/lw</code>, <code>--from/--to</code>, <code>--market</code>, <code>--lookback</code>, <code>--reset-sell-uuid</code>)는 <code>upbit_realized_pnl.py</code> 와 동일하며 <code>--period last-week</code>도 지원한다.</p>
       <div class="cmd-grid">
         <div class="cmd-tile">
           <div class="cmd-tile-title"><span class="tag">d</span>오늘 슬롯별 실현손익</div>
           <div class="cmd-tile-desc"><code>--period d</code></div>
           <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
 <pre><code>.venv/bin/python scripts/upbit_pnl_by_slot.py --period d</code></pre>
+          </div>
+        </div>
+        <div class="cmd-tile">
+          <div class="cmd-tile-title"><span class="tag">lw</span>지난주 슬롯별 실현손익</div>
+          <div class="cmd-tile-desc"><code>--period lw</code></div>
+          <div class="code-wrap"><div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code>.venv/bin/python scripts/upbit_pnl_by_slot.py --period lw</code></pre>
           </div>
         </div>
         <div class="cmd-tile">

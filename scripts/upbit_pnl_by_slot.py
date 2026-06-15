@@ -8,13 +8,13 @@
 (prepare_sorted_orders → run_fifo → group_realized_by_slot / realized_to_sell_lines).
 
 사용법:
-    .venv/bin/python scripts/upbit_pnl_by_slot.py [--period d|w|m|y]
+    .venv/bin/python scripts/upbit_pnl_by_slot.py [--period d|w|m|y|lw|last-week]
         [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--market MARKET]
         [--reset-sell-uuid UUID] [--lookback DAYS]
 
 기본값:
     옵션 없음 : 오늘 기준 최근 90일 합산
-    --period  : d=오늘, w=이번주, m=이번달, y=이번년
+    --period  : d=오늘, w=이번주, m=이번달, y=이번년, lw/last-week=지난주
     --from/to : 사용자가 직접 지정한 기간 1개 합산
     --market   : app.config.settings.SYMBOL
     --lookback : 30일 (default: DEFAULT_LOOKBACK_DAYS = 30)
@@ -175,8 +175,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--period",
         type=parse_period_preset,
-        metavar="{d,w,m,y}",
-        help="기간 프리셋: d=오늘, w=이번주, m=이번달, y=이번년 (옵션 없으면 최근 90일 합산)",
+        metavar="{d,w,m,y,lw,last-week}",
+        help="기간 프리셋: d=오늘, w=이번주, m=이번달, y=이번년, lw/last-week=지난주 (옵션 없으면 최근 90일 합산)",
     )
     parser.add_argument(
         "--market",

@@ -82,6 +82,24 @@ class UpbitRealizedPnlTest(unittest.TestCase):
         self.assertEqual((monthly.from_date, monthly.to_date, monthly.periods_to_show), (date(2026, 5, 1), today, ["monthly"]))
         self.assertEqual((yearly.from_date, yearly.to_date, yearly.periods_to_show), (date(2026, 1, 1), today, ["yearly"]))
 
+    def test_last_week_period_preset_resolves_to_previous_monday_through_sunday(self):
+        today = date(2026, 6, 15)
+
+        short_alias = pnl.resolve_report_window(
+            pnl.build_parser().parse_args(["--period", "lw"]),
+            today,
+        )
+        long_alias = pnl.resolve_report_window(
+            pnl.build_parser().parse_args(["--period", "last-week"]),
+            today,
+        )
+
+        self.assertEqual(
+            (short_alias.from_date, short_alias.to_date, short_alias.periods_to_show, short_alias.mode_label),
+            (date(2026, 6, 8), date(2026, 6, 14), ["weekly"], "지난주"),
+        )
+        self.assertEqual(long_alias, short_alias)
+
     def test_custom_date_range_outputs_single_range_section(self):
         args = pnl.build_parser().parse_args(["--from", "2026-05-01", "--to", "2026-05-11"])
 
